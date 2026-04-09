@@ -43,7 +43,7 @@ Nexus Core (FastAPI + FastMCP)
 
 **8-Check Scoring** — 8 dimensions: durability, regime fit, momentum, fundamentals, valuation, entropy, Hurst exponent, catalyst.
 
-**7-Layer Model** — L1 Foundation (λ≈0.02) through L7 Catalyst (λ≈0.25). Lower λ = higher durability.
+**7-Layer Model** — L1 Foundation (lowest decay) through L7 Catalyst (highest decay). Lower λ = higher durability.
 
 **MCP Orchestration** — Tools auto-adjust weighting based on detected regime. Any LLM accesses regime-aware analysis without domain logic.
 
@@ -51,7 +51,7 @@ Nexus Core (FastAPI + FastMCP)
 
 **Open (Apache 2.0):** Framework, architecture, scoring structure, layer model, tool pattern, compliance gate, caching.
 
-**Private:** Specific thresholds, 245 production tools, API keys, client data, narrative pipeline.
+**Private:** Specific thresholds, decay constants, 200+ production tools, API keys, client data, narrative pipeline.
 
 ## Tech Stack
 
