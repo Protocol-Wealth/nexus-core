@@ -13,3 +13,132 @@ Context Protocol for SEC/FINRA-Regulated Financial Advisory Services"
 
 Protocol Wealth, LLC is a member of the Open Invention Network (OIN) 2.0.
 See PATENTS file for full non-assertion pledge.
+
+================================================================================
+THIRD-PARTY COMPONENTS
+================================================================================
+
+This product bundles or derives from the following third-party open source
+software. Each component retains its original license. Full license text
+is in THIRD_PARTY_LICENSES.md.
+
+## Portfolio Optimization & Risk Analytics
+
+- PyPortfolioOpt (https://github.com/robertmartin8/PyPortfolioOpt)
+  Copyright (c) 2018-2026 Robert Andrew Martin
+  Licensed under the MIT License
+
+- Riskfolio-Lib (https://github.com/dcajasn/Riskfolio-Lib)
+  Copyright (c) 2020-2026 Dany Cajas
+  Licensed under the BSD 3-Clause License
+
+- empyrical-reloaded (https://github.com/stefan-jansen/empyrical-reloaded)
+  Copyright (c) 2016-2026 Quantopian, Inc.
+  Licensed under the Apache License, Version 2.0
+
+- pyfolio-reloaded (https://github.com/stefan-jansen/pyfolio-reloaded)
+  Copyright (c) 2015-2026 Quantopian, Inc.
+  Licensed under the Apache License, Version 2.0
+
+- ffn (https://github.com/pmorissette/ffn)
+  Copyright (c) 2014-2026 Philippe Morissette
+  Licensed under the MIT License
+
+- skfolio (https://github.com/skfolio/skfolio)
+  Copyright (c) 2023-2026 skfolio contributors
+  Licensed under the BSD 3-Clause License
+
+## Derivatives Pricing & Fixed Income
+
+- QuantLib (https://github.com/lballabio/QuantLib)
+  Copyright (c) 2000-2026 StatPro Italia srl
+  Licensed under the Modified BSD License
+
+- FinancePy (https://github.com/domokane/FinancePy)
+  Copyright (c) 2019-2026 Dominic O'Kane
+  Licensed under the MIT License
+
+## SEC EDGAR & Financial Data
+
+- edgartools (https://github.com/dgunning/edgartools)
+  Copyright (c) 2022-2026 Dwight Gunning
+  Licensed under the MIT License
+
+- sec-edgar-downloader (https://github.com/jadchaar/sec-edgar-downloader)
+  Copyright (c) 2019-2026 Jad Chaar
+  Licensed under the MIT License
+
+- edgar-crawler (https://github.com/lefterisloukas/edgar-crawler)
+  Copyright (c) 2022-2026 Lefteris Loukas
+  Licensed under the MIT License
+
+- sec-parser (https://github.com/alphanome-ai/sec-parser)
+  Copyright (c) 2023-2026 Alphanome AI
+  Licensed under the MIT License
+
+- Arelle (https://github.com/Arelle/Arelle)
+  Copyright (c) 2010-2026 Mark V Systems Limited
+  Licensed under the Apache License, Version 2.0
+
+- yfinance (https://github.com/ranaroussi/yfinance)
+  Copyright (c) 2017-2026 Ran Aroussi
+  Licensed under the Apache License, Version 2.0
+
+## Backtesting & Factor Analysis
+
+- zipline-reloaded (https://github.com/stefan-jansen/zipline-reloaded)
+  Copyright (c) 2014-2026 Quantopian, Inc.
+  Licensed under the Apache License, Version 2.0
+
+- alphalens (https://github.com/quantopian/alphalens)
+  Copyright (c) 2016-2026 Quantopian, Inc.
+  Licensed under the Apache License, Version 2.0
+
+## AI & ML for Finance
+
+- FinGPT (https://github.com/AI4Finance-Foundation/FinGPT)
+  Copyright (c) 2023-2026 AI4Finance Foundation
+  Licensed under the MIT License
+
+- FinRobot (https://github.com/AI4Finance-Foundation/FinRobot)
+  Copyright (c) 2024-2026 AI4Finance Foundation
+  Licensed under the Apache License, Version 2.0
+
+- FinRL (https://github.com/AI4Finance-Foundation/FinRL)
+  Copyright (c) 2020-2026 AI4Finance Foundation
+  Licensed under the MIT License
+
+- FinBERT (https://github.com/ProsusAI/finBERT)
+  Copyright (c) 2019-2026 Prosus AI
+  Licensed under the Apache License, Version 2.0
+
+## Compliance & Sanctions Screening
+
+- Moov Watchman (https://github.com/moov-io/watchman)
+  Copyright (c) 2019-2026 Moov Financial, Inc.
+  Licensed under the Apache License, Version 2.0
+
+## Blockchain Data
+
+- Ethereum-ETL (https://github.com/blockchain-etl/ethereum-etl)
+  Copyright (c) 2018-2026 Evgeny Medvedev
+  Licensed under the MIT License
+
+## Planning & Retirement Simulation
+
+- WenFire (https://github.com/basnijholt/wenfire)
+  Copyright (c) 2023-2026 Bas Nijholt
+  Licensed under the MIT License
+
+================================================================================
+REFERENCE ARCHITECTURE (patterns referenced, no code bundled)
+================================================================================
+
+The following AGPL-licensed projects informed our architecture. No source
+code was copied. Their patterns and designs are credited as inspiration:
+
+- OpenBB Platform (https://github.com/OpenBB-finance/OpenBB) - AGPL-3.0
+  Data aggregation and provider abstraction patterns
+
+- SEC EDGAR Toolkit (https://github.com/stefanoamorelli/sec-edgar-toolkit) - AGPL-3.0
+  TS+Python monorepo pattern for financial data SDK
