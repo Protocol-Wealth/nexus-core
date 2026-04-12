@@ -1,0 +1,60 @@
+name: License Compliance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  license-scan:
+    name: Scan dependency licenses
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install pip-licenses
+        run: pip install pip-licenses
+
+      - name: Install project dependencies (if pyproject.toml exists)
+        run: |
+          if [ -f pyproject.toml ]; then
+            pip install -e . || echo "No installable package yet"
+          fi
+
+      - name: Generate license report
+        run: |
+          pip-licenses --format=markdown --output-file=dependency-licenses.md || echo "No deps installed yet"
+          pip-licenses --format=json --output-file=dependency-licenses.json || echo "[]" > dependency-licenses.json
+
+      - name: Check for forbidden licenses
+        run: |
+          python -c "
+          import json
+          forbidden = ['GPL-3.0', 'GPL-3.0-only', 'GPL-3.0-or-later', 'AGPL-3.0', 'AGPL-3.0-only', 'AGPL-3.0-or-later', 'SSPL', 'SSPL-1.0']
+          with open('dependency-licenses.json') as f:
+              deps = json.load(f)
+          violations = [d for d in deps if any(fb in (d.get('License', '') or '') for fb in forbidden)]
+          if violations:
+              print('❌ FORBIDDEN LICENSES DETECTED:')
+              for v in violations:
+                  print(f\"  - {v['Name']} ({v['Version']}): {v['License']}\")
+              exit(1)
+          print(f'✅ All {len(deps)} dependencies pass license check')
+          "
+
+      - name: Upload license report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: |
+            dependency-licenses.md
+            dependency-licenses.json
