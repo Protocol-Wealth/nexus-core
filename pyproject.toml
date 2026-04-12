@@ -1,0 +1,166 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nexus-core"
+version = "0.1.0"
+description = "Open source regime-adaptive financial analysis engine with MCP tool orchestration"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Protocol Wealth, LLC", email = "opensource@protocolwealthllc.com" },
+    { name = "Nicholas Rygiel", email = "nick@protocolwealthllc.com" },
+]
+keywords = [
+    "finance",
+    "portfolio",
+    "mcp",
+    "ria",
+    "sec",
+    "compliance",
+    "wealth-management",
+    "regime-detection",
+    "fintech",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+
+# ─── Core dependencies (required) ───────────────────────────────────
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+    "pydantic>=2.10.0",
+    "httpx>=0.28.0",
+    "structlog>=25.0.0",
+    "redis>=5.2.0",
+    "asyncpg>=0.30.0",
+    "pandas>=2.2.0",
+    "numpy>=2.1.0",
+    "scipy>=1.14.0",
+]
+
+# ─── Optional dependencies (install with extras) ────────────────────
+[project.optional-dependencies]
+
+# Portfolio optimization
+optimization = [
+    "PyPortfolioOpt>=1.5.0",   # MIT
+    "Riskfolio-Lib>=7.0.0",    # BSD-3
+    "skfolio>=0.4.0",          # BSD-3
+]
+
+# Risk analytics
+risk = [
+    "empyrical-reloaded>=0.5.11",  # Apache 2.0
+    "pyfolio-reloaded>=0.9.8",     # Apache 2.0
+    "ffn>=1.0.0",                  # MIT
+]
+
+# Derivatives pricing
+pricing = [
+    "QuantLib>=1.34",              # Modified BSD
+    "financepy>=0.370",            # MIT
+]
+
+# SEC EDGAR integration
+edgar = [
+    "edgartools>=3.0.0",           # MIT — built-in MCP server
+    "arelle-release>=2.30.0",      # Apache 2.0 (XBRL validation)
+    "sec-parser>=0.0.6",           # MIT
+    "sec-edgar-downloader>=5.0.0", # MIT
+]
+
+# Market data
+market = [
+    "yfinance>=0.2.48",            # Apache 2.0
+]
+
+# AI/ML for finance
+ai = [
+    "finrl>=0.3.7",                # MIT (heavy: torch, gym)
+    "transformers>=4.46.0",        # Apache 2.0 (for FinBERT)
+    "torch>=2.5.0",                # BSD-3
+]
+
+# Backtesting
+backtest = [
+    "zipline-reloaded>=3.0.0",     # Apache 2.0
+    "alphalens-reloaded>=0.4.6",   # Apache 2.0
+]
+
+# Compliance (OFAC screening, XBRL)
+compliance = [
+    "httpx>=0.28.0",               # Moov Watchman runs as separate service
+]
+
+# Onchain / DeFi
+onchain = [
+    "ethereum-etl>=2.4.0",         # MIT
+    "web3>=7.6.0",                 # MIT
+]
+
+# Planning / retirement simulation
+planning = [
+    "scipy>=1.14.0",               # already in core but listed for clarity
+]
+
+# Development tools
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "pip-licenses>=5.0.0",
+]
+
+# All capabilities (excluding dev)
+all = [
+    "nexus-core[optimization,risk,pricing,edgar,market,ai,backtest,compliance,onchain,planning]",
+]
+
+[project.urls]
+Homepage = "https://nexusmcp.site"
+Documentation = "https://github.com/Protocol-Wealth/nexus-core/tree/main/docs"
+Repository = "https://github.com/Protocol-Wealth/nexus-core"
+Issues = "https://github.com/Protocol-Wealth/nexus-core/issues"
+Changelog = "https://github.com/Protocol-Wealth/nexus-core/blob/main/CHANGELOG.md"
+"Patent" = "https://patentcenter.uspto.gov/applications/64034229"
+
+[project.scripts]
+nexus-core = "nexus_core.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["nexus_core*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "PL"]
+ignore = ["E501", "PLR0913"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "unit: Unit tests (no external deps)",
+    "integration: Integration tests (may need services)",
+    "slow: Slow tests (>5s)",
+    "live: Tests hitting live APIs (skipped in CI)",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
