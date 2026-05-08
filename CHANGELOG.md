@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — v0.3.0: Financials + Optimization absorption
+
+- **`nexus_core.financials`** — new package, license-clean Apache 2.0:
+  - `statements.py` — Pydantic models for `IncomeStatement`,
+    `BalanceSheet`, `CashFlowStatement`, `StatisticsStatement`,
+    `StatementBundle` (canonical envelope), with `Period` enum.
+  - `ratios.py` — five families of ratios as pure functions:
+    `liquidity`, `solvency`, `efficiency`, `profitability`,
+    `valuation`. Returns typed `RatioPanel` subclasses.
+  - `models.py` — DCF (perpetuity-growth), CAPM, WACC, DuPont
+    (3-step + 5-step), Altman Z-Score (manufacturing variant) with
+    distress-zone classification.
+  - `performance.py` — Sharpe, Treynor, Information Ratio, Jensen
+    alpha + beta, all annualized; `all_performance` composes.
+  - `risk.py` — VaR family (historical / Gaussian / Cornish-Fisher),
+    CVaR, downside volatility, max drawdown.
+  - `adapter.py` — `from_finance_toolkit(toolkit)` reads a fetched
+    `financetoolkit.Toolkit` instance and produces a
+    `StatementBundle`. Optional `[financials]` extra unlocks the
+    bridge; everything else works without it.
+- **`nexus_core.engine.optimization`** expansion — twelve entry points:
+  - PyPortfolioOpt-backed (existing): `optimize`, `optimize_for_regime`,
+    `max_sharpe`, `min_volatility`, `target_return`, `target_risk`, `hrp`.
+  - Riskfolio-Lib-backed (new): `risk_parity` (24+ risk measures),
+    `hierarchical_risk_parity` (richer than PyPortfolioOpt's HRPOpt),
+    `min_cvar`.
+  - Black-Litterman (new): immutable `View` value object with
+    `absolute_view` / `relative_view` builders, plus
+    `black_litterman_posterior` to feed any optimizer's `mu` input.
+  - Discrete allocation (new): `discrete_allocate` with `lp` /
+    `greedy` methods, returns `DiscreteAllocationResult` with
+    integer shares + leftover cash.
+- **`pyproject.toml`** — new `[financials]` extra (`financetoolkit>=2.0.0`).
+- **Tests:** 33 new (26 financials + 7 optimization shapes).
+  `pytest tests/` reports 90 passed.
+- **Attribution:** FinanceToolkit (MIT), PyPortfolioOpt (MIT),
+  Riskfolio-Lib (BSD-3) added/updated in `NOTICE` and
+  `docs/attribution.md`.
+
 ### Added — Phase 3a (regime + scoring engines)
 - `nexus_core.engine.regime` — Multi-signal regime classification:
   - `RegimeCode` / `ClientType` / `SignalDirection` enums

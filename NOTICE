@@ -84,6 +84,10 @@ is in THIRD_PARTY_LICENSES.md.
   Copyright (c) 2017-2026 Ran Aroussi
   Licensed under the Apache License, Version 2.0
 
+- FinanceToolkit (https://github.com/JerBouma/FinanceToolkit)
+  Copyright (c) 2025 Jeroen Bouma
+  Licensed under the MIT License
+
 ## Backtesting & Factor Analysis
 
 - zipline-reloaded (https://github.com/stefan-jansen/zipline-reloaded)
