@@ -35,21 +35,27 @@
 
 ## MCP Tool Pattern
 
+The reference scaffold lives at `src/nexus_core/mcp/server/app.py`. Tools register via `@mcp.tool()`. Responses optionally flow through adopter-supplied `ResponseFilter` callables before return:
+
 ```python
-@mcp.tool()
-def score_ticker(ticker: str, auth_key: str = "") -> str:
-    denied = check_tier("user", auth_key=auth_key)
-    if denied:
-        return denied
-    # scoring logic
-    return json.dumps(result)
+from nexus_core.mcp.server import build_server
+
+def my_pii_filter(tool_name, response, *, auth_context=None):
+    # adopter-implemented PII redaction
+    return response
+
+def my_tier_filter(tool_name, response, *, auth_context=None):
+    # adopter-implemented tier-based response scrubbing
+    return response
+
+server = build_server(
+    regime_engine=engine,
+    filters=[my_pii_filter, my_tier_filter],
+)
 ```
 
-## Tiered Access
+The scaffold ships no authentication, authorization, tier enforcement, audit logging, or PII redaction of its own. The `ResponseFilter` Protocol is the hook surface where adopters wire those concerns in; the filter implementations are entirely adopter-defined and adopter-operated.
 
-| Tier | Access |
-|------|--------|
-| PUBLIC | No auth - market news, basic regime |
-| USER | API key - scoring, technicals |
-| CLIENT | Client key - portfolio, filtered |
-| ADVISOR | Full access including PII data |
+## Access Control and Tiering (Adopter-Supplied)
+
+The framework does not enforce access tiers. Production deployments typically need to distinguish public, authenticated, and privileged callers; adopters compose that logic on top of `ResponseFilter` (post-response scrubbing) or upstream of the MCP server (for example, an OAuth resource server in front of the FastAPI host doing authentication and rate limiting before the request reaches a tool). The current scaffold treats all callers as trusted and emits all tool output unfiltered.

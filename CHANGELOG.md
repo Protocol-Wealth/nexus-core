@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — Public-repo honesty disclaimer + claim reconciliation (2026-05-14)
+
+- **`README.md`** — added `## Status` block before `## What This Is`: this is a reference framework and starting point, not a production-ready product; adopters are responsible for adding their own PII controls, access control, input validation, authentication, and data-handling boundaries; the framework makes no AI-provider data-retention guarantees.
+- **`README.md`** — Architecture diagram: replaced the unsubstantiated "Multi-tier access control" and "Transport-layer PII filtering" lines under MCP Tool Registry with an honest "Pluggable ResponseFilter hooks (adopter-supplied auth / PII / audit)" line that matches the actual code in `src/nexus_core/mcp/server/app.py`.
+- **`docs/ARCHITECTURE.md`** — rewrote the "MCP Tool Pattern" section: the prior code example referenced a `check_tier(...)` function that does not exist in the codebase; replaced with the real `ResponseFilter` hook pattern. Replaced the "Tiered Access" table (PUBLIC / USER / CLIENT / ADVISOR scoring scopes claimed as built-in) with an "Access Control and Tiering (Adopter-Supplied)" section that states plainly the framework does not enforce access tiers and the scaffold treats all callers as trusted.
+- No code change. Reconciles a public-repo audit finding flagging README + ARCHITECTURE EXISTS-tense capability claims for access control and PII filtering that the code did not back. Apache-2.0 + USPTO #64/034,229 defensive-licensing posture unchanged.
+
 ### Added — v0.3.0: Financials + Optimization absorption
 
 - **`nexus_core.financials`** — new package, license-clean Apache 2.0:
