@@ -10,6 +10,14 @@
 
 **Live:** [nexusmcp.site](https://nexusmcp.site) | **Open Source:** [nexusmcp.site/opensource](https://nexusmcp.site/opensource) | **Patent:** [nexusmcp.site/patent](https://nexusmcp.site/patent)
 
+## Status
+
+This is a reference framework and a starting point, not a production-ready product. It is a work in progress under active, iterative development.
+
+Adopters are responsible for adding their own PII controls, access control, input validation, authentication, and data-handling boundaries appropriate to their own regulatory and security context before any real or sensitive data touches it. Adopters are also responsible for their own AI-provider data-handling posture; the framework makes no data-retention guarantees.
+
+Provided as-is under Apache-2.0.
+
 ## What This Is
 
 Nexus Core is the open source foundation of the [Protocol Wealth research engine](https://nexusmcp.site) — a regime-aware financial analysis system that exposes analytical capabilities as MCP (Model Context Protocol) tools. Any MCP-compatible AI client (Claude, GPT, Gemini) can access regime-aware financial analysis without implementing financial domain logic.
@@ -53,8 +61,8 @@ Nexus Core (FastAPI + FastMCP)
 │   └── OFAC sanctions screening via HTTP API
 ├── MCP Tool Registry
 │   ├── @mcp.tool() decorator pattern
-│   ├── Multi-tier access control
-│   └── Transport-layer PII filtering
+│   ├── Pluggable ResponseFilter hooks (adopter-supplied auth / PII / audit)
+│   └── Tool composition over regime + scoring engines
 └── Data Layer (PostgreSQL + Redis)
 ```
 
