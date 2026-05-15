@@ -1,0 +1,32 @@
+name: SPDX Headers Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  spdx-check:
+    name: Verify SPDX-License-Identifier on .py files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check SPDX-License-Identifier presence
+        run: |
+          MISSING=$(find . -name '*.py' \
+            -not -path '*/.venv/*' \
+            -not -path '*/build/*' \
+            -not -path '*/dist/*' \
+            -not -path '*/.git/*' \
+            -not -path '*/__pycache__/*' \
+            -not -path '*/.eggs/*' \
+            -not -path '*/*.egg-info/*' \
+            | xargs grep -L 'SPDX-License-Identifier' 2>/dev/null || true)
+          if [ -n "$MISSING" ]; then
+            echo "::error::Files missing SPDX-License-Identifier header:"
+            echo "$MISSING"
+            exit 1
+          fi
+          echo "All .py files carry SPDX-License-Identifier header"
