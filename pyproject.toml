@@ -44,7 +44,7 @@ dependencies = [
     "asyncpg>=0.30.0",
     "pandas>=3.0.3",
     "numpy>=2.1.0",
-    "scipy>=1.14.0",
+    "scipy>=1.17.1",
 ]
 
 # ─── Optional dependencies (install with extras) ────────────────────
@@ -114,7 +114,7 @@ onchain = [
 
 # Planning / retirement simulation
 planning = [
-    "scipy>=1.14.0",               # already in core but listed for clarity
+    "scipy>=1.17.1",               # already in core but listed for clarity
 ]
 
 # Development tools
