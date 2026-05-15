@@ -97,7 +97,7 @@ ai = [
 
 # Backtesting
 backtest = [
-    "zipline-reloaded>=3.0.0",     # Apache 2.0
+    "zipline-reloaded>=3.1.1",     # Apache 2.0
     "alphalens-reloaded>=0.4.6",   # Apache 2.0
 ]
 
