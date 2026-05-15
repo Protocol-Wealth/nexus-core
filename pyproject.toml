@@ -108,7 +108,7 @@ compliance = [
 
 # Onchain / DeFi
 onchain = [
-    "ethereum-etl>=2.4.0",         # MIT
+    "ethereum-etl>=2.4.2",         # MIT
     "web3>=7.6.0",                 # MIT
 ]
 
