@@ -54,7 +54,7 @@ dependencies = [
 optimization = [
     "PyPortfolioOpt>=1.5.0",   # MIT
     "Riskfolio-Lib>=7.0.0",    # BSD-3
-    "skfolio>=0.4.0",          # BSD-3
+    "skfolio>=0.20.1",          # BSD-3
 ]
 
 # Risk analytics
