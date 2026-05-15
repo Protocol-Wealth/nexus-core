@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Protocol Wealth, LLC and contributors.
 """Historical backtesting of planning strategies.
 
 Wraps zipline-reloaded for event-driven backtesting.

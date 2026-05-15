@@ -83,7 +83,7 @@ market = [
     "yfinance>=0.2.48",            # Apache 2.0
 ]
 
-# Financial statements + ratios + valuation models (FMP + Yahoo Finance fallback)
+# Financial statements + ratios + valuation models (FinanceToolkit, Yahoo Finance backend)
 financials = [
     "financetoolkit>=2.0.0",       # MIT
 ]

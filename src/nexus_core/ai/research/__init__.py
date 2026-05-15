@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Protocol Wealth, LLC and contributors.
 """Multi-agent equity research.
 
 Wraps FinRobot with PII-redacted prompts and compliance gating on outputs.
