@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Protocol Wealth, LLC and contributors.
 """Monte Carlo retirement simulations.
 
 Protocol Wealth original work, with algorithmic inspiration from:
