@@ -42,7 +42,7 @@ dependencies = [
     "structlog>=25.0.0",
     "redis>=5.2.0",
     "asyncpg>=0.30.0",
-    "pandas>=2.2.0",
+    "pandas>=3.0.3",
     "numpy>=2.1.0",
     "scipy>=1.14.0",
 ]
