@@ -7,7 +7,7 @@
 
 Python 3.12 package — regime-adaptive financial analysis engine that exposes capabilities as MCP (Model Context Protocol) tools. Any MCP-compatible AI client (Claude, GPT, Gemini) can call regime-aware analysis without re-implementing financial domain logic.
 
-Built and tested in production by Protocol Wealth LLC (SEC-registered RIA, CRD #335298). The deployed app at [nexusmcp.site](https://nexusmcp.site) is the closed reference consumer (separate repo). The README's *Status* section is the source of truth on maturity — this is a scaffold / alpha framework, not a production-ready product.
+Built and tested in production by Protocol Wealth LLC (SEC-registered RIA, CRD #335298). The public deployment at [nexusmcp.site](https://nexusmcp.site) runs the `nexus_core.app` surface from **this** repository — a read-only HTTP API + MCP-over-HTTP server; see [`DEPLOY.md`](DEPLOY.md). The README's *Status* section is the source of truth on maturity — this is a scaffold / alpha framework, not a production-ready product.
 
 Sibling: [`pwos-core`](https://github.com/Protocol-Wealth/pwos-core) — TypeScript compliance primitives. **Math + analytical engine lives here; data shapes + audit/compliance primitives live in pwos-core.** Do not port primitives across that boundary.
 
@@ -39,8 +39,10 @@ nexus-core/
 │   │   └── backtest/      # zipline-reloaded wrapper
 │   ├── rebalancing/
 │   │   └── tlh/           # Wash-sale-aware tax-loss harvesting
-│   └── mcp/
-│       └── server/        # FastMCP server entrypoint + @mcp.tool() registry
+│   ├── mcp/
+│   │   └── server/        # FastMCP server entrypoint + @mcp.tool() registry
+│   ├── app/               # Public HTTP API + MCP-over-HTTP deployment (nexusmcp.site)
+│   └── cli.py             # nexus-core CLI — serve (HTTP) / mcp (stdio)
 ├── tests/                 # pytest suites — match source files (test_<module>.py)
 ├── examples/              # Runnable examples: basic_regime, basic_scoring, mcp_server
 ├── docs/
@@ -147,5 +149,5 @@ Hard NOs. Each is enforced by review + tooling where possible:
 - **[`pwos-core`](https://github.com/Protocol-Wealth/pwos-core) (sibling, TypeScript)** — compliance primitives published to npm under `@protocolwealthos/*`. Per the v0.5.0 boundary: math lives in nexus-core; data shapes + audit/compliance hooks live in pwos-core. When extracting a primitive across the boundary, generalize the API — drop framework coupling, drop PW-specific identifiers, expose hooks for caller-specific behavior.
 - **Reference-consumer apps** are separate repos:
   - [`pw-os-v2`](https://github.com/Protocol-Wealth/pw-os-v2) — TypeScript consumer of pwos-core; deployed at [pwos.app](https://pwos.app).
-  - Deployed nexus-core reference at [nexusmcp.site](https://nexusmcp.site) — closed reference consumer; not in this codebase.
+  - The [nexusmcp.site](https://nexusmcp.site) deployment runs the `nexus_core.app` surface from **this** repository — see [`DEPLOY.md`](DEPLOY.md).
 - **`pw-portal-v2` / `pw-api` / `pw-infrastructure` / `pw-onchain`** — closed runtime + consumer repos listed on the security page. Not relevant from within this repo. Do not port code from those into here, and vice versa.

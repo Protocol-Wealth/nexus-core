@@ -146,6 +146,7 @@ pip install nexus-core[ai]                # + FinGPT, FinBERT, FinRobot (heavy)
 pip install nexus-core[backtest]          # + zipline-reloaded, alphalens
 pip install nexus-core[compliance]        # + Moov Watchman client
 pip install nexus-core[onchain]           # + Ethereum-ETL, DefiLlama integration
+pip install nexus-core[serve]             # + the public HTTP API + MCP server (nexusmcp.site)
 ```
 
 ### From source
@@ -170,12 +171,19 @@ score = scoring.score_ticker("AAPL")
 print(f"AAPL: {score.tier} ({score.total}/8)")
 ```
 
-### As an MCP server
+### Run the public API + MCP server
 
 ```bash
-# Run as an MCP server (any MCP-compatible AI client can connect)
-nexus-core mcp serve --port 3333
+pip install -e ".[serve]"
+nexus-core serve     # HTTP API + MCP-over-HTTP — http://127.0.0.1:8080
+nexus-core mcp       # MCP server over stdio (for Claude Desktop)
 ```
+
+`nexus-core serve` hosts the public surface deployed at
+[nexusmcp.site](https://nexusmcp.site): a read-only REST API (regime, market
+data, economic data), interactive docs at `/docs`, and an MCP endpoint at
+`/mcp`. See [DEPLOY.md](DEPLOY.md) for the endpoint reference and Cloud Run
+deployment.
 
 ## Tech Stack
 
@@ -183,8 +191,9 @@ Python 3.12 · FastAPI · FastMCP · PostgreSQL · Redis · pandas · numpy · s
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
-- [MCP Tools Reference](docs/mcp-tools.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Deployment](DEPLOY.md) — running the public API + Cloud Run deploy
+- [Public-surface audit](AUDIT.md) — what the deployment exposes (and excludes)
 - [Attribution](docs/attribution.md) — detailed provenance per capability
 - [Contributing](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)

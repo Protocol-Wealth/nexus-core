@@ -83,6 +83,18 @@ market = [
     "yfinance>=1.3.0",            # Apache 2.0
 ]
 
+# Model Context Protocol server (MCP-over-HTTP transport)
+mcp = [
+    "fastmcp>=2.0.0",              # Apache 2.0
+]
+
+# Public deployment surface — HTTP API + MCP server (see nexus_core.app).
+# fastapi + uvicorn are already core dependencies; this pulls the data and
+# MCP extras the deployed app needs.
+serve = [
+    "nexus-core[market,mcp]",
+]
+
 # Financial statements + ratios + valuation models (FinanceToolkit, Yahoo Finance backend)
 financials = [
     "financetoolkit>=2.0.0",       # MIT
@@ -129,7 +141,7 @@ dev = [
 
 # All capabilities (excluding dev)
 all = [
-    "nexus-core[optimization,risk,pricing,edgar,market,financials,ai,backtest,compliance,onchain,planning]",
+    "nexus-core[optimization,risk,pricing,edgar,market,mcp,financials,ai,backtest,compliance,onchain,planning]",
 ]
 
 [project.urls]
