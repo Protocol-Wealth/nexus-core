@@ -97,7 +97,7 @@ serve = [
 
 # Financial statements + ratios + valuation models (FinanceToolkit, Yahoo Finance backend)
 financials = [
-    "financetoolkit>=2.0.0",       # MIT
+    "financetoolkit>=2.0.7",       # MIT
 ]
 
 # AI/ML for finance
