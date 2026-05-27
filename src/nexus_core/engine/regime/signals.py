@@ -10,7 +10,7 @@ subclass them freely without pulling in Pydantic's validation costs.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 
@@ -104,6 +104,10 @@ class RegimeResult:
         rationale: Short natural-language explanation.
         dynamic_200wma: Optional trend-adjusted 200WMA context.
         forced_liquidation_dampener: Dampener state (if active).
+        as_of: Date the classification was performed against. When ``None``,
+            the classifier used the latest data available. When set, the
+            result is reproducible from frozen inputs — same ``signals`` +
+            same ``as_of`` always produces an identical ``RegimeResult``.
     """
 
     regime: str  # RegimeCode value
@@ -114,6 +118,7 @@ class RegimeResult:
     rationale: str
     dynamic_200wma: dict[str, Any] | None = None
     forced_liquidation_dampener: dict[str, Any] | None = None
+    as_of: date | None = None
 
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -128,6 +133,8 @@ class RegimeResult:
             result["dynamic_200wma"] = self.dynamic_200wma
         if self.forced_liquidation_dampener is not None:
             result["forced_liquidation_dampener"] = self.forced_liquidation_dampener
+        if self.as_of is not None:
+            result["as_of"] = self.as_of.isoformat()
         return result
 
 

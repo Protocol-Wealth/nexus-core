@@ -19,7 +19,7 @@ For the simplest usage, see ``examples/basic_regime.py``:
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from ...data.providers import MacroDataProvider, MarketDataProvider
 from .classifier import RegimeClassifier
@@ -79,10 +79,25 @@ class RegimeEngine:
 
     # ---------------------------------------------------------------- public
 
-    def fetch_signals(self, *, force_refresh: bool = False) -> RegimeSignals:
-        """Fetch fresh signals or return cached if within TTL."""
+    def fetch_signals(
+        self,
+        *,
+        force_refresh: bool = False,
+        as_of: date | None = None,
+    ) -> RegimeSignals:
+        """Fetch fresh signals or return cached if within TTL.
+
+        Args:
+            force_refresh: Bypass the cache.
+            as_of: When set, fetch signals as of this date for deterministic
+                replay. ``as_of`` is forwarded to the underlying data
+                providers via ``SignalFetcher.fetch(as_of=...)`` if the
+                fetcher supports it. A non-``None`` ``as_of`` also bypasses
+                the cache, because the cached snapshot is for "now" only.
+        """
         if (
-            not force_refresh
+            as_of is None
+            and not force_refresh
             and self._cached_signals is not None
             and self._cache_timestamp is not None
         ):
@@ -90,9 +105,23 @@ class RegimeEngine:
             if age_min < self._cache_ttl_minutes:
                 return self._cached_signals
 
-        signals = self.fetcher.fetch()
-        self._cached_signals = signals
-        self._cache_timestamp = datetime.now(UTC)
+        if as_of is not None:
+            try:
+                # ``SignalFetcher.fetch`` does not formally accept ``as_of`` in
+                # its base signature; adopters can supply a fetcher subclass
+                # that does. The TypeError fallback handles fetchers that
+                # don't — they get the plain-fetch result, and the caller
+                # should not interpret it as a true historical replay.
+                signals = self.fetcher.fetch(as_of=as_of)  # type: ignore[call-arg]
+            except TypeError:
+                signals = self.fetcher.fetch()
+        else:
+            signals = self.fetcher.fetch()
+
+        # Only update the cache when we fetched the "live now" data.
+        if as_of is None:
+            self._cached_signals = signals
+            self._cache_timestamp = datetime.now(UTC)
         return signals
 
     def classify(
@@ -100,10 +129,21 @@ class RegimeEngine:
         signals: RegimeSignals | None = None,
         *,
         prediction_market: dict[str, float | str] | None = None,
+        as_of: date | None = None,
     ) -> RegimeResult:
-        """Classify the current regime. Falls back to fetching signals if none passed."""
+        """Classify the current regime. Falls back to fetching signals if none passed.
+
+        Args:
+            signals: Pre-fetched signals to classify. If ``None``, the
+                engine fetches via :meth:`fetch_signals`.
+            prediction_market: Optional 6th signal.
+            as_of: Date this classification is being made for. Forwarded to
+                :meth:`fetch_signals` and to the classifier, and echoed onto
+                ``RegimeResult.as_of``. Pass a fixed date for reproducible
+                replay against frozen inputs.
+        """
         if signals is None:
-            signals = self.fetch_signals()
+            signals = self.fetch_signals(as_of=as_of)
 
         now = datetime.now(UTC)
         days_in_regime = (now - self._regime_start).days if self._regime_start else 0
@@ -113,6 +153,7 @@ class RegimeEngine:
             prior_regime=self._current_regime,
             days_in_regime=days_in_regime,
             prediction_market=prediction_market,
+            as_of=as_of,
         )
 
         # Track regime transitions.
