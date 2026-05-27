@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — Cross-repo governance parity with `pwos-core` (2026-05-27)
+
+- **No new governance files needed in this repo.** `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, and `CHANGELOG.md` already match the canonical PW open-source shape and were the source-of-truth pattern that `pwos-core`'s parallel hardening copied from. This entry records the cross-repo work for the audit trail; no file in this repo was modified except this CHANGELOG.
+- **`pwos-core` side (sibling repo)** of the same iteration: CONTRIBUTING rewritten to remove fictional commands and list all 18 published packages; SECURITY scope tightened to pwos-core primitives; CODE_OF_CONDUCT project-name typo fixed; README gained a *What's Open vs Private* section mirroring this repo's, plus a rewrite of the "LLM autonomously selects and executes tools" line to surface the human-in-the-loop boundary between advisor IDE chat and client-facing writes.
+
 ### Changed — Public-repo honesty disclaimer + claim reconciliation (2026-05-14)
 
 - **`README.md`** — added `## Status` block before `## What This Is`: this is a reference framework and starting point, not a production-ready product; adopters are responsible for adding their own PII controls, access control, input validation, authentication, and data-handling boundaries; the framework makes no AI-provider data-retention guarantees.
