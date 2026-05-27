@@ -44,6 +44,12 @@ from .enhancements import (
     base_rate_enhancement,
     consistency_enhancement,
 )
+from .explanation import (
+    CheckExplanation,
+    ScoreExplanation,
+    SignalContribution,
+    build_score_explanation,
+)
 from .formatter import format_advisor, format_public, format_structured
 from .framework import Enhancement, ScoreResult, ScoringFramework
 from .tiers import ConfidenceTier, classify_tier
@@ -70,6 +76,11 @@ __all__ = [
     "adversarial_brief_enhancement",
     "base_rate_enhancement",
     "consistency_enhancement",
+    # Explainability (Tier-2 N2)
+    "CheckExplanation",
+    "ScoreExplanation",
+    "SignalContribution",
+    "build_score_explanation",
     # Formatters
     "format_advisor",
     "format_public",

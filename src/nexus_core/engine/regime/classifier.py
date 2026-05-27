@@ -14,6 +14,8 @@ data source.
 
 from __future__ import annotations
 
+from datetime import date
+
 from .codes import RegimeCode
 from .hysteresis import HysteresisState, ZoneBoundary
 from .signals import RegimeResult, RegimeSignals, SignalStatus
@@ -60,6 +62,7 @@ class RegimeClassifier:
         prior_regime: str | None = None,
         days_in_regime: int = 0,
         prediction_market: dict[str, float | str] | None = None,
+        as_of: date | None = None,
     ) -> RegimeResult:
         """Classify signals into a regime result.
 
@@ -69,6 +72,12 @@ class RegimeClassifier:
                 dampener to decide whether to hold a prior classification.
             days_in_regime: Days since the last regime transition.
             prediction_market: Optional 6th signal (conviction + direction).
+            as_of: Date the classification is being made for. Echoed onto
+                ``RegimeResult.as_of``. The classifier is pure: given the
+                same ``signals`` + same ``as_of``, the returned
+                ``RegimeResult`` is identical. ``as_of`` does NOT change the
+                classification logic itself — it is metadata for reproducible
+                replay against frozen inputs.
         """
         signal_statuses = self._classify_signals(signals, prediction_market)
 
@@ -99,6 +108,7 @@ class RegimeClassifier:
             signals=signals,
             signal_statuses=signal_statuses,
             rationale=rationale,
+            as_of=as_of,
         )
 
     # ---------------------------------------------------------------- internal
