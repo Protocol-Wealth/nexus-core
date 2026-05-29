@@ -501,6 +501,103 @@ def _precompute_fscore(
 
 
 # =============================================================================
+# Sector / industry (SEC submissions endpoint)
+# =============================================================================
+
+_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
+
+# SIC major group (first two digits) -> GICS-style sector label, matching the
+# vocabulary the EMF sector / layer / ASAN checks consume. Coarse but adequate
+# for sector-tailwind + layer assignment; high-value splits (semiconductors,
+# software, pharma, autos vs aerospace, REITs) are handled by _SIC_OVERRIDES,
+# which take precedence.
+_SIC_MAJOR_SECTOR: dict[int, str] = {
+    1: "basic materials", 2: "basic materials", 7: "basic materials", 9: "basic materials",
+    10: "basic materials", 12: "basic materials", 14: "basic materials",
+    13: "energy",
+    15: "industrials", 16: "industrials", 17: "industrials",
+    20: "consumer defensive", 21: "consumer defensive",
+    22: "consumer cyclical", 23: "consumer cyclical",
+    24: "basic materials", 25: "consumer cyclical", 26: "basic materials",
+    27: "communication services",
+    28: "basic materials",
+    29: "energy",
+    30: "consumer cyclical", 31: "consumer cyclical", 32: "basic materials",
+    33: "basic materials", 34: "industrials",
+    35: "industrials", 36: "technology",
+    37: "consumer cyclical",
+    38: "technology", 39: "consumer cyclical",
+    40: "industrials", 41: "industrials", 42: "industrials", 44: "industrials",
+    45: "industrials", 47: "industrials",
+    48: "communication services",
+    49: "utilities",
+    50: "consumer cyclical", 51: "consumer cyclical",
+    52: "consumer cyclical", 53: "consumer cyclical", 55: "consumer cyclical",
+    56: "consumer cyclical", 57: "consumer cyclical", 59: "consumer cyclical",
+    54: "consumer defensive",
+    58: "consumer cyclical",
+    60: "financials", 61: "financials", 62: "financials", 63: "financials",
+    64: "financials", 67: "financials",
+    65: "real estate",
+    70: "consumer cyclical", 72: "consumer cyclical", 73: "technology",
+    75: "consumer cyclical", 78: "communication services", 79: "consumer cyclical",
+    80: "healthcare", 82: "communication services", 87: "industrials",
+}
+
+_SIC_OVERRIDES: tuple[tuple[int, int, str], ...] = (
+    (2833, 2836, "healthcare"),  # pharmaceutical / biological products
+    (3570, 3579, "technology"),  # computer & office equipment
+    (3661, 3669, "technology"),  # communications equipment
+    (3670, 3679, "technology"),  # semiconductors & electronic components
+    (3840, 3851, "healthcare"),  # medical / surgical instruments & supplies
+    (7370, 7379, "technology"),  # computer programming, software & data services
+    (3710, 3716, "consumer cyclical"),  # motor vehicles & parts
+    (3720, 3728, "industrials"),  # aircraft & aerospace
+    (6798, 6798, "real estate"),  # REITs (within the 67xx financial group)
+)
+
+
+def _sic_to_sector(sic: int | None) -> str | None:
+    """Map a SEC SIC code to the GICS-style sector label the EMF checks use."""
+    if sic is None:
+        return None
+    for lo, hi, sector in _SIC_OVERRIDES:
+        if lo <= sic <= hi:
+            return sector
+    return _SIC_MAJOR_SECTOR.get(sic // 100)
+
+
+def fetch_company_submissions(
+    cik: int,
+    *,
+    client: httpx.Client | None = None,
+    timeout: float = _DEFAULT_TIMEOUT,
+) -> dict[str, Any] | None:
+    """Fetch SEC submissions metadata for ``cik`` (carries ``sic`` + name), or ``None``."""
+    url = _SUBMISSIONS_URL.format(cik=cik)
+    try:
+        payload = fetch_json(url, headers=_HEADERS, client=client, timeout=timeout)
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.debug("SEC submissions fetch failed for CIK %s: %s", cik, exc)
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _extract_sic(submissions: dict[str, Any] | None) -> tuple[int | None, str | None]:
+    """Pull (sic_code, sic_description) from a submissions payload, best-effort."""
+    if not isinstance(submissions, dict):
+        return None, None
+    raw = submissions.get("sic")
+    sic: int | None = None
+    if isinstance(raw, (int, str)) and str(raw).strip():
+        try:
+            sic = int(raw)
+        except (TypeError, ValueError):
+            sic = None
+    return sic, submissions.get("sicDescription") or None
+
+
+# =============================================================================
 # Public entry point
 # =============================================================================
 
@@ -555,11 +652,23 @@ def build_fundamentals(
 
     f_score = _precompute_fscore(income, balance, cash)
 
+    # Sector / industry from the submissions endpoint (separate from companyfacts).
+    # Best-effort: leaves sector None if unavailable, so the sector/regime/ASAN
+    # checks simply report insufficient_data rather than misclassifying.
+    sic, sic_description = _extract_sic(
+        fetch_company_submissions(cik, client=client, timeout=timeout)
+    )
+    sector = _sic_to_sector(sic)
+
     return {
         "ticker": ticker.strip().upper(),
         "cik": cik,
         "source": "SEC EDGAR XBRL companyfacts",
         "fiscal_years": years,
+        "sector": sector,
+        "industry": sic_description,
+        "sic": sic,
+        "sic_description": sic_description,
         "croic": croic,
         "croic_passes": croic is not None and croic > _CROIC_STRONG_THRESHOLD,
         "f_score": f_score,
@@ -575,4 +684,5 @@ __all__ = [
     "build_fundamentals",
     "cik_for_ticker",
     "fetch_company_facts",
+    "fetch_company_submissions",
 ]

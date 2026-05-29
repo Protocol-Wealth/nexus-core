@@ -19,9 +19,11 @@ import pytest
 
 from nexus_core.data.edgar.fundamentals import (
     SEC_USER_AGENT,
+    _sic_to_sector,
     build_fundamentals,
     cik_for_ticker,
     fetch_company_facts,
+    fetch_company_submissions,
 )
 from nexus_core.engine.scoring.checks import ScoringContext
 from nexus_core.engine.scoring.emf.croic import CROICCheck
@@ -270,3 +272,64 @@ def test_build_fundamentals_empty_gaap_returns_none() -> None:
         return httpx.Response(200, json={"facts": {}})
 
     assert build_fundamentals("AAPL", client=_client(handler)) is None
+
+
+@pytest.mark.parametrize(
+    ("sic", "sector"),
+    [
+        (3571, "technology"),  # electronic computers (AAPL)
+        (3674, "technology"),  # semiconductors
+        (7372, "technology"),  # prepackaged software
+        (2834, "healthcare"),  # pharmaceutical preparations
+        (3841, "healthcare"),  # surgical/medical instruments
+        (1311, "energy"),  # crude petroleum & natural gas
+        (6021, "financials"),  # national commercial banks
+        (6798, "real estate"),  # REITs
+        (5812, "consumer cyclical"),  # eating places
+        (4911, "utilities"),  # electric services
+        (3711, "consumer cyclical"),  # motor vehicles
+        (3721, "industrials"),  # aircraft
+        (None, None),
+        (99, None),  # unmapped
+    ],
+)
+def test_sic_to_sector(sic: int | None, sector: str | None) -> None:
+    assert _sic_to_sector(sic) == sector
+
+
+def test_fetch_company_submissions() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert "submissions/CIK0000320193.json" in str(request.url)
+        return httpx.Response(200, json={"sic": "3571", "sicDescription": "Electronic Computers"})
+
+    subs = fetch_company_submissions(320193, client=_client(handler))
+    assert subs is not None
+    assert subs["sic"] == "3571"
+
+
+def _full_handler_with_submissions(request: httpx.Request) -> httpx.Response:
+    url = str(request.url)
+    if "company_tickers.json" in url:
+        return httpx.Response(200, json=_TICKER_MAP)
+    if "companyfacts/CIK0000320193.json" in url:
+        return httpx.Response(200, json=_COMPANY_FACTS)
+    if "submissions/CIK0000320193.json" in url:
+        return httpx.Response(
+            200, json={"sic": "3571", "sicDescription": "Electronic Computers"}
+        )
+    return httpx.Response(404, json={"error": "not found"})
+
+
+def test_build_fundamentals_populates_sector() -> None:
+    fund = build_fundamentals("AAPL", client=_client(_full_handler_with_submissions))
+    assert fund is not None
+    assert fund["sector"] == "technology"
+    assert fund["industry"] == "Electronic Computers"
+    assert fund["sic"] == 3571
+
+
+def test_build_fundamentals_sector_none_when_submissions_unavailable() -> None:
+    # _full_handler 404s the submissions URL → sector degrades to None, no break.
+    fund = build_fundamentals("AAPL", client=_client(_full_handler))
+    assert fund is not None
+    assert fund["sector"] is None
