@@ -113,7 +113,7 @@ Use modular installs in CI — `[all]` pulls heavy AI deps. Modular install patt
 6. Run `pytest && ruff check src/ tests/ && mypy src/nexus_core/` — all three must pass before opening the PR.
 
 **Do NOT:**
-- Hard-code production threshold values, decay constants (λ), or signal weights. Public repo uses reference / placeholder values only — real thresholds live in the private companion.
+- Change the calibrated threshold/decay/weight values casually. These ARE Protocol Wealth's published EMF calibration (EMF is an openly-published framework — see [protocolwealthllc.com/framework](https://protocolwealthllc.com/framework)); there is no private companion. Update them only to track the published framework, with the backtest rationale, and keep `regime/thresholds.py` the single source of truth.
 - Add a new regime state. The 5-state model (Growth / Transition / Hard Asset / Deflation / Repression) is patent-anchored; expanding it requires architecture-level review, not a contributor PR.
 - Compute scoring across regime states inside a signal module. Regime classification is one stage; scoring composes on top. Keep the stages separate.
 

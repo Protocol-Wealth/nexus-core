@@ -46,6 +46,21 @@ class TestRegimeThresholds:
         assert t.gold_spx_growth_max == 0.40
         assert t.vix_elevated_enter == 30.0
 
+    def test_pw_published_calibration(self) -> None:
+        """Defaults are Protocol Wealth's published EMF calibration (not placeholders).
+
+        Locks the calibrated values that differ from generic round numbers so a
+        casual edit can't silently drift the published framework.
+        """
+        t = RegimeThresholds()
+        # VIX hysteresis dead-zones
+        assert (t.vix_elevated_enter, t.vix_elevated_exit) == (26.0, 23.0)
+        assert (t.vix_crisis_enter, t.vix_crisis_exit) == (36.0, 33.0)
+        # Credit spreads — calibrated against BBB OAS (bps)
+        assert (t.spreads_tight, t.spreads_normal_max, t.spreads_wide_max) == (80.0, 150.0, 250.0)
+        # 30Y bond futures PM-direction brackets
+        assert (t.bond_futures_bullish_pm, t.bond_futures_neutral) == (113.0, 118.0)
+
 
 @pytest.mark.unit
 class TestForcedLiquidationThresholds:
