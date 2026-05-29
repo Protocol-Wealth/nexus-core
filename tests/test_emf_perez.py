@@ -177,3 +177,20 @@ def test_phase_from_extra_when_absent_in_fundamentals() -> None:
     result = PerezPhaseCheck()(ctx)
     assert result.passed is True
     assert result.details["current_phase"] == "Deployment"
+
+
+def test_compute_accepts_snake_case_capex() -> None:
+    """The nexus-core SEC fetcher emits snake_case 'capital_expenditure'."""
+    inc = [{"revenue": 110.0}, {"revenue": 100.0}]
+    cf = [{"capital_expenditure": -125.0}, {"capital_expenditure": -100.0}]
+    assert compute_perez_phase(inc, cf) == "Installation"
+
+
+def test_compute_dynamic_phase_from_sec_shaped_statements() -> None:
+    """SEC-fetcher field names compute a real phase (capex +50% > revenue +5.3%)."""
+    inc = [{"fiscal_year": 2024, "revenue": 1000.0}, {"fiscal_year": 2023, "revenue": 950.0}]
+    cf = [
+        {"fiscal_year": 2024, "operating_cash_flow": 200.0, "capital_expenditure": 90.0},
+        {"fiscal_year": 2023, "operating_cash_flow": 180.0, "capital_expenditure": 60.0},
+    ]
+    assert compute_perez_phase(inc, cf) == "Installation"
