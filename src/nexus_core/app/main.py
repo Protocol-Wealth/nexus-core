@@ -55,6 +55,7 @@ from .options import build_options_router
 from .ratelimit import RateLimitMiddleware
 from .routes import build_router
 from .scoring import build_score_router
+from .snapshots import build_snapshots_router
 from .vaults import build_vaults_router
 from .wallet import build_wallet_router
 
@@ -193,6 +194,7 @@ def create_app(
         build_lp_router(thegraph=TheGraphClient(), tatum=TatumClient(), merkl=MerklClient())
     )
     app.include_router(build_benchmarks_router(coingecko=CoinGeckoMarketData()))
+    app.include_router(build_snapshots_router(coingecko=CoinGeckoMarketData()))
 
     mcp_enabled = mcp_app is not None
 
