@@ -11,9 +11,12 @@ Concrete clients:
   balances (an arbitrary address → its total USD + token holdings). Public
   on-chain data; no identity, name, or client linkage. Requires ``DEBANK_API_KEY``.
 - :class:`TatumClient` — Tatum multi-chain RPC client for **anonymous**
-  native-coin balances (EVM ``eth_getBalance`` + Solana ``getBalance``). Public
-  on-chain data; complements DeBank with native balances across chains it does
-  not cover (incl. Solana). Requires ``TATUM_API_KEY``.
+  native-coin balances (EVM ``eth_getBalance`` + Solana ``getBalance``) and
+  Uniswap V3 ``tokensOwed`` reads via ``eth_call``. Requires ``TATUM_API_KEY``.
+- :class:`TheGraphClient` — The Graph gateway reader for Uniswap V3 LP
+  positions/pools (feeds ``engine.lp``). Requires ``THEGRAPH_API_KEY``.
+- :class:`MerklClient` — keyless Merkl v4 reader for liquidity-incentive
+  (reward) APR by pool/vault — the incentive layer on top of LP fee APR.
 
 All need only the core ``httpx`` dependency. Reference libraries for richer
 chain pipelines (``pip install nexus-core[onchain]``):
@@ -24,15 +27,22 @@ chain pipelines (``pip install nexus-core[onchain]``):
 
 from .debank import DeBankClient, WalletToken, is_evm_address
 from .defillama import DefiLlamaClient, DefiProtocol
+from .merkl import MerklClient, RewardOpportunity
 from .tatum import NativeBalance, TatumClient, is_solana_address
+from .thegraph import CHAIN_IDS, RawV3Position, TheGraphClient
 from .vaultsfyi import Vault, VaultsFyiClient, chain_alias, is_supported_chain
 
 __all__ = [
+    "CHAIN_IDS",
     "DeBankClient",
     "DefiLlamaClient",
     "DefiProtocol",
+    "MerklClient",
     "NativeBalance",
+    "RawV3Position",
+    "RewardOpportunity",
     "TatumClient",
+    "TheGraphClient",
     "Vault",
     "VaultsFyiClient",
     "WalletToken",

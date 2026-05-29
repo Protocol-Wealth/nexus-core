@@ -122,3 +122,31 @@ def test_multi_chain_native_filters_zero_and_non_evm() -> None:
 
 def test_multi_chain_native_rejects_non_evm_address() -> None:
     assert TatumClient(api_key="k").multi_chain_native(_SOL) == {}
+
+
+def test_nfpm_tokens_owed_decodes() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "ethereum-mainnet.gateway.tatum.io"
+        body = request.read().decode()
+        assert "eth_call" in body and "0x99fbab88" in body
+        # positions() returns 12 words; tokensOwed0/1 are words[10], [11].
+        words = ["00" * 32] * 10 + [f"{1_500_000:064x}", f"{2 * 10**18:064x}"]
+        return httpx.Response(200, json={"result": "0x" + "".join(words)})
+
+    owed = TatumClient(api_key="k", http_client=_client(handler)).nfpm_tokens_owed(
+        "ethereum", 123, decimals0=6, decimals1=18
+    )
+    assert owed is not None
+    assert owed[0] == pytest.approx(1.5)  # 1_500_000 / 10**6
+    assert owed[1] == pytest.approx(2.0)  # 2e18 / 10**18
+
+
+def test_nfpm_tokens_owed_unsupported_chain() -> None:
+    assert TatumClient(api_key="k").nfpm_tokens_owed("solana", 1) is None
+
+
+def test_nfpm_tokens_owed_short_result_degrades() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"result": "0x" + "00" * 32})  # only 1 word
+
+    assert TatumClient(api_key="k", http_client=_client(handler)).nfpm_tokens_owed("ethereum", 1) is None
