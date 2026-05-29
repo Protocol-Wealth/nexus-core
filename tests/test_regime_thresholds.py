@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from nexus_core.engine.regime import (
@@ -32,7 +34,7 @@ class TestRegimeThresholds:
 
     def test_immutable(self) -> None:
         t = RegimeThresholds()
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             t.gold_spx_growth_max = 0.99  # type: ignore[misc]
 
     def test_custom_thresholds(self) -> None:

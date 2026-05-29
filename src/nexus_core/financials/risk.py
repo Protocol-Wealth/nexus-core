@@ -120,8 +120,7 @@ def max_drawdown(returns: list[float]) -> float | None:
         cum *= 1 + r
         peak = max(peak, cum)
         dd = (cum - peak) / peak
-        if dd < mdd:
-            mdd = dd
+        mdd = min(mdd, dd)
     return mdd
 
 

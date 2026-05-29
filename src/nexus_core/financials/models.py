@@ -22,7 +22,6 @@ from dataclasses import dataclass
 
 from .statements import StatementBundle
 
-
 # ─── DCF ─────────────────────────────────────────────────────────────
 
 

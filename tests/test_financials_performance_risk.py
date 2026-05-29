@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from nexus_core.financials.performance import (
     all_performance,
     alpha_beta,

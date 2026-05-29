@@ -31,14 +31,6 @@ Install with: ``pip install nexus-core[optimization]``
 
 from __future__ import annotations
 
-# PyPortfolioOpt-backed primitives (existing wrapper)
-from .pypfopt_wrapper import (
-    REGIME_OPTIMIZER_MAP,
-    OptimizationResult,
-    optimize,
-    optimize_for_regime,
-)
-
 # Black-Litterman view construction + posterior
 from .black_litterman import (
     View,
@@ -49,6 +41,14 @@ from .black_litterman import (
 
 # Discrete allocation (whole-share)
 from .discrete import DiscreteAllocationResult, discrete_allocate
+
+# PyPortfolioOpt-backed primitives (existing wrapper)
+from .pypfopt_wrapper import (
+    REGIME_OPTIMIZER_MAP,
+    OptimizationResult,
+    optimize,
+    optimize_for_regime,
+)
 
 # Riskfolio-backed primitives — risk parity, HRP-with-rich-RMs, CVaR
 from .riskfolio_backend import (
