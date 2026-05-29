@@ -15,6 +15,7 @@ functions require ``DATABASE_URL`` (reachable only inside ``pwllc-prod-vpc``).
 from __future__ import annotations
 
 import json
+from datetime import date
 from typing import Any
 
 import asyncpg
@@ -49,10 +50,13 @@ ORDER BY snapshot_date ASC
 
 async def write_benchmark_snapshot(snapshot_date: str, prices: dict[str, float]) -> None:
     """Upsert one day's asset prices (``snapshot_date`` = ``YYYY-MM-DD``)."""
+    # asyncpg's date codec requires a datetime.date, not an ISO string — binding
+    # a str raises DataError even with a ::date cast (encode precedes the cast).
+    day = date.fromisoformat(snapshot_date)
     conn = await connect()
     try:
         await conn.execute(_SCHEMA)
-        await conn.execute(_UPSERT, snapshot_date, json.dumps(prices))
+        await conn.execute(_UPSERT, day, json.dumps(prices))
     finally:
         await conn.close()
 
