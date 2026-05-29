@@ -42,7 +42,7 @@ from ..data.market import (
     UsageTrackingMarketData,
     YFinanceMarketData,
 )
-from ..data.onchain import DeBankClient, TatumClient
+from ..data.onchain import DeBankClient, TatumClient, VaultsFyiClient
 from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..engine.regime import RegimeEngine
 from .chain import build_chain_router
@@ -52,6 +52,7 @@ from .options import build_options_router
 from .ratelimit import RateLimitMiddleware
 from .routes import build_router
 from .scoring import build_score_router
+from .vaults import build_vaults_router
 from .wallet import build_wallet_router
 
 logger = logging.getLogger(__name__)
@@ -184,6 +185,7 @@ def create_app(
     app.include_router(build_score_router(market=market, regime_engine=engine))
     app.include_router(build_wallet_router(debank=DeBankClient()))
     app.include_router(build_chain_router(tatum=TatumClient()))
+    app.include_router(build_vaults_router(vaultsfyi=VaultsFyiClient()))
 
     mcp_enabled = mcp_app is not None
 

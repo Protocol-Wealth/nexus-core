@@ -25,6 +25,7 @@ chain pipelines (``pip install nexus-core[onchain]``):
 from .debank import DeBankClient, WalletToken, is_evm_address
 from .defillama import DefiLlamaClient, DefiProtocol
 from .tatum import NativeBalance, TatumClient, is_solana_address
+from .vaultsfyi import Vault, VaultsFyiClient, chain_alias, is_supported_chain
 
 __all__ = [
     "DeBankClient",
@@ -32,7 +33,11 @@ __all__ = [
     "DefiProtocol",
     "NativeBalance",
     "TatumClient",
+    "Vault",
+    "VaultsFyiClient",
     "WalletToken",
+    "chain_alias",
     "is_evm_address",
     "is_solana_address",
+    "is_supported_chain",
 ]
