@@ -47,6 +47,7 @@ from .mcp_mount import build_mcp_app
 from .options import build_options_router
 from .ratelimit import RateLimitMiddleware
 from .routes import build_router
+from .scoring import build_score_router
 
 logger = logging.getLogger(__name__)
 
@@ -81,10 +82,10 @@ def build_market_provider() -> CompositeMarketData:
     return CompositeMarketData(providers)
 
 
-def _try_build_mcp_app(engine: RegimeEngine) -> Any:
+def _try_build_mcp_app(engine: RegimeEngine, market: MarketDataProvider) -> Any:
     """Build the MCP-over-HTTP sub-app, or return ``None`` if unavailable."""
     try:
-        return build_mcp_app(engine)
+        return build_mcp_app(engine, market)
     except Exception as exc:  # fastmcp missing, or transport build failure
         logger.warning("MCP HTTP transport unavailable (%s); serving REST API only", exc)
         return None
@@ -127,7 +128,7 @@ def create_app(
 
     # The MCP sub-app must be built before the FastAPI app so its lifespan can
     # be adopted at construction time.
-    mcp_app = _try_build_mcp_app(engine) if enable_mcp else None
+    mcp_app = _try_build_mcp_app(engine, market) if enable_mcp else None
     lifespan = mcp_app.lifespan if mcp_app is not None else None
 
     app = FastAPI(
@@ -168,6 +169,7 @@ def create_app(
 
     app.include_router(build_router(engine=engine, market=market, macro=macro))
     app.include_router(build_options_router(market=market))
+    app.include_router(build_score_router(market=market, regime_engine=engine))
 
     mcp_enabled = mcp_app is not None
 
