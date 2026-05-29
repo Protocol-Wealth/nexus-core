@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import asdict
 from typing import Any, Protocol
 
 try:
@@ -35,6 +36,17 @@ try:
 except ImportError:  # pragma: no cover
     FastMCP = None  # type: ignore[assignment,misc]
 
+from ...data.derivatives import DeribitClient
+from ...data.onchain import DefiLlamaClient
+from ...data.providers import MacroDataProvider, MarketDataProvider
+from ...engine.pricing import (
+    OptionKind,
+    bs_price,
+    cash_secured_put_overlay,
+    collar_overlay,
+    covered_call_overlay,
+    greeks,
+)
 from ...engine.regime import RegimeEngine, RegimeResult
 from ...engine.scoring import ScoringFramework, format_structured
 
@@ -61,6 +73,10 @@ def build_server(
     regime_engine: RegimeEngine | None = None,
     scoring_framework: ScoringFramework | None = None,
     score_context_factory: Callable[[str], Any] | None = None,
+    market: MarketDataProvider | None = None,
+    macro: MacroDataProvider | None = None,
+    deribit: DeribitClient | None = None,
+    defillama: DefiLlamaClient | None = None,
     filters: list[ResponseFilter] | None = None,
     disclaimer: str | None = None,
 ) -> Any:
@@ -136,7 +152,220 @@ def build_server(
             response = _apply_filters("score_asset", response, filters, {})
             return json.dumps(response, indent=2)
 
+    # ---------------------- Market / macro / DeFi / options ----------------------
+
+    if market is not None:
+        _register_market_tools(mcp, market, disclaimer, filters)
+        _register_equity_options_tools(mcp, market, disclaimer, filters)
+    if macro is not None:
+        _register_economic_tools(mcp, macro, disclaimer, filters)
+    if deribit is not None:
+        _register_crypto_options_tools(mcp, deribit, disclaimer, filters)
+    if defillama is not None:
+        _register_defi_tools(mcp, defillama, disclaimer, filters)
+
     return mcp
+
+
+# ----------------------------------------------------------------------
+# Tool-group registration (market / macro / DeFi / options) — all read-only,
+# educational, and composed over the engines/providers. Every response carries
+# the disclaimer and runs through the configured ResponseFilters.
+# ----------------------------------------------------------------------
+
+
+def _ok(tool: str, payload: dict[str, Any], filters: list[ResponseFilter], disclaimer: str) -> str:
+    return json.dumps(
+        _apply_filters(tool, {**payload, "disclaimer": disclaimer}, filters, {}), indent=2
+    )
+
+
+def _err(tool: str, message: str, filters: list[ResponseFilter], disclaimer: str) -> str:
+    return json.dumps(
+        _apply_filters(tool, {"error": message, "disclaimer": disclaimer}, filters, {}), indent=2
+    )
+
+
+def _annualized_vol(market: MarketDataProvider, symbol: str) -> float:
+    """Annualized volatility from ~90d of daily closes; 0.30 fallback."""
+    import math
+    import statistics
+
+    try:
+        bars = market.get_price_history(symbol, days=90, interval="1d")
+    except Exception:  # pragma: no cover — provider best-effort
+        return 0.30
+    closes = [float(b.close) for b in bars if getattr(b, "close", None)]
+    rets = [math.log(closes[i] / closes[i - 1]) for i in range(1, len(closes)) if closes[i - 1] > 0]
+    if len(rets) < 10:
+        return 0.30
+    return statistics.pstdev(rets) * math.sqrt(252.0)
+
+
+def _register_market_tools(
+    mcp: FastMCP, market: MarketDataProvider, disclaimer: str, filters: list[ResponseFilter]
+) -> None:
+    @mcp.tool()
+    def get_quote(symbol: str) -> str:
+        """Latest quote for a stock, ETF, index, or crypto coin id (e.g. AAPL, SPY, bitcoin)."""
+        quote = market.get_quote(symbol)
+        if quote is None:
+            return _err("get_quote", f"No quote for '{symbol}'", filters, disclaimer)
+        return _ok("get_quote", {"quote": asdict(quote)}, filters, disclaimer)
+
+    @mcp.tool()
+    def get_price_history(symbol: str, days: int = 365) -> str:
+        """OHLCV price history covering roughly ``days`` days for a symbol."""
+        bars = market.get_price_history(symbol, days=days, interval="1d")
+        if not bars:
+            return _err("get_price_history", f"No history for '{symbol}'", filters, disclaimer)
+        return _ok(
+            "get_price_history",
+            {"symbol": symbol, "days": days, "bars": [asdict(b) for b in bars]},
+            filters,
+            disclaimer,
+        )
+
+
+def _register_economic_tools(
+    mcp: FastMCP, macro: MacroDataProvider, disclaimer: str, filters: list[ResponseFilter]
+) -> None:
+    @mcp.tool()
+    def get_economic_series(series_id: str) -> str:
+        """Latest value for a FRED economic series (e.g. DGS10, DFII10, DTWEXBGS)."""
+        if not macro.is_configured():
+            return _err("get_economic_series", "FRED API key not configured", filters, disclaimer)
+        value = macro.get_series(series_id)
+        if value is None:
+            return _err("get_economic_series", f"No data for '{series_id}'", filters, disclaimer)
+        return _ok(
+            "get_economic_series", {"series_id": series_id, "value": value}, filters, disclaimer
+        )
+
+
+def _register_equity_options_tools(
+    mcp: FastMCP, market: MarketDataProvider, disclaimer: str, filters: list[ResponseFilter]
+) -> None:
+    @mcp.tool()
+    def option_price(
+        spot: float, strike: float, days: int, volatility: float, kind: str = "call"
+    ) -> str:
+        """Educational Black-Scholes price + Greeks. ``kind``: 'call' or 'put'. Not advice."""
+        k: OptionKind = "call"
+        if str(kind).lower().startswith("p"):
+            k = "put"
+        t = days / 365.0
+        return _ok(
+            "option_price",
+            {
+                "spot": spot,
+                "strike": strike,
+                "days": days,
+                "kind": k,
+                "price": round(bs_price(spot, strike, t, 0.04, volatility, k), 4),
+                "greeks": asdict(greeks(spot, strike, t, 0.04, volatility, k)),
+            },
+            filters,
+            disclaimer,
+        )
+
+    @mcp.tool()
+    def covered_call(symbol: str, strike: float, days: int) -> str:
+        """Educational covered-call overlay illustration on a public ticker (live spot). Not advice."""
+        quote = market.get_quote(symbol)
+        if quote is None:
+            return _err("covered_call", f"No quote for '{symbol}'", filters, disclaimer)
+        result = covered_call_overlay(
+            quote.price, strike, days, None, sigma=_annualized_vol(market, symbol)
+        )
+        return _ok(
+            "covered_call", {"symbol": symbol, "spot": quote.price, **asdict(result)}, filters, disclaimer
+        )
+
+    @mcp.tool()
+    def cash_secured_put(symbol: str, strike: float, days: int) -> str:
+        """Educational cash-secured-put overlay illustration on a public ticker. Not advice."""
+        quote = market.get_quote(symbol)
+        if quote is None:
+            return _err("cash_secured_put", f"No quote for '{symbol}'", filters, disclaimer)
+        result = cash_secured_put_overlay(
+            quote.price, strike, days, None, sigma=_annualized_vol(market, symbol)
+        )
+        return _ok(
+            "cash_secured_put",
+            {"symbol": symbol, "spot": quote.price, **asdict(result)},
+            filters,
+            disclaimer,
+        )
+
+    @mcp.tool()
+    def collar(symbol: str, put_strike: float, call_strike: float, days: int) -> str:
+        """Educational protective-collar overlay illustration on a public ticker. Not advice."""
+        quote = market.get_quote(symbol)
+        if quote is None:
+            return _err("collar", f"No quote for '{symbol}'", filters, disclaimer)
+        result = collar_overlay(
+            quote.price, put_strike, call_strike, days, None, None, sigma=_annualized_vol(market, symbol)
+        )
+        return _ok(
+            "collar", {"symbol": symbol, "spot": quote.price, **asdict(result)}, filters, disclaimer
+        )
+
+
+def _register_crypto_options_tools(
+    mcp: FastMCP, deribit: DeribitClient, disclaimer: str, filters: list[ResponseFilter]
+) -> None:
+    @mcp.tool()
+    def crypto_option_instruments(currency: str) -> str:
+        """Listed BTC / ETH / SOL option instruments (Deribit)."""
+        cur = currency.upper()
+        if cur not in ("BTC", "ETH", "SOL"):
+            return _err(
+                "crypto_option_instruments", f"Unsupported '{currency}' (BTC/ETH/SOL)", filters, disclaimer
+            )
+        instruments = deribit.list_option_instruments(cur)
+        return _ok(
+            "crypto_option_instruments",
+            {"currency": cur, "count": len(instruments), "instruments": [asdict(i) for i in instruments]},
+            filters,
+            disclaimer,
+        )
+
+    @mcp.tool()
+    def crypto_option_ticker(instrument_name: str) -> str:
+        """Mark price, implied vol + Greeks for a Deribit option instrument."""
+        ticker = deribit.get_option_ticker(instrument_name)
+        if ticker is None:
+            return _err("crypto_option_ticker", f"No ticker for '{instrument_name}'", filters, disclaimer)
+        return _ok("crypto_option_ticker", asdict(ticker), filters, disclaimer)
+
+
+def _register_defi_tools(
+    mcp: FastMCP, defillama: DefiLlamaClient, disclaimer: str, filters: list[ResponseFilter]
+) -> None:
+    @mcp.tool()
+    def defi_protocols(limit: int = 20) -> str:
+        """Top DeFi protocols by Total Value Locked (DefiLlama)."""
+        protocols = defillama.get_protocols(limit=limit)
+        return _ok(
+            "defi_protocols",
+            {"count": len(protocols), "protocols": [asdict(p) for p in protocols]},
+            filters,
+            disclaimer,
+        )
+
+    @mcp.tool()
+    def defi_protocol(slug: str) -> str:
+        """TVL detail for one DeFi protocol by DefiLlama slug (e.g. aave, lido)."""
+        detail = defillama.get_protocol(slug)
+        if detail is None:
+            return _err("defi_protocol", f"No protocol '{slug}'", filters, disclaimer)
+        return _ok("defi_protocol", detail, filters, disclaimer)
+
+    @mcp.tool()
+    def defi_chains() -> str:
+        """Aggregate DeFi TVL per blockchain (DefiLlama)."""
+        return _ok("defi_chains", {"chains": defillama.get_chains()}, filters, disclaimer)
 
 
 # ----------------------------------------------------------------------

@@ -82,10 +82,12 @@ def build_market_provider() -> CompositeMarketData:
     return CompositeMarketData(providers)
 
 
-def _try_build_mcp_app(engine: RegimeEngine, market: MarketDataProvider) -> Any:
+def _try_build_mcp_app(
+    engine: RegimeEngine, market: MarketDataProvider, macro: MacroDataProvider
+) -> Any:
     """Build the MCP-over-HTTP sub-app, or return ``None`` if unavailable."""
     try:
-        return build_mcp_app(engine, market)
+        return build_mcp_app(engine, market, macro)
     except Exception as exc:  # fastmcp missing, or transport build failure
         logger.warning("MCP HTTP transport unavailable (%s); serving REST API only", exc)
         return None
@@ -128,7 +130,7 @@ def create_app(
 
     # The MCP sub-app must be built before the FastAPI app so its lifespan can
     # be adopted at construction time.
-    mcp_app = _try_build_mcp_app(engine, market) if enable_mcp else None
+    mcp_app = _try_build_mcp_app(engine, market, macro) if enable_mcp else None
     lifespan = mcp_app.lifespan if mcp_app is not None else None
 
     app = FastAPI(
