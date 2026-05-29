@@ -37,6 +37,18 @@ def _asyncpg_dsn(url: str) -> str:
     return url.replace("+asyncpg", "", 1)
 
 
+async def connect(*, timeout: float = 10.0) -> asyncpg.Connection:
+    """Open an asyncpg connection to the configured database.
+
+    Raises ``RuntimeError`` if ``DATABASE_URL`` is unset — callers should gate on
+    :func:`is_configured` first. The caller owns closing the connection.
+    """
+    url = database_url()
+    if url is None:
+        raise RuntimeError("DATABASE_URL is not configured")
+    return await asyncpg.connect(_asyncpg_dsn(url), timeout=timeout)
+
+
 async def ping(*, timeout: float = 5.0) -> bool:
     """Open a connection and run ``SELECT 1`` — ``True`` on success.
 
@@ -57,4 +69,4 @@ async def ping(*, timeout: float = 5.0) -> bool:
             await conn.close()
 
 
-__all__ = ["database_url", "is_configured", "ping"]
+__all__ = ["connect", "database_url", "is_configured", "ping"]
