@@ -168,3 +168,26 @@ def test_mcp_transport_mounted() -> None:
     app = create_app(market=_FakeMarket(), macro=_FakeMacro(), enable_mcp=True)
     mounted = {getattr(route, "path", None) for route in app.routes}
     assert "/mcp" in mounted
+
+
+def test_cache_control_headers() -> None:
+    """Public GET endpoints advertise an edge-cacheable TTL; /health is no-store."""
+    with _rest_client() as client:
+        assert client.get("/api/regime").headers.get("cache-control") == "public, max-age=900"
+        assert (
+            client.get("/api/regime/signals").headers.get("cache-control")
+            == "public, max-age=900"
+        )
+        assert (
+            client.get("/api/market/quote/SPY").headers.get("cache-control")
+            == "public, max-age=300"
+        )
+        assert (
+            client.get("/api/market/history/SPY").headers.get("cache-control")
+            == "public, max-age=3600"
+        )
+        assert (
+            client.get("/api/economic/DGS10").headers.get("cache-control")
+            == "public, max-age=3600"
+        )
+        assert client.get("/health").headers.get("cache-control") == "no-store"

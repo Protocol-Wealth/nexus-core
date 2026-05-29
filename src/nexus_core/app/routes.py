@@ -13,11 +13,20 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, HTTPException, Path, Query, Response
 
 from .. import __version__
 from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..engine.regime import RegimeEngine
+
+# Edge/browser cache lifetimes (seconds) per endpoint. The deployment fronts
+# these with a Cloudflare cache rule set to "respect origin", so these headers
+# are the single source of truth for cache duration. Regime signals are already
+# cached ~15 min server-side; market history + FRED series change slowly.
+_REGIME_TTL = 900
+_QUOTE_TTL = 300
+_HISTORY_TTL = 3600
+_ECONOMIC_TTL = 3600
 
 
 def build_router(
@@ -36,22 +45,25 @@ def build_router(
     router = APIRouter()
 
     @router.get("/health", tags=["meta"], summary="Liveness probe")
-    def health() -> dict[str, Any]:
+    def health(response: Response) -> dict[str, Any]:
         """Return a static liveness payload. Excluded from rate limiting."""
+        response.headers["Cache-Control"] = "no-store"
         return {"status": "ok", "service": "nexus-core", "version": __version__}
 
     @router.get("/api/regime", tags=["regime"], summary="Current macro regime classification")
-    def get_regime() -> dict[str, Any]:
+    def get_regime(response: Response) -> dict[str, Any]:
         """Classify the current macro regime.
 
         Returns the regime code, confidence score, per-signal breakdown, and a
         natural-language rationale. Signals are cached for 15 minutes.
         """
+        response.headers["Cache-Control"] = f"public, max-age={_REGIME_TTL}"
         return engine.classify().to_dict()
 
     @router.get("/api/regime/signals", tags=["regime"], summary="Raw regime signal readings")
-    def get_signals() -> dict[str, Any]:
+    def get_signals(response: Response) -> dict[str, Any]:
         """Return the raw signal readings feeding regime classification."""
+        response.headers["Cache-Control"] = f"public, max-age={_REGIME_TTL}"
         return engine.fetch_signals().to_dict()
 
     @router.get(
@@ -60,12 +72,14 @@ def build_router(
         summary="Latest quote for a symbol",
     )
     def get_quote(
+        response: Response,
         symbol: str = Path(description="Ticker (e.g. SPY, AAPL) or crypto coin id (e.g. bitcoin)"),
     ) -> dict[str, Any]:
         """Return the latest quote for a stock, ETF, index, or crypto coin id."""
         quote = market.get_quote(symbol)
         if quote is None:
             raise HTTPException(status_code=404, detail=f"No quote available for '{symbol}'")
+        response.headers["Cache-Control"] = f"public, max-age={_QUOTE_TTL}"
         return asdict(quote)
 
     @router.get(
@@ -74,6 +88,7 @@ def build_router(
         summary="OHLCV price history for a symbol",
     )
     def get_history(
+        response: Response,
         symbol: str = Path(description="Ticker or crypto coin id"),
         days: int = Query(365, ge=1, le=1000, description="Approximate lookback window in days"),
         interval: str = Query("1d", description="Bar interval (e.g. 1d, 1wk)"),
@@ -84,6 +99,7 @@ def build_router(
             raise HTTPException(
                 status_code=404, detail=f"No price history available for '{symbol}'"
             )
+        response.headers["Cache-Control"] = f"public, max-age={_HISTORY_TTL}"
         return {
             "symbol": symbol,
             "interval": interval,
@@ -97,6 +113,7 @@ def build_router(
         summary="Latest value for a FRED economic series",
     )
     def get_economic(
+        response: Response,
         series_id: str = Path(description="FRED series id (e.g. DGS10, DFII10, DTWEXBGS)"),
     ) -> dict[str, Any]:
         """Return the latest observed value for a FRED economic data series."""
@@ -108,6 +125,7 @@ def build_router(
         value = macro.get_series(series_id)
         if value is None:
             raise HTTPException(status_code=404, detail=f"No data for series '{series_id}'")
+        response.headers["Cache-Control"] = f"public, max-age={_ECONOMIC_TTL}"
         return {"series_id": series_id, "value": value}
 
     return router
