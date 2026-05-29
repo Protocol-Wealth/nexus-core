@@ -42,9 +42,10 @@ from ..data.market import (
     UsageTrackingMarketData,
     YFinanceMarketData,
 )
-from ..data.onchain import DeBankClient
+from ..data.onchain import DeBankClient, TatumClient
 from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..engine.regime import RegimeEngine
+from .chain import build_chain_router
 from .landing import render_landing
 from .mcp_mount import build_mcp_app
 from .options import build_options_router
@@ -182,6 +183,7 @@ def create_app(
     app.include_router(build_options_router(market=market))
     app.include_router(build_score_router(market=market, regime_engine=engine))
     app.include_router(build_wallet_router(debank=DeBankClient()))
+    app.include_router(build_chain_router(tatum=TatumClient()))
 
     mcp_enabled = mcp_app is not None
 
