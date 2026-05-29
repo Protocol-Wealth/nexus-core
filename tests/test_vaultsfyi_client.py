@@ -19,27 +19,36 @@ def _client(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.Client:
     return httpx.Client(transport=httpx.MockTransport(handler))
 
 
+# Mirrors the real vaults.fyi v2 /detailed-vaults shape: network/protocol/curator
+# are objects, apy is keyed by window with base/reward/total, tvl.usd is a string,
+# and the id field is top-level "vaultId".
 _SAMPLE = {
     "data": [
         {
             "name": "Steakhouse USDC",
             "address": "0xabc",
-            "network": "base",
-            "protocol": {"name": "Morpho"},
-            "apy": {"current": 0.085},
-            "tvl": {"usd": 12_000_000.0},
+            "network": {"name": "base", "chainId": 8453},
+            "protocol": {"name": "Morpho", "product": "metamorpho"},
+            "curator": {"name": "Steakhouse"},
+            "apy": {
+                "1day": {"base": 0.09, "reward": 0.01, "total": 0.10},
+                "7day": {"base": 0.08, "reward": 0.005, "total": 0.085},
+                "30day": {"base": 0.078, "reward": 0.0, "total": 0.078},
+            },
+            "tvl": {"usd": "12000000", "native": "12000000000000"},
             "asset": {"symbol": "USDC"},
-            "id": "base-0xabc",
+            "protocolVaultUrl": "https://app.morpho.org/vault?id=abc",
+            "vaultId": "base-0xabc",
         },
         {
             "name": "Small Vault",
             "address": "0xdef",
-            "network": "base",
+            "network": {"name": "base", "chainId": 8453},
             "protocol": {"name": "Spark"},
-            "apy": {"current": 0.04},
-            "tvl": {"usd": 3_000_000.0},
+            "apy": {"7day": {"base": 0.04, "reward": 0.0, "total": 0.04}},
+            "tvl": {"usd": "3000000"},
             "asset": {"symbol": "DAI"},
-            "id": "base-0xdef",
+            "vaultId": "base-0xdef",
         },
     ]
 }
@@ -87,11 +96,19 @@ def test_search_vaults_params_and_parse() -> None:
     )
     assert [v.name for v in vaults] == ["Steakhouse USDC", "Small Vault"]  # sorted by TVL desc
     top = vaults[0]
+    assert top.chain == "base"  # network.name, not the object
     assert top.protocol == "Morpho"
-    assert top.apy == pytest.approx(0.085)
-    assert top.tvl_usd == pytest.approx(12_000_000.0)
+    assert top.apy == pytest.approx(0.085)  # 7-day total (base + reward)
+    assert top.apy_breakdown == {
+        "1day": pytest.approx(0.10),
+        "7day": pytest.approx(0.085),
+        "30day": pytest.approx(0.078),
+    }
+    assert top.tvl_usd == pytest.approx(12_000_000.0)  # string "12000000" coerced
     assert top.underlying_asset_symbol == "USDC"
-    assert top.vault_id == "base-0xabc"
+    assert top.curator == "Steakhouse"
+    assert top.vault_url == "https://app.morpho.org/vault?id=abc"
+    assert top.vault_id == "base-0xabc"  # top-level "vaultId"
 
 
 def test_per_page_clamped() -> None:
@@ -111,6 +128,7 @@ def test_unsupported_chain_returns_empty() -> None:
 
 
 def test_missing_fields_degrade_to_none() -> None:
+    # A bare record (string network exercises the fallback path; no apy/protocol/etc.).
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200, json={"data": [{"name": "Bare", "address": "0x1", "network": "base", "id": "x"}]}
@@ -119,8 +137,12 @@ def test_missing_fields_degrade_to_none() -> None:
     vaults = VaultsFyiClient(api_key="k", http_client=_client(handler)).search_vaults("base")
     assert len(vaults) == 1
     v = vaults[0]
+    assert v.chain == "base"
     assert v.protocol is None and v.apy is None and v.tvl_usd is None
+    assert v.apy_breakdown == {}
     assert v.underlying_asset_symbol is None
+    assert v.curator is None and v.vault_url is None
+    assert v.vault_id == "x"  # falls back to legacy "id" when "vaultId" absent
 
 
 def test_upstream_error_degrades_to_empty() -> None:

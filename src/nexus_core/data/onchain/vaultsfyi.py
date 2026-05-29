@@ -80,9 +80,12 @@ class Vault:
     address: str
     chain: str
     protocol: str | None
-    apy: float | None  # current APY as a fraction (vaults.fyi's apy.current)
+    apy: float | None  # 7-day total APY as a fraction (base + rewards)
+    apy_breakdown: dict[str, float]  # total APY by window: {"1day", "7day", "30day"}
     tvl_usd: float | None
     underlying_asset_symbol: str | None
+    curator: str | None
+    vault_url: str | None  # deep link to the vault on its protocol UI
     vault_id: str
 
 
@@ -155,28 +158,52 @@ class VaultsFyiClient:
         if not isinstance(rows, list):
             return []
 
-        vaults: list[Vault] = []
-        for entry in rows:
-            if not isinstance(entry, dict):
-                continue
-            protocol = entry.get("protocol")
-            apy = entry.get("apy")
-            tvl = entry.get("tvl")
-            asset = entry.get("asset")
-            vaults.append(
-                Vault(
-                    name=entry.get("name") or "",
-                    address=entry.get("address") or "",
-                    chain=entry.get("network") or network,
-                    protocol=protocol.get("name") if isinstance(protocol, dict) else None,
-                    apy=_num(apy.get("current")) if isinstance(apy, dict) else None,
-                    tvl_usd=_num(tvl.get("usd")) if isinstance(tvl, dict) else None,
-                    underlying_asset_symbol=asset.get("symbol") if isinstance(asset, dict) else None,
-                    vault_id=entry.get("id") or "",
-                )
-            )
+        vaults = [self._parse_vault(e, network) for e in rows if isinstance(e, dict)]
         vaults.sort(key=lambda v: v.tvl_usd or 0.0, reverse=True)
         return vaults
+
+    @staticmethod
+    def _parse_vault(entry: dict[str, Any], fallback_network: str) -> Vault:
+        """Map one v2 ``detailed-vaults`` record to a :class:`Vault`."""
+        network = entry.get("network")
+        protocol = entry.get("protocol")
+        curator = entry.get("curator")
+        tvl = entry.get("tvl")
+        asset = entry.get("asset")
+        raw_apy = entry.get("apy")
+        apy: dict[str, Any] = raw_apy if isinstance(raw_apy, dict) else {}
+
+        def apy_total(window: str) -> float | None:
+            # apy[window] is {"base", "reward", "total"}; "total" is base + rewards.
+            bucket = apy.get(window)
+            return _num(bucket.get("total")) if isinstance(bucket, dict) else None
+
+        breakdown = {
+            window: value
+            for window in ("1day", "7day", "30day")
+            if (value := apy_total(window)) is not None
+        }
+
+        if isinstance(network, dict):
+            chain = str(network.get("name") or fallback_network)
+        elif isinstance(network, str):
+            chain = network
+        else:
+            chain = fallback_network
+
+        return Vault(
+            name=entry.get("name") or "",
+            address=entry.get("address") or "",
+            chain=chain,
+            protocol=protocol.get("name") if isinstance(protocol, dict) else None,
+            apy=breakdown.get("7day"),  # headline: 7-day smoothed total
+            apy_breakdown=breakdown,
+            tvl_usd=_num(tvl.get("usd")) if isinstance(tvl, dict) else None,
+            underlying_asset_symbol=asset.get("symbol") if isinstance(asset, dict) else None,
+            curator=curator.get("name") if isinstance(curator, dict) else (curator or None),
+            vault_url=entry.get("protocolVaultUrl") or entry.get("lendUrl") or None,
+            vault_id=entry.get("vaultId") or entry.get("id") or "",
+        )
 
 
 __all__ = ["Vault", "VaultsFyiClient", "chain_alias", "is_supported_chain"]
