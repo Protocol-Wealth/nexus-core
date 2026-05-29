@@ -45,6 +45,7 @@ from ..data.market import (
 from ..data.onchain import DeBankClient, MerklClient, TatumClient, TheGraphClient, VaultsFyiClient
 from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..engine.regime import RegimeEngine
+from .benchmarks import build_benchmarks_router
 from .chain import build_chain_router
 from .landing import render_landing
 from .lp import build_lp_router
@@ -190,6 +191,7 @@ def create_app(
     app.include_router(
         build_lp_router(thegraph=TheGraphClient(), tatum=TatumClient(), merkl=MerklClient())
     )
+    app.include_router(build_benchmarks_router(coingecko=CoinGeckoMarketData()))
 
     mcp_enabled = mcp_app is not None
 
