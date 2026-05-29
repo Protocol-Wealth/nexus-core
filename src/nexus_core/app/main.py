@@ -32,6 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
 from .. import __version__
+from ..data import db
 from ..data.macro import FredMacroData
 from ..data.market import (
     CachedMarketData,
@@ -198,6 +199,13 @@ def create_app(
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     def landing() -> str:
         return render_landing(mcp_enabled=mcp_enabled)
+
+    @app.get("/health/db", include_in_schema=False)
+    async def health_db() -> dict[str, str]:
+        """DB connectivity probe for the private market-data instance."""
+        if not db.is_configured():
+            return {"database": "unconfigured"}
+        return {"database": "ok" if await db.ping() else "unreachable"}
 
     if mcp_app is not None:
         app.mount("/mcp", mcp_app)
