@@ -42,6 +42,7 @@ from ..data.market import (
     UsageTrackingMarketData,
     YFinanceMarketData,
 )
+from ..data.onchain import DeBankClient
 from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..engine.regime import RegimeEngine
 from .landing import render_landing
@@ -50,6 +51,7 @@ from .options import build_options_router
 from .ratelimit import RateLimitMiddleware
 from .routes import build_router
 from .scoring import build_score_router
+from .wallet import build_wallet_router
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +181,7 @@ def create_app(
     app.include_router(build_router(engine=engine, market=market, macro=macro))
     app.include_router(build_options_router(market=market))
     app.include_router(build_score_router(market=market, regime_engine=engine))
+    app.include_router(build_wallet_router(debank=DeBankClient()))
 
     mcp_enabled = mcp_app is not None
 
