@@ -44,6 +44,7 @@ from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..engine.regime import RegimeEngine
 from .landing import render_landing
 from .mcp_mount import build_mcp_app
+from .options import build_options_router
 from .ratelimit import RateLimitMiddleware
 from .routes import build_router
 
@@ -166,6 +167,7 @@ def create_app(
     )
 
     app.include_router(build_router(engine=engine, market=market, macro=macro))
+    app.include_router(build_options_router(market=market))
 
     mcp_enabled = mcp_app is not None
 
