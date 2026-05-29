@@ -71,6 +71,18 @@ _CHAINS: dict[str, _ChainMeta] = {
 
 _EVM_CHAINS: tuple[str, ...] = tuple(k for k, v in _CHAINS.items() if v.family == "evm")
 
+# Uniswap V3 NonfungiblePositionManager per chain (for uncollected-fee reads).
+# Deterministic 0xC364… on most chains; Base deployed a different address.
+_NFPM: dict[str, str] = {
+    "ethereum": "0xC36442b4a4522E871399CD717aBDD847Ab11FE88",
+    "arbitrum": "0xC36442b4a4522E871399CD717aBDD847Ab11FE88",
+    "optimism": "0xC36442b4a4522E871399CD717aBDD847Ab11FE88",
+    "polygon": "0xC36442b4a4522E871399CD717aBDD847Ab11FE88",
+    "base": "0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1",
+}
+# positions(uint256) selector on the NonfungiblePositionManager.
+_NFPM_POSITIONS_SELECTOR = "0x99fbab88"
+
 
 def is_solana_address(address: str) -> bool:
     """True for a plausible Solana (base58, 32–44 char) public key."""
@@ -190,6 +202,45 @@ class TatumClient:
             if balance is not None and balance.raw > 0:
                 out[chain.lower()] = balance
         return out
+
+    def eth_call(self, chain: str, to: str, data: str) -> str | None:
+        """Raw ``eth_call`` against ``to`` with calldata ``data`` (hex result or None)."""
+        meta = _CHAINS.get(chain.lower())
+        if meta is None or meta.family != "evm":
+            return None
+        result = self._rpc(meta, "eth_call", [{"to": to, "data": data}, "latest"])
+        return result if isinstance(result, str) else None
+
+    def nfpm_tokens_owed(
+        self, chain: str, token_id: str | int, *, decimals0: int = 18, decimals1: int = 18
+    ) -> tuple[float, float] | None:
+        """Uncollected fees (``tokensOwed0/1``) for a Uniswap V3 position NFT.
+
+        Reads ``NonfungiblePositionManager.positions(tokenId)`` via ``eth_call``
+        and decodes the last two return words (``tokensOwed0``, ``tokensOwed1``),
+        scaled to human units. These are the fees owed as of the position's last
+        interaction. Returns ``None`` on an unsupported chain or any RPC failure.
+        """
+        nfpm = _NFPM.get(chain.lower())
+        if nfpm is None:
+            return None
+        try:
+            token = int(token_id)
+        except (TypeError, ValueError):
+            return None
+        result = self.eth_call(chain, nfpm, f"{_NFPM_POSITIONS_SELECTOR}{token:064x}")
+        if result is None:
+            return None
+        body = result[2:] if result.startswith("0x") else result
+        words = [body[i * 64 : (i + 1) * 64] for i in range(len(body) // 64)]
+        if len(words) < 12:  # positions() returns 12 words; tokensOwed are [10], [11]
+            return None
+        try:
+            owed0 = int(words[10], 16)
+            owed1 = int(words[11], 16)
+        except ValueError:
+            return None
+        return owed0 / (10**decimals0), owed1 / (10**decimals1)
 
 
 __all__ = ["NativeBalance", "TatumClient", "is_solana_address"]
