@@ -17,7 +17,6 @@ from nexus_core.engine.optimization import (
     DiscreteAllocationResult,
     OptimizationResult,
     RiskfolioResult,
-    View,
     absolute_view,
     relative_view,
 )

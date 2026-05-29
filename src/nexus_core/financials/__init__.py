@@ -28,8 +28,8 @@ from .models import (
     altman_z_score,
     capm_expected_return,
     dcf_value,
-    dupont_three_step,
     dupont_five_step,
+    dupont_three_step,
     wacc,
 )
 from .performance import (

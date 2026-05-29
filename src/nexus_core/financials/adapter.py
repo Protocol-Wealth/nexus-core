@@ -31,7 +31,6 @@ from .statements import (
     IncomeStatement,
     Period,
     StatementBundle,
-    StatisticsStatement,
 )
 
 

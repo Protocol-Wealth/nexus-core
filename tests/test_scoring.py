@@ -21,7 +21,6 @@ from nexus_core.engine.scoring import (
     format_structured,
 )
 
-
 # ---------------- Fixture checks ----------------
 
 
