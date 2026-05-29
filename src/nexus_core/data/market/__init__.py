@@ -9,6 +9,8 @@ Concrete :class:`~nexus_core.data.providers.MarketDataProvider` implementations:
 - :class:`MarketStackMarketData` — MarketStack v2 EOD. Key required.
 - :class:`CoinGeckoMarketData` — CoinGecko crypto data. Key optional.
 - :class:`CompositeMarketData` — ordered fallback across the above.
+- :class:`CachedMarketData` — TTL cache over a provider (cuts upstream quota use).
+- :class:`UsageTrackingMarketData` — per-provider call counter for monitoring.
 
 Third-party libraries (install with ``pip install nexus-core[market]``):
 
@@ -22,6 +24,7 @@ Reference architecture (not bundled):
 - OpenBB Platform (AGPL-3.0) - data aggregation patterns
 """
 
+from .cache import CachedMarketData, UsageTrackingMarketData
 from .coingecko_provider import CoinGeckoMarketData
 from .composite import CompositeMarketData
 from .marketstack_provider import MarketStackMarketData
@@ -29,9 +32,11 @@ from .mboum_provider import MboumMarketData
 from .yfinance_provider import YFinanceMarketData
 
 __all__ = [
+    "CachedMarketData",
     "CoinGeckoMarketData",
     "CompositeMarketData",
     "MarketStackMarketData",
     "MboumMarketData",
+    "UsageTrackingMarketData",
     "YFinanceMarketData",
 ]

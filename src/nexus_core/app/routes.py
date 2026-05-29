@@ -128,6 +128,18 @@ def build_router(
         response.headers["Cache-Control"] = f"public, max-age={_ECONOMIC_TTL}"
         return {"series_id": series_id, "value": value}
 
+    @router.get("/api/usage", tags=["meta"], summary="Market-data cache + provider usage stats")
+    def usage(response: Response) -> dict[str, Any]:
+        """In-process cache hit-rate + per-provider (MBOUM/MarketStack) call counts.
+
+        Non-sensitive operational metrics — no keys, no client data. Empty when
+        the wired market provider does not expose a ``usage_report``.
+        """
+        report_fn = getattr(market, "usage_report", None)
+        report: dict[str, Any] = report_fn() if callable(report_fn) else {}
+        response.headers["Cache-Control"] = "public, max-age=30"
+        return report
+
     return router
 
 

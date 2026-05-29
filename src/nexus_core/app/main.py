@@ -34,10 +34,12 @@ from fastapi.responses import HTMLResponse
 from .. import __version__
 from ..data.macro import FredMacroData
 from ..data.market import (
+    CachedMarketData,
     CoinGeckoMarketData,
     CompositeMarketData,
     MarketStackMarketData,
     MboumMarketData,
+    UsageTrackingMarketData,
     YFinanceMarketData,
 )
 from ..data.providers import MacroDataProvider, MarketDataProvider
@@ -64,22 +66,27 @@ advisory workflows.
 """
 
 
-def build_market_provider() -> CompositeMarketData:
-    """Assemble the composite market data provider from available sources.
+def build_market_provider() -> CachedMarketData:
+    """Assemble the cached, composite market data provider.
 
-    yfinance is the keyless default. MBOUM, MarketStack, and CoinGecko are
-    consulted in turn; a keyed provider with no configured key short-circuits
-    to a miss without issuing a request.
+    yfinance is the keyless default; MBOUM and MarketStack (keyed, quota-limited)
+    and CoinGecko follow in turn. The MBOUM / MarketStack adapters are wrapped in
+    usage trackers so the deployment can monitor their quota consumption, and the
+    whole composite is wrapped in a TTL cache so repeated requests don't re-hit
+    upstream (a keyed provider with no configured key short-circuits to a miss
+    without issuing a request).
     """
     providers: list[MarketDataProvider] = []
     try:
         providers.append(YFinanceMarketData())
     except ImportError:
         logger.warning("yfinance not installed; the keyless market provider is unavailable")
-    providers.append(MboumMarketData())
-    providers.append(MarketStackMarketData())
+    mboum = UsageTrackingMarketData(MboumMarketData(), "mboum")
+    marketstack = UsageTrackingMarketData(MarketStackMarketData(), "marketstack")
+    providers.append(mboum)
+    providers.append(marketstack)
     providers.append(CoinGeckoMarketData())
-    return CompositeMarketData(providers)
+    return CachedMarketData(CompositeMarketData(providers), tracked=[mboum, marketstack])
 
 
 def _try_build_mcp_app(
