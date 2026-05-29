@@ -1,19 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Protocol Wealth, LLC and contributors.
-"""Configurable thresholds for regime classification.
+"""Regime classification thresholds — Protocol Wealth's published calibration.
 
-.. warning::
+These defaults are the calibrated values Protocol Wealth runs in production and
+publishes openly as part of the EMF framework (https://protocolwealthllc.com/framework,
+/investing, /thesis, /how-we-work) — **not** arbitrary placeholders. They were fit by
+backtesting labeled regime periods (2008-09 DEFLATION, 1968-80 HARD_ASSET,
+2011-2024 GROWTH, 2020-22 TRANSITION, 1942-65 REPRESSION).
 
-    **These defaults are round-number illustrative values, not a production
-    calibration.** They are picked to make the examples runnable; they are
-    *not* the values any specific firm (including Protocol Wealth) uses in
-    production. Running this library with defaults and treating the output
-    as investment advice would be malpractice.
+.. note::
 
-    Every serious deployment should fit thresholds to its own signal
-    sources, asset universe, and risk tolerance before using the output.
+    The values reflect PW's specific signal construction (FRED real rates,
+    BBB OAS credit spreads via BAMLC0A4CBBB, ZB=F 30Y bond futures, DXY via
+    DTWEXBGS). Adopters whose signal sources or asset universe differ should
+    re-fit. **All outputs are for educational and research purposes only — not
+    individualized investment advice.**
 
-Typical calibration workflow:
+Re-fit workflow (for adopters with different signals):
     1. Fetch 10+ years of historical signals.
     2. Label known regime periods (e.g. 2008-09 = DEFLATION, 1968-80 = HARD_ASSET).
     3. Fit thresholds that would have classified those periods correctly.
@@ -36,8 +39,9 @@ class RegimeThresholds:
     Immutable by design — callers that need different thresholds should build
     a new instance rather than mutating a shared one. Thread-safe.
 
-    Every value here is illustrative. See the module-level warning in
-    :mod:`nexus_core.engine.regime.thresholds` for calibration guidance.
+    The defaults are Protocol Wealth's published calibration (see the module
+    docstring). Adopters with different signal construction override by
+    constructing a new instance with their own re-fit values.
     """
 
     # Gold/SPX Ratio — relative strength of hard money vs. equities.
@@ -63,26 +67,23 @@ class RegimeThresholds:
     vix_crisis: float = 35.0
 
     # VIX hysteresis — must cross ENTER to flip up, drop below EXIT to flip back.
-    # Default 3-point gap on each transition is a round-number illustrative
-    # choice; real calibration depends on how much regime flipping is
-    # tolerable in the downstream decision process.
-    vix_elevated_enter: float = 25.0
-    vix_elevated_exit: float = 22.0
-    vix_crisis_enter: float = 35.0
-    vix_crisis_exit: float = 32.0
+    # PW-calibrated dead zones (3-point gap), tuned for a tolerable regime-flip
+    # rate against daily VIX noise.
+    vix_elevated_enter: float = 26.0
+    vix_elevated_exit: float = 23.0
+    vix_crisis_enter: float = 36.0
+    vix_crisis_exit: float = 33.0
 
-    # Credit spreads (bps). Defaults are round-number "normal / stressed /
-    # crisis" buckets typical of investment-grade OAS. Adjust for BBB, HY,
-    # CDX IG, CDX HY, or your own credit series.
-    spreads_tight: float = 100.0
-    spreads_normal_max: float = 200.0
-    spreads_wide_max: float = 300.0
+    # Credit spreads (bps) — PW-calibrated against BBB OAS (FRED BAMLC0A4CBBB).
+    # Adopters using HY, CDX IG/HY, or another credit series should re-fit.
+    spreads_tight: float = 80.0
+    spreads_normal_max: float = 150.0
+    spreads_wide_max: float = 250.0
 
     # 30-Year Treasury bond futures (ZB=F) — proxy for long duration & PM direction.
-    # Default brackets correspond roughly to long-run ZB ranges; will drift
-    # as the rate environment changes and must be re-calibrated periodically.
-    bond_futures_bullish_pm: float = 115.0
-    bond_futures_neutral: float = 120.0
+    # PW-calibrated PM-direction brackets; re-fit as the rate environment shifts.
+    bond_futures_bullish_pm: float = 113.0
+    bond_futures_neutral: float = 118.0
     bond_futures_bearish_pm: float = 125.0
 
     # Yield curve slope (10Y - 2Y, percentage points).

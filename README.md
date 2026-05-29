@@ -122,9 +122,9 @@ Nexus Core stands on a foundation of exceptional open-source projects. We bundle
 
 ## What's Open vs Private
 
-**Open (Apache 2.0):** Framework architecture, scoring structure, layer model, tool pattern, compliance gate, caching patterns. All third-party integrations listed above.
+**Open (Apache 2.0):** Framework architecture, scoring structure, layer model, tool pattern, compliance gate, caching patterns — **and Protocol Wealth's calibrated regime thresholds + scoring values**, which PW publishes openly as part of the EMF framework ([protocolwealthllc.com/framework](https://protocolwealthllc.com/framework)). All third-party integrations listed above.
 
-**Private:** Specific thresholds, decay constants, production tools, API keys, client data, narrative pipeline.
+**Private:** API keys, client data, advisory/planning surfaces, the narrative/research pipeline, and any client-specific or suitability logic. (Calibrations are *not* private — EMF is a published framework. Adopters with different signal sources should still re-fit.)
 
 ## Installation
 
