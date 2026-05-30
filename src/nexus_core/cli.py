@@ -19,9 +19,9 @@ import uvicorn
 
 from . import __version__
 from .app import build_market_provider, create_app
+from .app.mcp_mount import build_configured_server
 from .data.macro import FredMacroData
 from .engine.regime import RegimeEngine
-from .mcp.server import build_server
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -78,11 +78,13 @@ def _serve_http(host: str, port: int) -> None:
 
 
 def _serve_mcp_stdio() -> None:
-    engine = RegimeEngine(
-        market_data=build_market_provider(),
-        macro_data=FredMacroData(),
-    )
-    build_server(name="nexus-core", regime_engine=engine).run()
+    market = build_market_provider()
+    macro = FredMacroData()
+    engine = RegimeEngine(market_data=market, macro_data=macro)
+    # Same fully-wired tool set as the HTTP /mcp transport, so Claude Desktop
+    # and other local stdio clients get regime + scoring + market + macro +
+    # options + DeFi tools, not just the regime pair.
+    build_configured_server(engine, market, macro).run()
 
 
 if __name__ == "__main__":
