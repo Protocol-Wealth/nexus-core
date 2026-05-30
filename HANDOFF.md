@@ -1,175 +1,205 @@
 # HANDOFF — `nexus-core` (open-source repo)
 
-Cross-repo wiring the parallel private-estate session must pick up. This file
-tracks open work that crosses the public/private boundary, so it lives in the
-public tree where both sessions can see it.
+Operator handoff / current-state snapshot for `nexus-core` — the public,
+Apache-2.0 regime-adaptive financial-analysis + DeFi/market-data engine
+(github.com/Protocol-Wealth/nexus-core). Public, read-only, no client data,
+no auth. This file is the practical "what's live, what's next" reference for
+the next session.
 
-Branch: `feat/cfp-governance-hardening`
-Most recent commit at last update: see `git log -3` on the branch.
+Stack: Python 3.12, FastAPI + FastMCP, sync `httpx`, `asyncpg`, `mypy --strict`,
+`ruff`. Version `0.1.0`. ~580-test suite.
 
----
-
-## Tier 1 — governance parity confirmation (CFP-substrate iteration)
-
-**Status: shipped to the feature branch as of 2026-05-27, pending operator
-go/no-go review before any push to `main` or any Tier-2 work begins.**
-
-### What changed in this repo
-
-- `CHANGELOG.md` — `[Unreleased]` entry under "Changed" recording the
-  cross-repo governance-parity work performed alongside `pwos-core`. No
-  other file in this repo was modified.
-- **Confirmed existing**: `CONTRIBUTING.md`, `SECURITY.md`,
-  `CODE_OF_CONDUCT.md`, `CHANGELOG.md` already match the canonical PW
-  open-source shape (this repo was the source-of-truth that `pwos-core`'s
-  parallel hardening copied from). No new governance files written.
-
-### Cross-repo wiring required from the private-estate session
-
-- **(governance-doc consistency check)** Same item as `pwos-core/HANDOFF.md`:
-  open `shared/docs/compliance/opensource-policy.md` (private estate
-  canonical) and cross-check the license / patent / OIN posture and the
-  open-vs-private boundary description against the updated `pwos-core`
-  wording. `nexus-core` already states this boundary in its `## What's Open
-  vs Private` README section (no change needed here) and continues to
-  follow the patent-doc-rule discipline (USPTO #64/034,229; OIN member).
-- **(no production code wiring required for Tier 1)** Documentation-only.
-  The `nexusmcp.site` deployment running `nexus_core.app` is unaffected;
-  no module imports changed, no public API moved, no signal / threshold /
-  decay-constant value was added or modified.
-
-### Operator decision required before Tier 2
-
-Tier 2 here is the flagship pair (score-explainability extension + `as_of`
-deterministic replay + cross-link doc to pwos-core disclosure schema).
-**Not yet authorized.** This session will not begin Tier 2 work until
-the operator explicitly says "go."
-
-If Tier 2 is authorized, the private-estate wiring will be (preview, not
-committed):
-
-- Surface the new `explanation` object (Tier-2 N2) — per-check pass/fail
-  + normalized signal contributions, **shape only, no constant values** —
-  in the client-facing research rendering inside pw-os-v2 and
-  pw-portal-v2. The narrative-pipeline consumer in the private estate
-  should pull `explanation.checks_passed` / `explanation.checks_failed`
-  / `explanation.confidence_tier` rather than relying on the old
-  free-text `notes` field.
-- Make the private-estate research jobs idempotent by passing the new
-  `as_of` parameter (Tier-2 N3) on every regime / scoring call. Frozen
-  inputs → identical outputs; useful for reproducibility under SEC exam
-  conditions and for the audit trail's hash-chain stability.
-- Cross-link doc (Tier-2 N4) shows how a `nexus-core` scoring result
-  populates the `pwos-core` disclosure-card `knownLimitations[]` field
-  conceptually. No code coupling between the repos — the worked example
-  is text only.
-
-These three items will only show up here as concrete wiring instructions
-after the Tier-2 code lands on this branch. If Tier 2 is declined, this
-HANDOFF stays Tier-1-only.
+Branch at last update: `fix/ratelimit-xff`. PRs #64 (snapshot-job) and #65
+(ratelimit) may still be open at read time — both capabilities are already
+running in production, so describe them as present.
 
 ---
 
-## Tier 2 — explainability + deterministic replay + cross-link (CFP-substrate iteration)
+## What's live
 
-**Status: shipped to the feature branch as of 2026-05-27.** Operator
-authorized Tier 2 immediately after the Tier-1 checkpoint.
+Deployed at **nexusmcp.site** (Cloudflare → Google Cloud Run, region
+`us-central1`). Three moving pieces:
 
-### What landed in this repo (Tier 2)
+1. **Web service** `nexus-core` — runs `nexus-core serve` (public HTTP API +
+   MCP-over-HTTP). `--allow-unauthenticated`.
+2. **Cloud Run Job** `nexus-snapshot-job` — runs `nexus-core snapshot`, writes
+   the daily benchmark-price snapshot. This is a Job, **not** an HTTP route —
+   there is no public write endpoint.
+3. **Cloud Scheduler** `nexus-daily-snapshot` — triggers the Job daily at
+   01:00 America/New_York via an OAuth service-account identity (no shared
+   secret).
 
-- **`src/nexus_core/engine/scoring/explanation.py`** — N2: new module
-  with `ScoreExplanation`, `CheckExplanation`, `SignalContribution`, and
-  `build_score_explanation()`. The explanation is **sanitized by
-  construction**: `SignalContribution` carries only `(name, status,
-  supports_regime)` — NO `current_value`, NO `threshold_info`, NO
-  numeric cutoff. The shape lets a downstream consumer render an
-  explanation surface without leaking the operator's production
-  threshold values.
-- **`src/nexus_core/engine/scoring/framework.py`** — N2 + N3:
-  - `ScoreResult` gained two fields: `as_of: date | None = None` and
-    `explanation: ScoreExplanation | None = None`. Both default to None
-    for backward compat.
-  - `ScoringFramework.score(ctx, *, subject=None, as_of=None)` —
-    new `as_of` keyword param; the score auto-populates the
-    `explanation` and echoes `as_of` onto the result.
-  - `to_dict()` now serializes both new fields.
-- **`src/nexus_core/engine/scoring/__init__.py`** — re-exports the new
-  explanation symbols under `__all__`.
-- **`src/nexus_core/engine/regime/signals.py`** — N3: `RegimeResult`
-  gained `as_of: date | None = None`; `to_dict()` emits the ISO date
-  when set (omits when None).
-- **`src/nexus_core/engine/regime/classifier.py`** — N3:
-  `RegimeClassifier.classify(..., as_of=None)` — accepts `as_of`,
-  echoes it onto the result. The classifier itself is unchanged
-  (still pure on signals); `as_of` is metadata for reproducible replay.
-- **`src/nexus_core/engine/regime/engine.py`** — N3:
-  - `RegimeEngine.fetch_signals(*, force_refresh=False, as_of=None)`
-    — when `as_of` is set, bypasses the cache and forwards to the
-    underlying `SignalFetcher.fetch(as_of=...)` if the fetcher accepts
-    it (TypeError fallback to plain `.fetch()` for providers without
-    `as_of` support).
-  - `RegimeEngine.classify(signals=None, *, prediction_market=None,
-    as_of=None)` — forwards `as_of` to `fetch_signals` and the
-    classifier.
-- **`tests/test_explanation.py`** — N2 tests. The load-bearing test is
-  `test_signal_contributions_strip_threshold_and_raw_value` which
-  asserts that serialized contributions have ONLY the three sanitized
-  keys (`name`, `status`, `supports_regime`).
-- **`tests/test_replay.py`** — N3 tests. Asserts identical results
-  across repeated calls with the same `as_of` (classifier + scoring
-  framework both), and that `as_of` round-trips through `to_dict()`.
-- **`examples/deterministic_replay.py`** — runnable worked example.
-  Builds synthetic signals, classifies twice with the same `as_of`,
-  asserts the JSON-serialized outputs are byte-identical. Zero data
-  dependencies — no network, no API keys.
-- **`docs/CROSS-LINK-PWOS-CORE.md`** — N4: conceptual note documenting
-  three join points between `nexus-core` and `pwos-core`:
-  - `ScoreExplanation` → `DisclosureCard.knownLimitations[]`
-  - `as_of` + provenance hash-chain → `DisclosureCard.auditTrail`
-  - HITL gate enforcement → `DisclosureCard.humanOversight`
+Persistence is a **private Cloud SQL** instance, `nexus-marketdata`
+(`POSTGRES_16`, private-IP-only on `pwllc-prod-vpc`, backups + deletion
+protection). The web service and the Job reach it via Direct VPC egress
+(`--network=pwllc-prod-vpc --subnet=pwllc-prod-cloud-run-us-central1
+--vpc-egress=private-ranges-only`) plus a Cloud SQL connection
+(`--add-cloudsql-instances` for the service, `--set-cloudsql-instances` for
+the Job) and `roles/cloudsql.client`. Runtime SA: `nexus-core-run@pwllc-prod`.
 
-### Cross-repo wiring required from the private-estate session (Tier 2)
-
-The wiring contract for these items lives in `pwos-core/HANDOFF.md`
-under "Cross-repo wiring required from the private-estate session
-(Tier 2)" — that is the authoritative source. The two items most
-specifically tied to *this* repo's surface:
-
-- **Consume `score_result.explanation.*` instead of re-deriving from
-  `score_result.checks`** in any client-facing narrative path. The
-  sanitized contract is the safer surface for client copy because it
-  cannot accidentally leak the operator's production threshold
-  numbers.
-- **Thread `as_of: date` through the audit-trail replay code path.**
-  The new fields are backward-compatible — existing call sites that
-  don't pass `as_of` keep working — but every replay-context call site
-  should pass it so the result is reproducible from a frozen snapshot
-  and the provenance hash-chain (`@protocolwealthos/shared/provenance`)
-  carries the as-of in the hashed content.
-
-### Public-surface compatibility
-
-- Every new field on `RegimeResult` and `ScoreResult` defaults to
-  `None`. Pre-Tier-2 callers continue to compile + work without
-  changes.
-- `to_dict()` shape is additive — pre-existing keys retained, new
-  keys (`as_of`, `explanation`) appear only when set / non-None.
-- No symbol renamed. No symbol removed. No regime taxonomy change. No
-  new threshold value added or modified.
+CLI (`nexus-core …`): `serve`, `mcp` (stdio, for Claude Desktop), `snapshot`.
 
 ---
 
-## Build + test status at last update
+## Endpoint surface (full current public surface)
 
-Captured in the checkpoint summary on this branch. If the operator wants
-to re-verify before approving the push to `main`, from the repo root with
-the `.venv` activated:
+All read-only GET (plus POST/OPTIONS where noted). External integrations
+degrade gracefully to `None`/empty/`503` when their API key is absent.
+
+**Core / health**
+
+- `/health`, `/health/db` (DB connectivity probe), `/` (landing)
+
+**Regime + scoring (EMF)**
+
+- `/api/regime`, `/api/regime/signals` — regime classification
+- `/api/score/{ticker}` — 8-check EMF scoring (SEC EDGAR fundamentals)
+
+**Market + macro data**
+
+- `/api/market/quote/{symbol}`, `/api/market/history/{symbol}` — composite
+  (yfinance / MBOUM / MarketStack / CoinGecko)
+- `/api/economic/{series_id}` — FRED economic series
+
+**Options (educational, Black-Scholes)**
+
+- `/api/options/price`
+- `/api/options/overlay/{covered-call,cash-secured-put,collar}`
+- `/api/options/crypto/{currency}/instruments`,
+  `/api/options/crypto/instrument/{instrument_name}` — Deribit crypto options
+
+**On-chain / wallets**
+
+- `/api/wallet/{address}` — anonymous EVM wallet balance (DeBank)
+- `/api/chain/chains`, `/api/chain/balance/{chain}/{address}`,
+  `/api/chain/native/{address}` — multi-chain native balances (Tatum: EVM
+  `eth_getBalance` + Solana `getBalance`)
+
+**DeFi vaults + LP**
+
+- `/api/vaults`, `/api/vaults/chains` — vault discovery (vaults.fyi v2)
+- `/api/lp/chains`,
+  `/api/lp/uniswap-v3/{chain}/{token_id}/analytics` — Uniswap V3 position
+  analytics: value, in-range, exact impermanent-loss-vs-HODL, fee-APR
+  estimate, uncollected fees (RPC `tokensOwed` via Tatum), Merkl reward APR →
+  total APR. USD prices are required query params. (The Graph + RPC + Merkl.)
+
+**Benchmarks**
+
+- `/api/benchmarks`, `/api/benchmarks/series?days=`,
+  `/api/benchmarks/history?days=` — base-100 hold-strategy returns (BTC/ETH/SOL
+  + ETH-USDC 50/50, 60/40, 70/30 + ETH-BTC 50/50; USDC held at $1;
+  buy-and-hold). `/series` = on-demand from CoinGecko; `/history` = from the
+  persisted daily snapshots.
+
+**Ops + MCP**
+
+- `/api/usage` — provider usage / quota report
+- `/mcp` — MCP-over-HTTP transport (FastMCP)
+
+---
+
+## Module map (where things live)
+
+- **Data clients** — `data/onchain/{debank,tatum,thegraph,merkl,vaultsfyi,defillama}.py`;
+  `data/market/{coingecko,mboum,marketstack,yfinance}_provider` + cache +
+  composite; `data/macro` (FRED); `data/edgar` (SEC fundamentals);
+  `data/derivatives` (Deribit); `data/db.py` + `data/snapshots.py` (asyncpg
+  persistence).
+- **Engine** — `engine/regime` (`RegimeEngine`), `engine/scoring/emf` (8-check),
+  `engine/pricing` (Black-Scholes), `engine/lp/uniswap_v3.py` (pure CLMM math:
+  tick math, `get_amounts_for_liquidity`, exact IL, fee APR),
+  `engine/benchmarks.py` (base-100 + buy-and-hold compositions).
+- **Jobs** — `jobs/daily_snapshot.py`.
+- **CLI** — `nexus-core {serve|mcp|snapshot}`.
+
+---
+
+## Secrets + env vars
+
+Secrets live only in **Google Secret Manager** — no credentials in config.
+Provider keys: `nexus-{fred,mboum,marketstack,coingecko,eia,bea,debank,tatum,vaultsfyi,thegraph}-api-key`
+plus `nexus-marketdata-database-url`.
+
+Runtime env vars (each external integration degrades gracefully when its key
+is absent):
+
+- `FRED_API_KEY`, `MBOUM_API_KEY`, `MARKETSTACK_API_KEY`, `COINGECKO_API_KEY`,
+  `EIA_API_KEY`, `BEA_API_KEY`
+- `DEBANK_API_KEY` (`/api/wallet`)
+- `TATUM_API_KEY` (`/api/chain` + LP uncollected fees)
+- `VAULTSFYI_API_KEY` (`/api/vaults`)
+- `THEGRAPH_API_KEY` (`/api/lp`)
+- `DATABASE_URL` (persistence + `/api/benchmarks/history`; returns `503` when
+  unset)
+- `NEXUS_RATE_LIMIT_PER_MIN` (default 60), `NEXUS_CORS_ORIGINS`
+
+---
+
+## Security posture
+
+- Public, read-only. **No public write endpoints** — the daily snapshot is a
+  Cloud Run Job, not an HTTP route.
+- Cloud SQL is private-IP-only; reachable only over Direct VPC egress.
+- In-process rate limiter resolves client IP **spoofing-resistantly**:
+  `CF-Connecting-IP`, else the rightmost `X-Forwarded-For` hop (the fix on
+  branch `fix/ratelimit-xff`).
+- Cloudflare methods rule blocks non-GET/POST/OPTIONS; edge rate-limit on the
+  cost endpoints.
+- Secrets only in Secret Manager; Scheduler → Job uses an OAuth SA identity,
+  not a static token.
+
+---
+
+## Deploy (summary — `DEPLOY.md` owns the detail)
 
 ```bash
-pip install -e ".[dev]"     # if not already installed
-pytest
-ruff check src/ tests/
-mypy src/nexus_core/
+# Web service
+gcloud run deploy nexus-core \
+  --source . --region us-central1 \
+  --service-account nexus-core-run@pwllc-prod.iam.gserviceaccount.com \
+  --allow-unauthenticated \
+  --network=pwllc-prod-vpc \
+  --subnet=pwllc-prod-cloud-run-us-central1 \
+  --vpc-egress=private-ranges-only \
+  --add-cloudsql-instances <instance-connection-name> \
+  --set-secrets <provider keys + DATABASE_URL>
+
+# Snapshot Job (note: --set-cloudsql-instances, NOT --add-)
+gcloud run jobs deploy nexus-snapshot-job \
+  --source . --command nexus-core --args snapshot \
+  --set-cloudsql-instances <instance-connection-name> \
+  --network=pwllc-prod-vpc --subnet=... --vpc-egress=private-ranges-only \
+  --set-secrets DATABASE_URL=...,COINGECKO_API_KEY=...
+
+# Scheduler (OAuth SA, NOT a static token)
+gcloud scheduler jobs create http nexus-daily-snapshot \
+  --schedule "0 1 * * *" --time-zone America/New_York \
+  --oauth-service-account-email nexus-core-run@pwllc-prod.iam.gserviceaccount.com \
+  ...
 ```
 
-All three should be green; this iteration touched no code paths.
+---
+
+## Build + test status
+
+From the repo root with the `.venv` activated:
+
+```bash
+pip install -e ".[dev]"        # if not already installed
+pytest                         # ~580 tests
+ruff check src/ tests/
+mypy --strict src/nexus_core/
+```
+
+All three should be green.
+
+---
+
+## Next up (ROADMAP)
+
+1. **Position-PnL-vs-benchmark surface** — pair LP impermanent loss with the
+   hold benchmarks to answer "was LPing worth it?" (the headline next item).
+2. **Jupiter Solana price source** — for Solana AMM coverage.
+3. **Uniswap V4 + Aerodrome / Balancer / Algebra LP adapters.**
+4. **Persisted LP-position snapshots.**

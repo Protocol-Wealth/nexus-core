@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — On-chain data, LP analytics, benchmarks, and a private market-data store (2026-05-19 → 2026-05-28)
+
+- **Multi-chain native balances** — `data/onchain/tatum.py` (Tatum) backing
+  `GET /api/chain/chains`, `GET /api/chain/balance/{chain}/{address}` (EVM
+  `eth_getBalance` + Solana `getBalance`), and `GET /api/chain/native/{address}`.
+  Requires `TATUM_API_KEY`; degrades to empty/None when absent.
+- **Anonymous EVM wallet balance** — `data/onchain/debank.py` (DeBank) backing
+  `GET /api/wallet/{address}`. No client data, no auth. Requires `DEBANK_API_KEY`.
+- **DeFi vault discovery** — `data/onchain/vaultsfyi.py` (vaults.fyi v2) backing
+  `GET /api/vaults` and `GET /api/vaults/chains`. Response parsing reads
+  `apy` / `chain` / `vaultId`. Requires `VAULTSFYI_API_KEY`.
+- **Uniswap V3 LP position analytics** — `engine/lp/uniswap_v3.py` pure CLMM
+  math (tick math, `get_amounts_for_liquidity`, exact impermanent-loss-vs-HODL,
+  fee-APR estimate) plus `data/onchain/{thegraph,merkl}.py` backing
+  `GET /api/lp/chains` and
+  `GET /api/lp/uniswap-v3/{chain}/{token_id}/analytics`. Returns position
+  value, in-range flag, exact IL-vs-HODL, fee-APR, uncollected fees
+  (RPC `tokensOwed` via Tatum), and Merkl reward APR → total APR. USD prices
+  are required query params. Sources: The Graph + RPC + Merkl;
+  requires `THEGRAPH_API_KEY` (and `TATUM_API_KEY` for uncollected fees).
+- **Hold-strategy benchmarks** — `engine/benchmarks.py` (base-100, buy-and-hold)
+  backing `GET /api/benchmarks`, `GET /api/benchmarks/series?days=` (on-demand
+  from CoinGecko), and `GET /api/benchmarks/history?days=` (from persisted daily
+  snapshots). Compositions: BTC/ETH/SOL, ETH-USDC 50/50·60/40·70/30,
+  ETH-BTC 50/50; USDC held at $1.
+- **Private market-data persistence** — `data/db.py` + `data/snapshots.py`
+  (asyncpg) against a private-IP-only Cloud SQL instance (`nexus-marketdata`,
+  POSTGRES_16) reached via Direct VPC egress. `GET /health/db` probes
+  connectivity. `DATABASE_URL` gates persistence and
+  `/api/benchmarks/history` (503 when unset).
+- **Daily snapshot Cloud Run Job** — `jobs/daily_snapshot.py`, invoked via the
+  `nexus-core snapshot` CLI command, run by a Cloud Run Job
+  (`nexus-snapshot-job`) on an OAuth service-account identity, triggered by
+  Cloud Scheduler (`nexus-daily-snapshot`, daily 01:00 America/New_York).
+  No shared secret; no public write route.
+- **Educational options overlays + crypto options** — Black-Scholes overlays at
+  `GET /api/options/price` and `GET /api/options/overlay/{covered-call,cash-secured-put,collar}`,
+  plus Deribit crypto options at `GET /api/options/crypto/{currency}/instruments`
+  and `GET /api/options/crypto/instrument/{instrument_name}` (`data/derivatives`).
+
+### Changed — Snapshot write path moved off the public surface (2026-05-19)
+
+- The daily snapshot is now a Cloud Run Job (`nexus-core snapshot`), not an
+  HTTP route. The public write endpoint was dropped; the public surface remains
+  read-only.
+
+### Fixed — Spoofing-resistant rate limiting (2026-05-28)
+
+- The in-process rate limiter now resolves the client IP spoofing-resistantly:
+  prefers `CF-Connecting-IP`, else the rightmost `X-Forwarded-For` entry.
+  Layered behind a Cloudflare methods rule (blocks non-GET/POST/OPTIONS) and an
+  edge rate-limit on cost endpoints. `NEXUS_RATE_LIMIT_PER_MIN` defaults to 60.
+
 ### Added — Tier-2: score explainability + deterministic replay + cross-link doc (2026-05-27)
 
 - **`src/nexus_core/engine/scoring/explanation.py`** — new module exposing
