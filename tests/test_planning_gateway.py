@@ -77,6 +77,45 @@ def test_list_tools_version_handshake() -> None:
     assert "glide_path" in body["tools"]
     assert "correlation_matrix" in body["tools"]
     assert "capital_market_assumptions" in body["tools"]
+    assert "tax_aware_withdrawal" in body["tools"]
+
+
+def test_tax_aware_withdrawal_happy_path() -> None:
+    r = _client().post(
+        "/mcp/tools/tax_aware_withdrawal",
+        json={
+            "contractVersion": "0.1.0",
+            "year": 2026,
+            "filingStatus": "married_joint",
+            "accounts": [
+                {"type": "taxable", "balance": 200000, "allocation": {"us_equity": 1.0}},
+                {"type": "traditional", "balance": 800000, "allocation": {"us_equity": 1.0}},
+            ],
+            "grossNeed": 120000,
+            "age": 65,
+            "otherTaxableIncome": 0,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert body["withdrawals"][0]["type"] == "taxable"
+    assert "totalTax" in body and "effectiveRate" in body and body["rmdSatisfied"] is True
+
+
+def test_tax_aware_withdrawal_infeasible_returns_422() -> None:
+    r = _client().post(
+        "/mcp/tools/tax_aware_withdrawal",
+        json={
+            "year": 2026,
+            "filingStatus": "single",
+            "accounts": [{"type": "roth", "balance": 1000, "allocation": {"x": 1.0}}],
+            "grossNeed": 50000,
+            "age": 65,
+        },
+    )
+    assert r.status_code == 422
+    assert "insufficient" in r.text.lower()
 
 
 def test_correlation_matrix_happy_path() -> None:

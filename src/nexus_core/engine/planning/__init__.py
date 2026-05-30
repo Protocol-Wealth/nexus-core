@@ -12,5 +12,12 @@ any specific person's outcome.
 
 from .correlation import correlation_matrix
 from .glide_path import GlidePathShape, compute_glide_path
+from .tax import InfeasiblePlanError, tax_aware_withdrawal
 
-__all__ = ["GlidePathShape", "compute_glide_path", "correlation_matrix"]
+__all__ = [
+    "GlidePathShape",
+    "InfeasiblePlanError",
+    "compute_glide_path",
+    "correlation_matrix",
+    "tax_aware_withdrawal",
+]
