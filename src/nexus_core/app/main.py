@@ -194,7 +194,7 @@ def create_app(
         build_lp_router(thegraph=TheGraphClient(), tatum=TatumClient(), merkl=MerklClient())
     )
     app.include_router(build_benchmarks_router(coingecko=CoinGeckoMarketData()))
-    app.include_router(build_snapshots_router(coingecko=CoinGeckoMarketData()))
+    app.include_router(build_snapshots_router())
 
     mcp_enabled = mcp_app is not None
 
