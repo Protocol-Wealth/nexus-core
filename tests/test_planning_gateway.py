@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 from fastapi import FastAPI
@@ -12,6 +13,16 @@ from fastapi.testclient import TestClient
 
 from nexus_core.app.planning import CONTRACT_VERSION, build_planning_router
 from nexus_core.data.providers import PriceBar
+
+
+class _FakeRegimeEngine:
+    """Duck-typed RegimeEngine returning a fixed live classification."""
+
+    def __init__(self, regime: str = "GROWTH") -> None:
+        self._regime = regime
+
+    def classify(self) -> SimpleNamespace:
+        return SimpleNamespace(regime=self._regime, confidence_score=80)
 
 
 class _FakeMarket:
@@ -43,7 +54,7 @@ def _client(*, cors: bool = False) -> TestClient:
             allow_headers=["*"],
             allow_credentials=False,
         )
-    app.include_router(build_planning_router(market=_FakeMarket()))
+    app.include_router(build_planning_router(market=_FakeMarket(), regime_engine=_FakeRegimeEngine()))
     return TestClient(app)
 
 
@@ -78,6 +89,46 @@ def test_list_tools_version_handshake() -> None:
     assert "correlation_matrix" in body["tools"]
     assert "capital_market_assumptions" in body["tools"]
     assert "tax_aware_withdrawal" in body["tools"]
+    assert "regime_return_generator" in body["tools"]
+
+
+def test_regime_return_generator_live_regime_and_matrix() -> None:
+    r = _client().post(
+        "/mcp/tools/regime_return_generator",
+        json={
+            "contractVersion": "0.1.0",
+            "assetClasses": [
+                {"id": "us_equity", "label": "US Equity", "expectedReturn": 0.07, "volatility": 0.16, "lambda": 0.35}
+            ],
+            "horizonYears": 50,
+            "paths": 1000,
+            "seed": 42,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert body["currentRegime"] == "expansion"  # fake GROWTH → expansion
+    regimes = ["expansion", "inflationary", "deflationary", "stagflation", "crisis"]
+    tm = body["transitionMatrix"]
+    assert set(tm) == set(regimes)
+    for frm in regimes:
+        assert set(tm[frm]) == set(regimes)
+        assert abs(sum(tm[frm].values()) - 1.0) < 1e-9  # rows sum to 1
+    assert body["pathCacheKey"] == "emf-v1-42"  # encodes the seed
+    assert body["seedUsed"] == 42
+
+
+def test_regime_return_generator_requires_lambda() -> None:
+    r = _client().post(
+        "/mcp/tools/regime_return_generator",
+        json={
+            "assetClasses": [{"id": "us_equity", "label": "US Equity", "expectedReturn": 0.07, "volatility": 0.16}],
+            "horizonYears": 50,
+        },
+    )
+    assert r.status_code == 400
+    assert "lambda" in r.text
 
 
 def test_tax_aware_withdrawal_happy_path() -> None:

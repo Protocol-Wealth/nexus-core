@@ -18,6 +18,7 @@ exactly; the gateway 404s ids that aren't registered.
 from __future__ import annotations
 
 import math
+import secrets
 import statistics
 from collections.abc import Callable
 from typing import Any, cast
@@ -30,8 +31,12 @@ from ...engine.planning import (
     correlation_matrix,
     tax_aware_withdrawal,
 )
+from ...engine.planning.regime import path_cache_key, to_generic_regime, transition_matrix
+from ...engine.regime import RegimeEngine
 from .contract import PlanningInfeasibleError, PlanningInputError
 from .universe import ASSET_UNIVERSE, proxy_tickers, universe_ids
+
+_MAX_SEED = 2**31 - 1
 
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -242,7 +247,54 @@ def _capital_market_assumptions_tool(
     return {"assetClasses": asset_classes, "correlations": correlations, "asOf": resolved_as_of}
 
 
-def build_tool_handlers(*, market: MarketDataProvider) -> dict[str, ToolHandler]:
+def _resolve_seed(body: dict[str, Any]) -> int:
+    """Return the seed to use: the supplied non-negative int, or a fresh one."""
+    seed = body.get("seed")
+    if seed is None:
+        return secrets.randbelow(_MAX_SEED)
+    if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= _MAX_SEED:
+        raise PlanningInputError(f"seed must be an integer in [0, {_MAX_SEED}] or null")
+    return seed
+
+
+def _validate_asset_classes(body: dict[str, Any], *, require_lambda: bool) -> list[dict[str, Any]]:
+    """Validate the ``assetClasses`` list; require a numeric ``lambda`` when asked."""
+    raw = _require(body, "assetClasses")
+    if not isinstance(raw, list) or not raw:
+        raise PlanningInputError("assetClasses must be a non-empty list")
+    for asset in raw:
+        if not isinstance(asset, dict) or not isinstance(asset.get("id"), str):
+            raise PlanningInputError("each assetClass must be an object with a string id")
+        if require_lambda:
+            lam = asset.get("lambda")
+            if isinstance(lam, bool) or not isinstance(lam, (int, float)):
+                raise PlanningInputError(
+                    f"assetClass '{asset.get('id')}' requires a numeric lambda (for emf_regime)"
+                )
+    return raw
+
+
+def _regime_return_generator_tool(
+    body: dict[str, Any], regime_engine: RegimeEngine
+) -> dict[str, Any]:
+    """``regime_return_generator`` — live current regime + transition matrix + cache key."""
+    _validate_asset_classes(body, require_lambda=True)
+    horizon = _as_int(body, "horizonYears")
+    if not 1 <= horizon <= 200:
+        raise PlanningInputError("horizonYears must be an integer in [1, 200]")
+    seed_used = _resolve_seed(body)
+    result = regime_engine.classify()
+    return {
+        "currentRegime": to_generic_regime(result.regime),
+        "transitionMatrix": transition_matrix(),
+        "pathCacheKey": path_cache_key(seed_used),
+        "seedUsed": seed_used,
+    }
+
+
+def build_tool_handlers(
+    *, market: MarketDataProvider, regime_engine: RegimeEngine
+) -> dict[str, ToolHandler]:
     """Construct the planning tool registry with its data dependencies injected.
 
     Tool ids MUST match the pwplan-core wire contract exactly.
@@ -254,11 +306,15 @@ def build_tool_handlers(*, market: MarketDataProvider) -> dict[str, ToolHandler]
     def capital_market_assumptions_tool(body: dict[str, Any]) -> dict[str, Any]:
         return _capital_market_assumptions_tool(body, market)
 
+    def regime_return_generator_tool(body: dict[str, Any]) -> dict[str, Any]:
+        return _regime_return_generator_tool(body, regime_engine)
+
     return {
         "glide_path": glide_path_tool,
         "tax_aware_withdrawal": tax_aware_withdrawal_tool,
         "correlation_matrix": correlation_matrix_tool,
         "capital_market_assumptions": capital_market_assumptions_tool,
+        "regime_return_generator": regime_return_generator_tool,
     }
 
 

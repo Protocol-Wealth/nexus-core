@@ -29,6 +29,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from ...data.providers import MarketDataProvider
+from ...engine.regime import RegimeEngine
 from .contract import (
     CONTRACT_VERSION,
     PlanningInfeasibleError,
@@ -45,10 +46,12 @@ def _error(status_code: int, message: str) -> PlainTextResponse:
     return PlainTextResponse(message, status_code=status_code, headers={"Cache-Control": "no-store"})
 
 
-def build_planning_router(*, market: MarketDataProvider) -> APIRouter:
+def build_planning_router(
+    *, market: MarketDataProvider, regime_engine: RegimeEngine
+) -> APIRouter:
     """Build the planning tool-gateway router with its data dependencies injected."""
     router = APIRouter(tags=["planning"])
-    handlers = build_tool_handlers(market=market)
+    handlers = build_tool_handlers(market=market, regime_engine=regime_engine)
     available = sorted(handlers)
 
     @router.get("/mcp/tools", summary="Planning tools + contract version")
