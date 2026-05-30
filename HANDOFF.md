@@ -7,7 +7,7 @@ no auth. This file is the practical "what's live, what's next" reference for
 the next session.
 
 Stack: Python 3.12, FastAPI + FastMCP, sync `httpx`, `asyncpg`, `mypy --strict`,
-`ruff`. Version `0.1.0`. ~580-test suite.
+`ruff`. Version `0.1.0`. CI-gated test suite.
 
 Branch at last update: `fix/ratelimit-xff`. PRs #64 (snapshot-job) and #65
 (ratelimit) may still be open at read time — both capabilities are already
@@ -194,7 +194,7 @@ From the repo root with the `.venv` activated:
 
 ```bash
 pip install -e ".[dev]"        # if not already installed
-pytest                         # ~580 tests
+pytest                         # full test suite
 ruff check src/ tests/
 mypy --strict src/nexus_core/
 ```

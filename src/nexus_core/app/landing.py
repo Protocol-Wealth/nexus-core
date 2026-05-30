@@ -98,6 +98,16 @@ _PAGE = """\
     {mcp_line}
   </ul>
 
+  <h2>Try it — no setup</h2>
+  <pre style="background:#111830;border:1px solid #1f2a48;border-radius:10px;padding:1rem 1.15rem;overflow-x:auto;font-size:.85rem;color:#d6def5"><code># current macro regime
+curl https://nexusmcp.site/api/regime
+
+# planning tools: contract handshake, then invoke one (educational, PII-free)
+curl https://nexusmcp.site/mcp/tools
+curl -X POST https://nexusmcp.site/mcp/tools/glide_path \\
+  -H 'Content-Type: application/json' \\
+  -d '{{"currentAge": 40, "retirementAge": 65, "horizonAge": 95, "startEquityWeight": 0.8, "endEquityWeight": 0.4, "shape": "linear"}}'</code></pre>
+
   <h2>Public surface only</h2>
   <p style="color:#aab3cf">
     This deployment exposes market data and analytical signals. It contains no

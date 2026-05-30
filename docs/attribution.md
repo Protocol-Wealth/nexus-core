@@ -103,9 +103,7 @@ This document provides detailed provenance for every capability in Nexus Core. W
 ### AI/ML Finance Module
 
 **Fully attributed to AI4Finance Foundation:**
-- **[FinGPT](https://github.com/AI4Finance-Foundation/FinGPT)** (MIT) — Financial LLM framework
-- **[FinRobot](https://github.com/AI4Finance-Foundation/FinRobot)** (Apache 2.0) — Multi-agent research
-- **[FinRL](https://github.com/AI4Finance-Foundation/FinRL)** (MIT) — RL for portfolios
+- **[FinRL](https://github.com/AI4Finance-Foundation/FinRL)** (MIT) — RL for portfolios (the `ai` extra)
 
 **Fully attributed to Prosus AI:**
 - **[FinBERT](https://github.com/ProsusAI/finBERT)** (Apache 2.0) — Financial sentiment

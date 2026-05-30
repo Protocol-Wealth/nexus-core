@@ -342,7 +342,13 @@ def _register_market_tools(
         """Latest quote for a stock, ETF, index, or crypto coin id (e.g. AAPL, SPY, bitcoin)."""
         quote = market.get_quote(symbol)
         if quote is None:
-            return _err("get_quote", f"No quote for '{symbol}'", filters, disclaimer)
+            return _err(
+                "get_quote",
+                f"No quote available for '{symbol}'. Use a ticker (AAPL, SPY) "
+                "or a CoinGecko coin id (bitcoin, ethereum).",
+                filters,
+                disclaimer,
+            )
         return _ok("get_quote", {"quote": asdict(quote)}, filters, disclaimer)
 
     @mcp.tool(annotations=_RO_OPEN)
@@ -380,7 +386,12 @@ def _register_economic_tools(
     def get_economic_series(series_id: str) -> str:
         """Latest value for a FRED economic series (e.g. DGS10, DFII10, DTWEXBGS)."""
         if not macro.is_configured():
-            return _err("get_economic_series", "FRED API key not configured", filters, disclaimer)
+            return _err(
+                "get_economic_series",
+                "Economic data unavailable: the server has no FRED_API_KEY configured.",
+                filters,
+                disclaimer,
+            )
         value = macro.get_series(series_id)
         if value is None:
             return _err("get_economic_series", f"No data for '{series_id}'", filters, disclaimer)

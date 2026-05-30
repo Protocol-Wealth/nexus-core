@@ -118,6 +118,14 @@ _PAGE = """\
     Most clients that support remote MCP servers accept the URL directly — point
     them at <code>{mcp_url}</code> with the HTTP / Streamable-HTTP transport.
   </p>
+  <div class="note">
+    <strong>Tools not showing up?</strong> Fully quit and reopen Claude Desktop
+    (not just close the window). <code>mcp-remote</code> needs Node 18+ (check
+    <code>node -v</code>); if <code>npx</code> errors, run
+    <code>npx -y mcp-remote@latest {mcp_url}</code> once in a terminal to
+    pre-cache it. For the claude.ai web connector, if it won't attach, remove and
+    re-add it — the authorize step approves itself and needs no Client ID.
+  </div>
 
   <h2>Option B — Run it locally (stdio)</h2>
   <p>Install from source (Python 3.12+), then run the stdio server:</p>

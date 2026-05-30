@@ -8,7 +8,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**Live:** [nexusmcp.site](https://nexusmcp.site) | **Open Source:** [nexusmcp.site/opensource](https://nexusmcp.site/opensource) | **Patent:** [nexusmcp.site/patent](https://nexusmcp.site/patent)
+**Live:** [nexusmcp.site](https://nexusmcp.site) | **Source:** [GitHub](https://github.com/Protocol-Wealth/nexus-core) | **Patent:** [USPTO #64/034,229](https://patentcenter.uspto.gov/applications/64034229)
 
 ## Status
 
@@ -216,17 +216,33 @@ pip install -e ".[all]"
 
 ## Quick Start
 
-```python
-from nexus_core import RegimeEngine, ScoringEngine
+**Hosted — no install.** The server is live at `nexusmcp.site`:
 
-engine = RegimeEngine()
-regime = engine.detect_current_regime()
-print(f"Current regime: {regime.name} (confidence: {regime.confidence:.1%})")
+```bash
+curl https://nexusmcp.site/health
+curl https://nexusmcp.site/api/regime          # current macro regime
+curl https://nexusmcp.site/mcp/tools            # planning contract + tool ids
 
-scoring = ScoringEngine(regime=regime)
-score = scoring.score_ticker("AAPL")
-print(f"AAPL: {score.tier} ({score.total}/8)")
+# a planning tool (educational, PII-free — send age, never date of birth)
+curl -X POST https://nexusmcp.site/mcp/tools/glide_path \
+  -H 'Content-Type: application/json' \
+  -d '{"currentAge": 40, "retirementAge": 65, "horizonAge": 95,
+       "startEquityWeight": 0.8, "endEquityWeight": 0.4, "shape": "linear"}'
 ```
+
+**In Python** — the regime engine is built over data providers:
+
+```python
+from nexus_core.app.main import build_market_provider
+from nexus_core.data.macro import FredMacroData
+from nexus_core.engine.regime import RegimeEngine
+
+engine = RegimeEngine(market_data=build_market_provider(), macro_data=FredMacroData())
+result = engine.classify()
+print(result.to_dict())   # regime code, confidence, per-signal breakdown, rationale
+```
+
+See [`examples/`](examples) for more runnable snippets.
 
 ### Run the public API + MCP server
 
@@ -266,7 +282,7 @@ runs without any of them, with reduced data coverage.
 
 ## Tech Stack
 
-Python 3.12 · FastAPI · FastMCP · `httpx` · `asyncpg` · PostgreSQL (Cloud SQL) · Redis · pandas · numpy · scipy · `mypy --strict` · ruff · ~594-test suite
+Python 3.12 · FastAPI · FastMCP · `httpx` · `asyncpg` · PostgreSQL (Cloud SQL) · Redis · pandas · numpy · scipy · `mypy --strict` · ruff · CI-gated test + lint suite
 
 ## Documentation
 
@@ -320,8 +336,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for full guidelines.
 ## Links
 
 - **Live App:** [nexusmcp.site](https://nexusmcp.site)
-- [Open Source Manifesto](https://nexusmcp.site/opensource)
-- [Patent Documentation](https://nexusmcp.site/patent)
+- [MCP setup guide](https://nexusmcp.site/mcp-guide) · [REST docs](https://nexusmcp.site/docs) · [llms.txt](https://nexusmcp.site/llms.txt)
+- [USPTO Patent Center #64/034,229](https://patentcenter.uspto.gov/applications/64034229)
 - [Protocol Wealth](https://protocolwealthllc.com)
 
 ---
