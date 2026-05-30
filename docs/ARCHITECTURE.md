@@ -95,7 +95,7 @@ FRED series 1 hr); Cloudflare is set to respect origin.
 | Scoring | `/api/score/{ticker}` (8-check EMF, SEC EDGAR fundamentals) |
 | Market | `/api/market/quote/{symbol}`, `/api/market/history/{symbol}` |
 | Economic | `/api/economic/{series_id}` (FRED) |
-| Options | `/api/options/price`, `/api/options/overlay/{covered-call,cash-secured-put,collar}`, `/api/options/crypto/{currency}/instruments`, `/api/options/crypto/instrument/{instrument_name}` |
+| Options | `/api/options/price`, `/api/options/overlay/{covered-call,cash-secured-put,collar}`, `/api/options/crypto/currencies`, `/api/options/crypto/{currency}/instruments`, `/api/options/crypto/instrument/{instrument_name}` (BTC/ETH inverse + SOL/XRP/TRX/AVAX USDC-linear, Deribit) |
 | Wallet | `/api/wallet/{address}` (DeBank EVM balance) |
 | Chain | `/api/chain/chains`, `/api/chain/balance/{chain}/{address}`, `/api/chain/native/{address}` (Tatum) |
 | Vaults | `/api/vaults`, `/api/vaults/chains` (vaults.fyi v2) |

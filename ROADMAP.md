@@ -40,9 +40,11 @@ gracefully to `None` / empty / `503` when its key is absent.
 - **`GET /api/options/price`** — Black-Scholes pricing (`engine/pricing`).
 - **`GET /api/options/overlay/{covered-call,cash-secured-put,collar}`** —
   educational overlay structures.
-- **`GET /api/options/crypto/{currency}/instruments`,
-  `/api/options/crypto/instrument/{instrument_name}`** — Deribit crypto
-  options (`data/derivatives`).
+- **`GET /api/options/crypto/currencies`,
+  `/api/options/crypto/{currency}/instruments`,
+  `/api/options/crypto/instrument/{instrument_name}`** — Deribit crypto options
+  on BTC/ETH (coin-settled inverse) + SOL/XRP/TRX/AVAX (USDC-settled linear,
+  read from Deribit's `USDC` umbrella) (`data/derivatives`). Keyless.
 
 ### Onchain & DeFi
 

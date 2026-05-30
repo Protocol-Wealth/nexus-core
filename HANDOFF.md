@@ -65,8 +65,11 @@ degrade gracefully to `None`/empty/`503` when their API key is absent.
 
 - `/api/options/price`
 - `/api/options/overlay/{covered-call,cash-secured-put,collar}`
-- `/api/options/crypto/{currency}/instruments`,
-  `/api/options/crypto/instrument/{instrument_name}` — Deribit crypto options
+- `/api/options/crypto/currencies`,
+  `/api/options/crypto/{currency}/instruments`,
+  `/api/options/crypto/instrument/{instrument_name}` — Deribit crypto options on
+  BTC/ETH (coin-settled inverse) + SOL/XRP/TRX/AVAX (USDC-settled linear, read
+  from Deribit's `USDC` umbrella). Keyless.
 
 **On-chain / wallets**
 

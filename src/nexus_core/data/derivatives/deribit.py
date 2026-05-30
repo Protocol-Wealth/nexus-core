@@ -8,7 +8,15 @@ public method is reachable as ``GET /public/<method>`` and wraps its payload in
 a top-level ``{"result": ...}`` envelope. This client unwraps ``result`` and
 exposes the option-instrument list, per-instrument ticker (mark price, implied
 vol, greeks, top-of-book), and the spot index price for the supported
-currencies (BTC, ETH, SOL).
+underliers (BTC, ETH, SOL, XRP, TRX, AVAX).
+
+Deribit lists options under two settlement models. BTC and ETH have
+coin-settled (*inverse*) books reachable directly via ``currency=BTC|ETH``.
+Every other underlier — SOL, XRP, TRX, AVAX — is USDC-settled (*linear*) and
+listed under a single ``USDC`` "currency" umbrella as ``<CODE>_USDC-…``; a
+direct ``currency=SOL`` query returns nothing (and ``currency=TRX`` is rejected
+outright), so the client queries the umbrella and filters by instrument-name
+prefix. :meth:`DeribitClient.list_option_instruments` hides that split.
 
 Every input is a *public* market parameter — a currency code or an exchange
 instrument name (e.g. ``BTC-27JUN25-100000-C``). Nothing here takes an account,
@@ -36,11 +44,41 @@ logger = logging.getLogger(__name__)
 _BASE_URL = "https://www.deribit.com/api/v2"
 _DEFAULT_TIMEOUT = 10.0
 
-#: Currencies this client supports, mapped to their Deribit spot index name.
-_INDEX_NAMES: dict[str, str] = {
-    "BTC": "btc_usd",
-    "ETH": "eth_usd",
-    "SOL": "sol_usd",
+#: All linear (USDC-settled) options are listed under this single Deribit
+#: "currency" umbrella; the per-asset book is selected by instrument-name prefix.
+_LINEAR_UMBRELLA = "USDC"
+
+
+@dataclass(frozen=True)
+class _Underlier:
+    """How one supported option underlier is reached on Deribit.
+
+    Attributes:
+        index_name: Spot index name for ``get_index_price`` (``<code>_usd``).
+        linear: ``True`` when the asset's options are USDC-settled (linear),
+            listed under :data:`_LINEAR_UMBRELLA` as ``<CODE>_USDC-…`` — the
+            client queries that umbrella and filters by instrument-name prefix.
+            ``False`` for coin-settled (inverse) books reachable directly via
+            ``currency=<CODE>``.
+    """
+
+    index_name: str
+    linear: bool
+
+
+#: Supported option underliers and how to reach each. Deribit migrated every
+#: altcoin option to USDC-settled (linear) books under the ``USDC`` umbrella;
+#: only BTC and ETH keep coin-settled (inverse) books queryable by
+#: ``currency=BTC|ETH``. SOL/XRP/TRX/AVAX options exist ONLY as
+#: ``<CODE>_USDC-…`` linear instruments. Verified live against the Deribit
+#: public API on 2026-05-30.
+_UNDERLIERS: dict[str, _Underlier] = {
+    "BTC": _Underlier("btc_usd", linear=False),
+    "ETH": _Underlier("eth_usd", linear=False),
+    "SOL": _Underlier("sol_usd", linear=True),
+    "XRP": _Underlier("xrp_usd", linear=True),
+    "TRX": _Underlier("trx_usd", linear=True),
+    "AVAX": _Underlier("avax_usd", linear=True),
 }
 
 #: Educational-framing disclaimer attached to structured option outputs.
@@ -111,7 +149,7 @@ class OptionInstrument:
 
     Attributes:
         instrument_name: Deribit instrument name.
-        base_currency: Base currency (BTC / ETH / SOL).
+        base_currency: Base currency (BTC, ETH, SOL, XRP, TRX, AVAX).
         option_type: ``call`` or ``put``.
         strike: Strike price.
         expiration_timestamp: Expiry as Unix epoch milliseconds.
@@ -186,22 +224,44 @@ class DeribitClient:
         if not isinstance(currency, str):
             return None
         code = currency.strip().upper()
-        return code if code in _INDEX_NAMES else None
+        return code if code in _UNDERLIERS else None
+
+    @staticmethod
+    def supported_currencies() -> list[str]:
+        """Currency codes with Deribit option coverage, in display order."""
+        return list(_UNDERLIERS)
+
+    @staticmethod
+    def settlement_model(currency: str) -> str | None:
+        """``"linear_usdc"`` / ``"inverse"`` for a supported currency, else ``None``."""
+        code = DeribitClient._normalise_currency(currency)
+        if code is None:
+            return None
+        return "linear_usdc" if _UNDERLIERS[code].linear else "inverse"
 
     def list_option_instruments(self, currency: str) -> list[OptionInstrument]:
-        """Return active option instruments for ``currency`` (BTC / ETH / SOL).
+        """Return active option instruments for ``currency``.
 
-        Backs ``GET /public/get_instruments?currency=...&kind=option&expired=false``.
+        Supported underliers: BTC, ETH (coin-settled inverse books) and SOL,
+        XRP, TRX, AVAX (USDC-settled linear books). Backs
+        ``GET /public/get_instruments?currency=...&kind=option&expired=false``.
+        For a linear underlier the query targets the ``USDC`` umbrella and the
+        result is filtered to that asset's ``<CODE>_USDC-…`` instruments.
         Returns an empty list for an unsupported currency or on failure.
         """
         code = self._normalise_currency(currency)
         if code is None:
             return []
+        under = _UNDERLIERS[code]
+        # Linear (USDC-settled) books all live under the USDC umbrella; the
+        # asset is selected from the umbrella by its instrument-name prefix.
+        query_currency = _LINEAR_UMBRELLA if under.linear else code
+        prefix = f"{code}_{_LINEAR_UMBRELLA}-" if under.linear else None
         result = self._get_result(
             "/public/get_instruments",
             # ``expired`` must be the lowercase JSON literal Deribit expects;
             # passing Python ``False`` would serialise to the string "False".
-            params={"currency": code, "kind": "option", "expired": "false"},
+            params={"currency": query_currency, "kind": "option", "expired": "false"},
         )
         if not isinstance(result, list):
             return []
@@ -211,6 +271,9 @@ class DeribitClient:
                 continue
             name = entry.get("instrument_name")
             if not isinstance(name, str) or not name:
+                continue
+            # The umbrella returns every linear asset's book; keep only this one.
+            if prefix is not None and not name.startswith(prefix):
                 continue
             expiry = entry.get("expiration_timestamp")
             instruments.append(
@@ -260,10 +323,11 @@ class DeribitClient:
         )
 
     def get_index_price(self, currency: str) -> float | None:
-        """Return the spot index price for ``currency`` (BTC / ETH / SOL).
+        """Return the spot index price for ``currency``.
 
-        Backs ``GET /public/get_index_price?index_name=btc_usd`` (the currency
-        is mapped to its ``<code>_usd`` index name). Returns ``None`` for an
+        Supported underliers: BTC, ETH, SOL, XRP, TRX, AVAX. Backs
+        ``GET /public/get_index_price?index_name=btc_usd`` (the currency is
+        mapped to its ``<code>_usd`` index name). Returns ``None`` for an
         unsupported currency or on failure.
         """
         code = self._normalise_currency(currency)
@@ -271,7 +335,7 @@ class DeribitClient:
             return None
         result = self._get_result(
             "/public/get_index_price",
-            params={"index_name": _INDEX_NAMES[code]},
+            params={"index_name": _UNDERLIERS[code].index_name},
         )
         if not isinstance(result, dict):
             return None

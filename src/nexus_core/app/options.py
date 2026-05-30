@@ -9,8 +9,10 @@ client as a public, read-only API:
 * ``GET /api/options/overlay/{covered-call,cash-secured-put,collar}`` — payoff
   illustration of an equity/ETF overlay; spot is fetched live and volatility is
   estimated from recent history when neither a premium nor a sigma is supplied.
-* ``GET /api/options/crypto/{currency}/instruments`` — listed BTC/ETH/SOL option
-  instruments (Deribit).
+* ``GET /api/options/crypto/currencies`` — supported crypto underliers +
+  settlement model (Deribit).
+* ``GET /api/options/crypto/{currency}/instruments`` — listed option instruments
+  for BTC/ETH/SOL/XRP/TRX/AVAX (Deribit).
 * ``GET /api/options/crypto/instrument/{name}`` — per-instrument mark price,
   implied vol, and Greeks (Deribit).
 
@@ -44,7 +46,6 @@ _PRICE_TTL = 300
 _DEFAULT_RATE = 0.04
 _DEFAULT_SIGMA = 0.30
 _TRADING_DAYS = 252.0
-_SUPPORTED_CRYPTO = ("BTC", "ETH", "SOL")
 _DISCLAIMER = "Educational illustration only — not investment advice."
 
 
@@ -173,18 +174,31 @@ def build_options_router(
         response.headers["Cache-Control"] = f"public, max-age={_OVERLAY_TTL}"
         return {"symbol": symbol, "spot": spot, **asdict(result)}
 
+    @router.get("/crypto/currencies", summary="Crypto option underliers (Deribit)")
+    def crypto_currencies(response: Response) -> dict[str, Any]:
+        """Supported crypto option underliers and their settlement model."""
+        currencies = deribit.supported_currencies()
+        response.headers["Cache-Control"] = f"public, max-age={_CRYPTO_TTL}"
+        return {
+            "currencies": currencies,
+            "settlement": {c: deribit.settlement_model(c) for c in currencies},
+            "disclaimer": _DISCLAIMER,
+        }
+
     @router.get(
         "/crypto/{currency}/instruments",
         summary="Listed crypto option instruments (Deribit)",
     )
     def crypto_instruments(
         response: Response,
-        currency: str = Path(description="BTC, ETH, or SOL"),
+        currency: str = Path(description="BTC, ETH, SOL, XRP, TRX, or AVAX"),
     ) -> dict[str, Any]:
         cur = currency.upper()
-        if cur not in _SUPPORTED_CRYPTO:
+        supported = deribit.supported_currencies()
+        if cur not in supported:
             raise HTTPException(
-                status_code=404, detail=f"Unsupported currency '{currency}'. Use BTC/ETH/SOL."
+                status_code=404,
+                detail=f"Unsupported currency '{currency}'. Use {'/'.join(supported)}.",
             )
         instruments = deribit.list_option_instruments(cur)
         response.headers["Cache-Control"] = f"public, max-age={_CRYPTO_TTL}"

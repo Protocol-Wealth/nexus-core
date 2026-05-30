@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Deribit crypto options coverage: SOL fix + XRP/TRX/AVAX
+
+- **Crypto option underliers expanded to six** — `GET /api/options/crypto/{currency}/instruments`
+  now covers **BTC, ETH, SOL, XRP, TRX, AVAX**. Deribit migrated all altcoin
+  options to USDC-settled (linear) books listed under a single `USDC` umbrella,
+  so `data/derivatives/deribit.py` now queries that umbrella and filters by
+  `<CODE>_USDC-…` instrument-name prefix for the linear underliers, while BTC/ETH
+  keep their coin-settled (inverse) books. **Fixes** SOL silently returning zero
+  instruments (it had been queried as `currency=SOL`, which Deribit now answers
+  with an empty book). Keyless — no new secret.
+- **`GET /api/options/crypto/currencies`** — new discovery endpoint listing the
+  supported underliers and each one's settlement model (`inverse` / `linear_usdc`).
+- `DeribitClient.supported_currencies()` / `settlement_model()` are now the single
+  source of truth for the REST routes and the `crypto_option_instruments` MCP tool
+  (no more hard-coded currency triples).
+
 ### Added — Multi-chain LP, Aerodrome Slipstream, position vs-benchmark, and Solana SPL prices
 
 - **Aerodrome Slipstream LP analytics (Base, on-chain RPC)** —
