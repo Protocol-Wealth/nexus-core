@@ -52,6 +52,10 @@ def main(argv: list[str] | None = None) -> int:
         "mcp", help="Run the MCP server over stdio (for Claude Desktop)"
     )
 
+    subparsers.add_parser(
+        "snapshot", help="Run the daily benchmark-price snapshot job (Cloud Run Job)"
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "serve":
@@ -60,6 +64,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "mcp":
         _serve_mcp_stdio()
         return 0
+    if args.command == "snapshot":
+        from .jobs.daily_snapshot import run as run_snapshot_job
+
+        return run_snapshot_job()
 
     parser.print_help()
     return 1
