@@ -1,0 +1,182 @@
+# Current state — nexus-core
+
+A point-in-time snapshot of exactly what is live right now. For the architectural
+overview see [README.md](README.md); for deploy mechanics see [DEPLOY.md](DEPLOY.md);
+for the public-surface audit see [AUDIT.md](AUDIT.md).
+
+- **Repo:** [github.com/Protocol-Wealth/nexus-core](https://github.com/Protocol-Wealth/nexus-core) — public, Apache-2.0
+- **Live:** [nexusmcp.site](https://nexusmcp.site) (Cloudflare → Cloud Run)
+- **Version:** 0.1.0
+- **Stack:** Python 3.12 · FastAPI · FastMCP · sync httpx · asyncpg · mypy `--strict` · ruff
+- **Tests:** 580-test suite (`pytest`)
+- **Posture:** public, read-only, no client data, no auth, no public write endpoints
+
+## Public REST surface
+
+Every endpoint is anonymous GET (the `/mcp` transport also accepts POST). External
+integrations degrade gracefully — when a provider key is absent the dependent
+endpoint returns `None` / empty / `503` rather than failing the service.
+
+### Meta
+
+| Endpoint | Data source | Required key |
+|----------|-------------|--------------|
+| `GET /` | — (landing page) | — |
+| `GET /health` | — (liveness probe) | — |
+| `GET /health/db` | Cloud SQL connectivity probe | `DATABASE_URL` |
+| `GET /api/usage` | in-process cache + provider usage report | — |
+
+### Regime & scoring
+
+| Endpoint | Data source | Required key |
+|----------|-------------|--------------|
+| `GET /api/regime` | RegimeEngine (Gold/SPX vs 200WMA, real rates, DXY, VIX, credit spreads) | `FRED_API_KEY` for macro precision |
+| `GET /api/regime/signals` | RegimeEngine — raw per-signal readings | `FRED_API_KEY` for macro precision |
+| `GET /api/score/{ticker}` | EMF 8-check scoring on SEC EDGAR XBRL fundamentals | — (EDGAR is keyless) |
+
+### Market & economic data
+
+| Endpoint | Data source | Required key |
+|----------|-------------|--------------|
+| `GET /api/market/quote/{symbol}` | composite: yfinance / MBOUM / MarketStack / CoinGecko | keyless works; keys raise limits / add fallbacks |
+| `GET /api/market/history/{symbol}` | composite (same providers) — OHLCV bars | keyless works; keys raise limits / add fallbacks |
+| `GET /api/economic/{series_id}` | FRED | `FRED_API_KEY` |
+
+### Options (educational overlays)
+
+| Endpoint | Data source | Required key |
+|----------|-------------|--------------|
+| `GET /api/options/price` | Black-Scholes pricer + Greeks | — |
+| `GET /api/options/overlay/covered-call` | Black-Scholes overlay illustration | — |
+| `GET /api/options/overlay/cash-secured-put` | Black-Scholes overlay illustration | — |
+| `GET /api/options/overlay/collar` | Black-Scholes overlay illustration | — |
+| `GET /api/options/crypto/{currency}/instruments` | Deribit | — |
+| `GET /api/options/crypto/instrument/{instrument_name}` | Deribit | — |
+
+### On-chain & DeFi
+
+| Endpoint | Data source | Required key |
+|----------|-------------|--------------|
+| `GET /api/wallet/{address}` | DeBank — anonymous EVM wallet balance | `DEBANK_API_KEY` |
+| `GET /api/chain/chains` | Tatum — supported chains | — |
+| `GET /api/chain/balance/{chain}/{address}` | Tatum — EVM `eth_getBalance` / Solana `getBalance` | `TATUM_API_KEY` |
+| `GET /api/chain/native/{address}` | Tatum — native balances | `TATUM_API_KEY` |
+| `GET /api/vaults` | vaults.fyi v2 — vault discovery | `VAULTSFYI_API_KEY` |
+| `GET /api/vaults/chains` | vaults.fyi v2 — chains with vault data | `VAULTSFYI_API_KEY` |
+| `GET /api/lp/chains` | — chains/versions with LP analytics | — |
+| `GET /api/lp/uniswap-v3/{chain}/{token_id}/analytics` | The Graph + RPC (Tatum) + Merkl | `THEGRAPH_API_KEY`, `TATUM_API_KEY` (uncollected fees); USD prices are required query params |
+
+Uniswap V3 analytics computes value, in-range status, **exact** impermanent-loss-vs-HODL,
+fee-APR estimate, uncollected fees (RPC `tokensOwed`), and Merkl reward APR → total APR.
+
+### Benchmarks
+
+| Endpoint | Data source | Required key |
+|----------|-------------|--------------|
+| `GET /api/benchmarks` | base-100 hold-strategy composition definitions | — |
+| `GET /api/benchmarks/series?days=` | CoinGecko — on-demand base-100 returns | `COINGECKO_API_KEY` raises limits |
+| `GET /api/benchmarks/history?days=` | persisted daily snapshots (Cloud SQL) | `DATABASE_URL` (`503` when unset) |
+
+Compositions are buy-and-hold, base-100: BTC / ETH / SOL singles; ETH-USDC 50/50,
+60/40, 70/30; ETH-BTC 50/50. USDC is held at $1.
+
+### MCP
+
+| Endpoint | Data source | Required key |
+|----------|-------------|--------------|
+| `POST /mcp` | FastMCP-over-HTTP transport over the regime + scoring engines | — |
+
+## Code layout
+
+| Area | Modules |
+|------|---------|
+| Data — onchain | `data/onchain/{debank,tatum,thegraph,merkl,vaultsfyi,defillama}.py` |
+| Data — market | `data/market/{coingecko,mboum,marketstack,yfinance}_provider` + cache + composite |
+| Data — macro | `data/macro` (FRED) |
+| Data — fundamentals | `data/edgar` (SEC) |
+| Data — derivatives | `data/derivatives` (Deribit) |
+| Data — persistence | `data/db.py` + `data/snapshots.py` (asyncpg) |
+| Engine | `engine/regime` (RegimeEngine), `engine/scoring/emf` (8-check), `engine/pricing` (Black-Scholes), `engine/lp/uniswap_v3.py` (CLMM tick math, `get_amounts_for_liquidity`, exact IL, fee APR), `engine/benchmarks.py` (base-100 + buy-and-hold) |
+| Jobs | `jobs/daily_snapshot.py` |
+| CLI | `nexus-core {serve \| mcp \| snapshot}` |
+
+## Persistence & snapshot pipeline
+
+- **Cloud SQL `nexus-marketdata`** — POSTGRES_16, **private-IP-only** on
+  `pwllc-prod-vpc`, backups + deletion protection enabled. Holds the daily
+  benchmark snapshots that back `/api/benchmarks/history`.
+- **Web service → DB** via Direct VPC egress
+  (`--network=pwllc-prod-vpc --subnet=pwllc-prod-cloud-run-us-central1
+  --vpc-egress=private-ranges-only`) plus `--add-cloudsql-instances` and the
+  runtime SA's `roles/cloudsql.client`.
+- **Daily benchmark snapshot** is written by **Cloud Run Job `nexus-snapshot-job`**
+  (runs `nexus-core snapshot`), triggered by **Cloud Scheduler
+  `nexus-daily-snapshot`** at **01:00 America/New_York** daily, using an OAuth
+  service-account identity (no shared secret). It is a Job, **not an HTTP route** —
+  there is no public write endpoint.
+
+## Infrastructure
+
+| Resource | Identity / detail |
+|----------|-------------------|
+| Cloud Run service | `nexus-core` — region `us-central1`, `--allow-unauthenticated`, Direct VPC egress, `--add-cloudsql-instances`, provider keys + `DATABASE_URL` via `--set-secrets` |
+| Cloud Run Job | `nexus-snapshot-job` — `--command nexus-core --args snapshot`, `--set-cloudsql-instances` (note: not `--add-`), Direct VPC egress, `DATABASE_URL` + `COINGECKO_API_KEY` |
+| Cloud Scheduler | `nexus-daily-snapshot` — HTTP trigger, `--oauth-service-account-email` (not a static token), daily 01:00 ET |
+| Cloud SQL | `nexus-marketdata` — POSTGRES_16, private IP only, on `pwllc-prod-vpc` |
+| Runtime SA | `nexus-core-run@pwllc-prod` |
+
+### Secrets (Google Secret Manager)
+
+`nexus-fred-api-key`, `nexus-mboum-api-key`, `nexus-marketstack-api-key`,
+`nexus-coingecko-api-key`, `nexus-eia-api-key`, `nexus-bea-api-key`,
+`nexus-debank-api-key`, `nexus-tatum-api-key`, `nexus-vaultsfyi-api-key`,
+`nexus-thegraph-api-key`, `nexus-marketdata-database-url`.
+
+### Environment variables
+
+| Variable | Effect |
+|----------|--------|
+| `FRED_API_KEY` | `/api/economic/*` + macro precision for `/api/regime` |
+| `MBOUM_API_KEY` | MBOUM market-data fallback |
+| `MARKETSTACK_API_KEY` | MarketStack market-data fallback |
+| `COINGECKO_API_KEY` | Raises CoinGecko limits (keyless works) |
+| `EIA_API_KEY` | EIA energy data |
+| `BEA_API_KEY` | BEA economic data |
+| `DEBANK_API_KEY` | `/api/wallet` |
+| `TATUM_API_KEY` | `/api/chain` + LP uncollected fees |
+| `VAULTSFYI_API_KEY` | `/api/vaults` |
+| `THEGRAPH_API_KEY` | `/api/lp` |
+| `DATABASE_URL` | persistence + `/api/benchmarks/history` (`503` when unset) |
+| `NEXUS_RATE_LIMIT_PER_MIN` | per-IP request budget (default `60`) |
+| `NEXUS_CORS_ORIGINS` | CORS allow-list |
+
+Every external integration degrades gracefully to `None` / empty / `503` when its
+key is absent.
+
+## Security posture
+
+- Public, read-only. **No public write endpoints** — the daily snapshot runs as a
+  Cloud Run Job, not an HTTP route.
+- Cloud SQL is private-IP-only; reached over Direct VPC egress with a service-account
+  identity. No credentials in config — secrets live only in Secret Manager.
+- In-process rate limiter resolves the client IP spoofing-resistantly
+  (`CF-Connecting-IP`, else rightmost `X-Forwarded-For`).
+- Cloudflare methods rule blocks non-`GET`/`POST`/`OPTIONS`; edge rate-limit on the
+  cost endpoints.
+- No client data, no PII at risk.
+
+## Recent work (this cycle)
+
+- Tatum multi-chain native balances (`/api/chain/*`)
+- vaults.fyi vault discovery (`/api/vaults`)
+- Uniswap V3 LP analytics — exact IL + fees + Merkl reward APR (`/api/lp/*`)
+- CoinGecko hold-strategy benchmarks — on-demand + persisted (`/api/benchmarks/*`)
+- Private market-data Cloud SQL + daily snapshot Cloud Run Job + Cloud Scheduler
+- Spoofing-resistant rate-limiter fix
+
+## Next (roadmap)
+
+- Position-PnL-vs-benchmark surface — pair LP IL with hold benchmarks ("was LPing worth it?")
+- Jupiter Solana price source (Solana AMM coverage)
+- Uniswap V4 + Aerodrome / Balancer / Algebra LP adapters
+- Persisted LP-position snapshots

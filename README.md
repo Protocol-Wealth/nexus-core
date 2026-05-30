@@ -16,63 +16,124 @@ This is a reference framework and a starting point, not a production-ready produ
 
 Adopters are responsible for adding their own PII controls, access control, input validation, authentication, and data-handling boundaries appropriate to their own regulatory and security context before any real or sensitive data touches it. Adopters are also responsible for their own AI-provider data-handling posture; the framework makes no data-retention guarantees.
 
-Provided as-is under Apache-2.0.
+Provided as-is under Apache-2.0. Educational use only — nothing here is investment advice.
 
 ## What This Is
 
-Nexus Core is the open source foundation of the [Protocol Wealth research engine](https://nexusmcp.site) — a regime-aware financial analysis system that exposes analytical capabilities as MCP (Model Context Protocol) tools. Any MCP-compatible AI client (Claude, GPT, Gemini) can access regime-aware financial analysis without implementing financial domain logic.
+Nexus Core is the open source foundation of the [Protocol Wealth research engine](https://nexusmcp.site) — a regime-aware financial-analysis and DeFi/market-data engine that exposes its capabilities as a public, read-only REST API and as MCP (Model Context Protocol) tools. Any MCP-compatible AI client (Claude, GPT, Gemini) can access regime-aware analysis without implementing financial domain logic. It is built on FastAPI + FastMCP (Python 3.12, sync `httpx`, `asyncpg`), runs `mypy --strict` + `ruff`, and is deployed on Google Cloud Run behind Cloudflare at [nexusmcp.site](https://nexusmcp.site).
 
 Built and tested in production by an SEC-registered RIA (Protocol Wealth LLC, CRD #335298).
+
+## Public API
+
+The deployed surface is public, read-only, and carries no client data and no authentication. Every external integration degrades gracefully — to `None`, an empty result, or `503` — when its API key is absent.
+
+### Meta
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Landing page |
+| `GET /health` | Liveness probe (rate-limit exempt) |
+| `GET /health/db` | Database connectivity probe |
+| `GET /docs` | Interactive OpenAPI / Swagger UI |
+| `GET /api/usage` | Provider usage / quota report |
+| `POST /mcp` | Model Context Protocol over HTTP (FastMCP) |
+
+### Regime & Scoring
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/regime` | EMF regime classification |
+| `GET /api/regime/signals` | Raw regime signal readings |
+| `GET /api/score/{ticker}` | 8-check EMF durability score (SEC EDGAR fundamentals) |
+
+### Market & Economic Data
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/market/quote/{symbol}` | Latest quote (yfinance/MBOUM/MarketStack/CoinGecko composite) |
+| `GET /api/market/history/{symbol}` | OHLCV price history |
+| `GET /api/economic/{series_id}` | FRED economic series |
+
+### Options (educational)
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/options/price` | Black-Scholes price + Greeks |
+| `GET /api/options/overlay/covered-call` | Covered-call overlay illustration |
+| `GET /api/options/overlay/cash-secured-put` | Cash-secured-put overlay illustration |
+| `GET /api/options/overlay/collar` | Protective-collar overlay illustration |
+| `GET /api/options/crypto/{currency}/instruments` | Deribit crypto options instruments |
+| `GET /api/options/crypto/instrument/{instrument_name}` | Deribit crypto option detail |
+
+### On-Chain & DeFi
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/wallet/{address}` | Anonymous EVM wallet balance (DeBank) |
+| `GET /api/chain/chains` | Supported chains |
+| `GET /api/chain/balance/{chain}/{address}` | Multi-chain native balance (Tatum) |
+| `GET /api/chain/native/{address}` | Native balance lookup |
+| `GET /api/vaults` | DeFi vault discovery (vaults.fyi v2) |
+| `GET /api/vaults/chains` | Vault-supported chains |
+
+### LP Analytics (Uniswap V3)
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/lp/chains` | Chains/versions with LP analytics |
+| `GET /api/lp/uniswap-v3/{chain}/{token_id}/analytics` | Position value, in-range status, exact impermanent-loss-vs-HODL, fee-APR estimate, uncollected fees, Merkl reward APR → total APR (USD prices required as query params) |
+
+### Benchmarks
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/benchmarks` | Base-100 buy-and-hold benchmark returns (BTC/ETH/SOL + ETH-USDC 50/50,60/40,70/30 + ETH-BTC 50/50) |
+| `GET /api/benchmarks/series?days=` | On-demand series from CoinGecko |
+| `GET /api/benchmarks/history?days=` | Series from persisted daily snapshots |
 
 ## Architecture
 
 ```
-MCP Client (Claude, GPT, Gemini)
-    │ JSON-RPC over HTTP
-    ▼
+MCP Client (Claude, GPT, Gemini)  /  REST clients
+    │ JSON-RPC over HTTP          │ HTTP
+    ▼                             ▼
 Nexus Core (FastAPI + FastMCP)
-├── Regime Detection Engine
-│   ├── Signal ensemble (yield curve, VIX, DXY, CPI, energy)
-│   ├── 5 regime states (Growth, Transition, Hard Asset, Deflation, Repression)
-│   ├── Langevin decay constants (λ) per asset class
-│   └── 6 voting signals with cross-validation
-├── Scoring Framework
-│   ├── Multi-dimensional durability scoring
-│   ├── Confidence tiers
-│   ├── Layered durability model
-│   └── Kill rules for automatic disqualification
-├── Portfolio Optimization (PyPortfolioOpt + Riskfolio-Lib)
-│   ├── MVO, Black-Litterman, HRP, discrete allocation
-│   ├── 24 convex risk measures, factor models
-│   └── Walk-forward cross-validation (skfolio)
-├── Risk Analytics (empyrical-reloaded + pyfolio-reloaded)
-│   ├── Sharpe, Sortino, alpha, beta, VaR, max drawdown
-│   └── Professional tear sheets
-├── Derivatives Pricing (QuantLib + FinancePy)
-│   ├── Yield curves, bond analytics, swaps
-│   └── Equity options, FX, credit instruments
-├── SEC EDGAR Integration (edgartools + Arelle)
-│   ├── Filings as Python objects with native XBRL
-│   └── SEC-certified XBRL validation
-├── AI/ML Finance (FinGPT + FinRobot + FinBERT)
-│   ├── Multi-agent equity research from 10-Ks
-│   └── Financial sentiment classification
-├── Compliance (Moov Watchman)
-│   └── OFAC sanctions screening via HTTP API
-├── MCP Tool Registry
-│   ├── @mcp.tool() decorator pattern
-│   ├── Pluggable ResponseFilter hooks (adopter-supplied auth / PII / audit)
-│   └── Tool composition over regime + scoring engines
-└── Data Layer (PostgreSQL + Redis)
+├── Regime Engine (engine/regime)
+│   ├── Core signals: Gold/SPX vs 200WMA, real rates, DXY, VIX, credit spreads (BBB OAS)
+│   ├── Supplementary: yield curve (2s10s), precious metals
+│   └── 5 regime states (Growth, Transition, Hard Asset, Deflation, Repression)
+├── EMF Scoring (engine/scoring/emf)
+│   └── 8-check durability scoring + confidence tiers (SEC EDGAR fundamentals)
+├── Options Pricing (engine/pricing)
+│   └── Black-Scholes price + Greeks, covered-call/CSP/collar overlays
+├── LP Analytics (engine/lp/uniswap_v3.py)
+│   └── Pure CLMM math: tick math, get_amounts_for_liquidity, exact IL, fee APR
+├── Benchmarks (engine/benchmarks.py)
+│   └── Base-100 buy-and-hold compositions
+├── Data Clients (data/)
+│   ├── market/   yfinance, MBOUM, MarketStack, CoinGecko + cache + composite
+│   ├── macro/    FRED, EIA, BEA, Treasury
+│   ├── edgar/    SEC fundamentals (XBRL)
+│   ├── derivatives/  Deribit
+│   └── onchain/  DeBank, Tatum, The Graph, Merkl, vaults.fyi, DefiLlama
+├── Persistence (data/db.py, data/snapshots.py)
+│   └── asyncpg → private Cloud SQL (daily benchmark snapshots)
+├── Jobs (jobs/daily_snapshot.py)
+└── MCP Tool Registry (mcp/server)
+    ├── @mcp.tool() decorator pattern
+    └── Pluggable ResponseFilter hooks (adopter-supplied auth / PII / audit)
 ```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the signal ensemble, regime-state table, 8-check definitions, and the `ResponseFilter` tiering hook.
 
 ## Key Innovations
 
 **Regime Detection** — Signal ensemble maps macroeconomic conditions to regime states, informing asset-specific analysis.
 
-**Scoring Framework** — Multi-dimensional assessment combining fundamentals, technicals, momentum, and regime alignment.
+**EMF Scoring** — Multi-dimensional 8-check durability assessment combining fundamentals, technicals, momentum, and regime alignment.
 
-**Layered Durability Model** — Assets classified by decay characteristics. Lower decay = higher durability under stress.
+**Exact LP Analytics** — Pure constant-liquidity-market-maker math computes exact impermanent-loss-vs-HODL, fee APR, and total APR (including Merkl rewards) for Uniswap V3 positions.
 
 **MCP Orchestration** — Tools auto-adjust analysis based on detected regime. Any LLM accesses regime-aware insights without domain logic.
 
@@ -97,32 +158,21 @@ Nexus Core stands on a foundation of exceptional open-source projects. We bundle
 - **[Arelle](https://github.com/Arelle/Arelle)** (Apache 2.0) — SEC-certified XBRL validation
 - **[sec-parser](https://github.com/alphanome-ai/sec-parser)** (MIT) — Semantic parsing for LLM pipelines
 - **[sec-edgar-downloader](https://github.com/jadchaar/sec-edgar-downloader)** (MIT) — Bulk filing downloads
-- **[edgar-crawler](https://github.com/lefterisloukas/edgar-crawler)** (MIT) — Filing section extraction
 - **[yfinance](https://github.com/ranaroussi/yfinance)** (Apache 2.0) — Market data
 
 ### Backtesting & Factor Analysis
 - **[zipline-reloaded](https://github.com/stefan-jansen/zipline-reloaded)** (Apache 2.0) — Event-driven backtesting
-- **[alphalens](https://github.com/quantopian/alphalens)** (Apache 2.0) — Factor performance analysis
+- **[alphalens-reloaded](https://github.com/stefan-jansen/alphalens-reloaded)** (Apache 2.0) — Factor performance analysis
 
 ### AI & ML for Finance
-- **[FinGPT](https://github.com/AI4Finance-Foundation/FinGPT)** (MIT) — Financial LLM framework with RAG
-- **[FinRobot](https://github.com/AI4Finance-Foundation/FinRobot)** (Apache 2.0) — Multi-agent equity research
 - **[FinRL](https://github.com/AI4Finance-Foundation/FinRL)** (MIT) — Reinforcement learning for portfolios
-- **[FinBERT](https://github.com/ProsusAI/finBERT)** (Apache 2.0) — Financial sentiment classification
-
-### Compliance & Blockchain
-- **[Moov Watchman](https://github.com/moov-io/watchman)** (Apache 2.0) — OFAC sanctions screening
-- **[Ethereum-ETL](https://github.com/blockchain-etl/ethereum-etl)** (MIT) — Blockchain data pipeline
-
-### Reference Architecture (patterns only — AGPL code NOT copied)
-- **[OpenBB Platform](https://github.com/OpenBB-finance/OpenBB)** (AGPL-3.0) — Data aggregation architecture
-- **[SEC EDGAR Toolkit](https://github.com/stefanoamorelli/sec-edgar-toolkit)** (AGPL-3.0) — TS+Python monorepo pattern
+- **[FinBERT](https://github.com/ProsusAI/finBERT)** (Apache 2.0) — Financial sentiment classification (via Transformers)
 
 **Huge thanks to every maintainer and contributor of these projects.** Financial software has historically been locked behind proprietary walls — Nexus Core would not exist without the open-source financial ecosystem.
 
 ## What's Open vs Private
 
-**Open (Apache 2.0):** Framework architecture, scoring structure, layer model, tool pattern, compliance gate, caching patterns — **and Protocol Wealth's calibrated regime thresholds + scoring values**, which PW publishes openly as part of the EMF framework ([protocolwealthllc.com/framework](https://protocolwealthllc.com/framework)). All third-party integrations listed above.
+**Open (Apache 2.0):** Framework architecture, scoring structure, layer model, tool pattern, the public REST/MCP surface, caching patterns — **and Protocol Wealth's calibrated regime thresholds + scoring values**, which PW publishes openly as part of the EMF framework ([protocolwealthllc.com/framework](https://protocolwealthllc.com/framework)). All third-party integrations listed above.
 
 **Private:** API keys, client data, advisory/planning surfaces, the narrative/research pipeline, and any client-specific or suitability logic. (Calibrations are *not* private — EMF is a published framework. Adopters with different signal sources should still re-fit.)
 
@@ -138,15 +188,14 @@ pip install nexus-core[all]
 
 ```bash
 pip install nexus-core                    # Core only (regime, scoring)
+pip install nexus-core[serve]             # + the public HTTP API + MCP server (nexusmcp.site)
 pip install nexus-core[optimization]      # + PyPortfolioOpt, Riskfolio, skfolio
-pip install nexus-core[risk]              # + empyrical, pyfolio
+pip install nexus-core[risk]              # + empyrical, pyfolio, ffn
 pip install nexus-core[pricing]           # + QuantLib, FinancePy
 pip install nexus-core[edgar]             # + edgartools, Arelle, sec-parser
-pip install nexus-core[ai]                # + FinGPT, FinBERT, FinRobot (heavy)
+pip install nexus-core[market]            # + yfinance
+pip install nexus-core[ai]                # + FinRL, Transformers, torch (heavy)
 pip install nexus-core[backtest]          # + zipline-reloaded, alphalens
-pip install nexus-core[compliance]        # + Moov Watchman client
-pip install nexus-core[onchain]           # + Ethereum-ETL, DefiLlama integration
-pip install nexus-core[serve]             # + the public HTTP API + MCP server (nexusmcp.site)
 ```
 
 ### From source
@@ -177,22 +226,44 @@ print(f"AAPL: {score.tier} ({score.total}/8)")
 pip install -e ".[serve]"
 nexus-core serve     # HTTP API + MCP-over-HTTP — http://127.0.0.1:8080
 nexus-core mcp       # MCP server over stdio (for Claude Desktop)
+nexus-core snapshot  # Write a daily benchmark snapshot to the database
 ```
 
 `nexus-core serve` hosts the public surface deployed at
-[nexusmcp.site](https://nexusmcp.site): a read-only REST API (regime, market
-data, economic data), interactive docs at `/docs`, and an MCP endpoint at
-`/mcp`. See [DEPLOY.md](DEPLOY.md) for the endpoint reference and Cloud Run
+[nexusmcp.site](https://nexusmcp.site): the read-only REST API described above,
+interactive docs at `/docs`, and an MCP endpoint at `/mcp`. See
+[DEPLOY.md](DEPLOY.md) for the Cloud Run + Cloud SQL + Cloud Scheduler
 deployment.
+
+## Configuration
+
+All configuration is environment-driven. Every variable is optional; the app
+runs without any of them, with reduced data coverage.
+
+| Variable | Effect |
+|----------|--------|
+| `FRED_API_KEY` | Enables `/api/economic/*` and macro precision for `/api/regime` |
+| `MBOUM_API_KEY` | Adds MBOUM as a market-data fallback |
+| `MARKETSTACK_API_KEY` | Adds MarketStack as a market-data fallback |
+| `COINGECKO_API_KEY` | Raises CoinGecko rate limits (works keyless too) |
+| `EIA_API_KEY` | EIA energy / commodity macro data |
+| `BEA_API_KEY` | Bureau of Economic Analysis macro data |
+| `DEBANK_API_KEY` | Enables `/api/wallet` (DeBank) |
+| `TATUM_API_KEY` | Enables `/api/chain` and LP uncollected-fee lookups |
+| `VAULTSFYI_API_KEY` | Enables `/api/vaults` (vaults.fyi) |
+| `THEGRAPH_API_KEY` | Enables `/api/lp` (The Graph) |
+| `DATABASE_URL` | Persistence + `/api/benchmarks/history` (`503` when unset) |
+| `NEXUS_RATE_LIMIT_PER_MIN` | Per-IP request budget (default `60`) |
+| `NEXUS_CORS_ORIGINS` | Comma-separated CORS allow-list (default `*`) |
 
 ## Tech Stack
 
-Python 3.12 · FastAPI · FastMCP · PostgreSQL · Redis · pandas · numpy · scipy · PyWavelets
+Python 3.12 · FastAPI · FastMCP · `httpx` · `asyncpg` · PostgreSQL (Cloud SQL) · Redis · pandas · numpy · scipy · `mypy --strict` · ruff · 580-test suite
 
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
-- [Deployment](DEPLOY.md) — running the public API + Cloud Run deploy
+- [Deployment](DEPLOY.md) — running the public API + Cloud Run / Cloud SQL deploy
 - [Public-surface audit](AUDIT.md) — what the deployment exposes (and excludes)
 - [Attribution](docs/attribution.md) — detailed provenance per capability
 - [Contributing](CONTRIBUTING.md)
