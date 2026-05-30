@@ -42,6 +42,12 @@ def _client(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.Client:
     return httpx.Client(transport=httpx.MockTransport(handler))
 
 
+def test_supported_chains_includes_verified_evm() -> None:
+    chains = set(TheGraphClient.supported_chains())
+    assert {"ethereum", "base", "optimism", "polygon"} <= chains
+    assert "arbitrum" not in chains  # doc ID has an incompatible schema — intentionally omitted
+
+
 def test_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("THEGRAPH_API_KEY", raising=False)
     c = TheGraphClient(api_key=None)
