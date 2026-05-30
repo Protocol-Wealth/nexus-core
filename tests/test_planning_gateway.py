@@ -90,6 +90,87 @@ def test_list_tools_version_handshake() -> None:
     assert "capital_market_assumptions" in body["tools"]
     assert "tax_aware_withdrawal" in body["tools"]
     assert "regime_return_generator" in body["tools"]
+    assert "monte_carlo_decumulation" in body["tools"]
+
+
+_MC_PAYLOAD: dict[str, Any] = {
+    "contractVersion": "0.1.0",
+    "currentAge": 45,
+    "retirementAge": 65,
+    "horizonAge": 95,
+    "accounts": [
+        {"type": "traditional", "balance": 1200000, "allocation": {"us_equity": 0.6, "us_bonds": 0.4}},
+        {"type": "roth", "balance": 300000, "allocation": {"us_equity": 0.8, "us_bonds": 0.2}},
+    ],
+    "assetClasses": [
+        {"id": "us_equity", "label": "US Equity", "expectedReturn": 0.07, "volatility": 0.16, "lambda": 0.35},
+        {"id": "us_bonds", "label": "US Bonds", "expectedReturn": 0.03, "volatility": 0.05, "lambda": 0.10},
+    ],
+    "correlations": None,
+    "annualSpend": 120000,
+    "spendColaRate": 0.025,
+    "guaranteedIncome": [{"label": "Social Security", "annualAmount": 42000, "startAge": 67, "colaRate": 0.02}],
+    "filingStatus": "married_joint",
+    "returnModel": "emf_regime",
+    "paths": 3000,
+    "seed": 12345,
+    "pathCacheKey": None,
+}
+
+
+def test_monte_carlo_default_scenario_non_degenerate() -> None:
+    # §5.2 default with retirementAge 65 (accumulate 45→65, then decumulate):
+    # a plausible, non-degenerate result.
+    r = _client().post("/mcp/tools/monte_carlo_decumulation", json=_MC_PAYLOAD)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert 0.0 < body["successProbability"] <= 1.0
+    assert set(body["terminalValues"]) == {"p10", "p25", "p50", "p75", "p90"}
+    assert body["terminalValues"]["p90"] > 0  # upside paths retain wealth
+    assert len(body["medianBalanceByYear"]) == 50  # horizonAge - currentAge
+    assert len(body["regimePathSummary"]) == 50  # emf_regime populated
+    assert body["seedUsed"] == 12345
+
+
+def test_monte_carlo_retirement_age_lifts_success() -> None:
+    # Accumulating until 65 must beat withdrawing from 45 (the no-retirementAge case).
+    with_ret = _client().post("/mcp/tools/monte_carlo_decumulation", json=_MC_PAYLOAD).json()
+    no_ret = _client().post(
+        "/mcp/tools/monte_carlo_decumulation",
+        json={k: v for k, v in _MC_PAYLOAD.items() if k != "retirementAge"},
+    ).json()
+    assert with_ret["successProbability"] > no_ret["successProbability"]
+
+
+def test_monte_carlo_deterministic() -> None:
+    a = _client().post("/mcp/tools/monte_carlo_decumulation", json=_MC_PAYLOAD).json()
+    b = _client().post("/mcp/tools/monte_carlo_decumulation", json=_MC_PAYLOAD).json()
+    assert a == b  # same payload + seed ⇒ identical
+
+
+def test_monte_carlo_pathcachekey_reuse_not_an_error() -> None:
+    r = _client().post(
+        "/mcp/tools/monte_carlo_decumulation", json={**_MC_PAYLOAD, "pathCacheKey": "emf-v1-777"}
+    )
+    assert r.status_code == 200  # reuses seed 777; a stale/unknown key is never an error
+
+
+def test_monte_carlo_bad_allocation_returns_400() -> None:
+    bad = {
+        **_MC_PAYLOAD,
+        "accounts": [{"type": "traditional", "balance": 1000, "allocation": {"us_equity": 0.5, "us_bonds": 0.4}}],
+    }
+    r = _client().post("/mcp/tools/monte_carlo_decumulation", json=bad)
+    assert r.status_code == 400
+    assert "sums to" in r.text
+
+
+def test_monte_carlo_unknown_model_returns_400() -> None:
+    r = _client().post(
+        "/mcp/tools/monte_carlo_decumulation", json={**_MC_PAYLOAD, "returnModel": "crystal_ball"}
+    )
+    assert r.status_code == 400
 
 
 def test_regime_return_generator_live_regime_and_matrix() -> None:
@@ -209,7 +290,7 @@ def test_correlation_matrix_bad_lookback_400() -> None:
 
 
 def test_unknown_tool_returns_404() -> None:
-    r = _client().post("/mcp/tools/monte_carlo_decumulation", json=_GLIDE)
+    r = _client().post("/mcp/tools/not_a_real_planning_tool", json=_GLIDE)
     assert r.status_code == 404
     assert "unknown tool" in r.text
 
