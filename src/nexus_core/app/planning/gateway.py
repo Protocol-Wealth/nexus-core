@@ -27,13 +27,14 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
+from ...data.providers import MarketDataProvider
 from .contract import (
     CONTRACT_VERSION,
     PlanningInfeasibleError,
     PlanningInputError,
     find_identity_keys,
 )
-from .tools import TOOL_HANDLERS, available_tools
+from .tools import build_tool_handlers
 
 
 def _error(status_code: int, message: str) -> PlainTextResponse:
@@ -41,14 +42,16 @@ def _error(status_code: int, message: str) -> PlainTextResponse:
     return PlainTextResponse(message, status_code=status_code, headers={"Cache-Control": "no-store"})
 
 
-def build_planning_router() -> APIRouter:
-    """Build the planning tool-gateway router."""
+def build_planning_router(*, market: MarketDataProvider) -> APIRouter:
+    """Build the planning tool-gateway router with its data dependencies injected."""
     router = APIRouter(tags=["planning"])
+    handlers = build_tool_handlers(market=market)
+    available = sorted(handlers)
 
     @router.get("/mcp/tools", summary="Planning tools + contract version")
     def list_planning_tools() -> dict[str, Any]:
         """Version handshake + tool discovery for the planning contract."""
-        return {"contractVersion": CONTRACT_VERSION, "tools": available_tools()}
+        return {"contractVersion": CONTRACT_VERSION, "tools": available}
 
     @router.post("/mcp/tools/{tool_id}", summary="Invoke a planning tool", response_model=None)
     async def call_planning_tool(
@@ -71,11 +74,9 @@ def build_planning_router() -> APIRouter:
                 "Planning uses age, not date of birth; remove any name/contact/id fields.",
             )
 
-        handler = TOOL_HANDLERS.get(tool_id)
+        handler = handlers.get(tool_id)
         if handler is None:
-            return _error(
-                404, f"unknown tool '{tool_id}'; available: {', '.join(available_tools())}"
-            )
+            return _error(404, f"unknown tool '{tool_id}'; available: {', '.join(available)}")
 
         try:
             payload = handler(body)

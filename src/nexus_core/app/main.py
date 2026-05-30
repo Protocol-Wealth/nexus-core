@@ -215,7 +215,7 @@ def create_app(
     app.include_router(build_snapshots_router())
     # Planning tool gateway. Included before the FastMCP `/mcp` mount (below) so
     # the explicit `/mcp/tools/...` routes take precedence over the transport.
-    app.include_router(build_planning_router())
+    app.include_router(build_planning_router(market=market))
 
     mcp_enabled = mcp_app is not None
 

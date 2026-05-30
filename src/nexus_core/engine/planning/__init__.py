@@ -10,6 +10,7 @@ Educational scenario analysis only — not investment advice, not a projection o
 any specific person's outcome.
 """
 
+from .correlation import correlation_matrix
 from .glide_path import GlidePathShape, compute_glide_path
 
-__all__ = ["GlidePathShape", "compute_glide_path"]
+__all__ = ["GlidePathShape", "compute_glide_path", "correlation_matrix"]
