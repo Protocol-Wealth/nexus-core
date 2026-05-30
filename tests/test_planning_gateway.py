@@ -11,6 +11,26 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
 from nexus_core.app.planning import CONTRACT_VERSION, build_planning_router
+from nexus_core.data.providers import PriceBar
+
+
+class _FakeMarket:
+    """Canned daily closes for the proxy tickers used by correlation_matrix."""
+
+    _DATES = [f"2026-01-{d:02d}T00:00:00Z" for d in range(1, 13)]
+    _SERIES = {"VTI": (100.0, 1.0), "AGG": (50.0, -0.4)}  # base, drift sign
+
+    def get_price_history(
+        self, symbol: str, *, days: int = 365, interval: str = "1d"
+    ) -> list[PriceBar]:
+        if symbol not in self._SERIES:
+            return []
+        base, k = self._SERIES[symbol]
+        closes = [base + k * ((i % 3) - 1) + i * 0.1 for i in range(len(self._DATES))]
+        return [
+            PriceBar(timestamp=d, open=c, high=c + 1, low=c - 1, close=c, volume=10.0)
+            for d, c in zip(self._DATES, closes, strict=True)
+        ]
 
 
 def _client(*, cors: bool = False) -> TestClient:
@@ -23,7 +43,7 @@ def _client(*, cors: bool = False) -> TestClient:
             allow_headers=["*"],
             allow_credentials=False,
         )
-    app.include_router(build_planning_router())
+    app.include_router(build_planning_router(market=_FakeMarket()))
     return TestClient(app)
 
 
@@ -55,6 +75,46 @@ def test_list_tools_version_handshake() -> None:
     body = r.json()
     assert body["contractVersion"] == CONTRACT_VERSION
     assert "glide_path" in body["tools"]
+    assert "correlation_matrix" in body["tools"]
+
+
+def test_correlation_matrix_happy_path() -> None:
+    r = _client().post(
+        "/mcp/tools/correlation_matrix",
+        json={
+            "contractVersion": "0.1.0",
+            "assetClassIds": ["us_equity", "us_bonds"],
+            "lookbackDays": 1260,
+            "shrinkage": True,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["contractVersion"] == CONTRACT_VERSION
+    matrix = body["matrix"]
+    assert matrix["us_equity"]["us_equity"] == 1.0
+    assert matrix["us_bonds"]["us_bonds"] == 1.0
+    assert matrix["us_equity"]["us_bonds"] == matrix["us_bonds"]["us_equity"]  # symmetric
+    assert -1.0 <= matrix["us_equity"]["us_bonds"] <= 1.0
+    assert body["asOf"] == "2026-01-12"  # latest aligned date
+
+
+def test_correlation_matrix_unknown_asset_422() -> None:
+    r = _client().post(
+        "/mcp/tools/correlation_matrix",
+        json={"assetClassIds": ["unobtanium"], "shrinkage": False},
+    )
+    assert r.status_code == 422
+    assert "no return series available" in r.text
+
+
+def test_correlation_matrix_bad_lookback_400() -> None:
+    r = _client().post(
+        "/mcp/tools/correlation_matrix",
+        json={"assetClassIds": ["us_equity"], "lookbackDays": 5},
+    )
+    assert r.status_code == 400
+    assert "lookbackDays" in r.text
 
 
 def test_unknown_tool_returns_404() -> None:
