@@ -8,7 +8,7 @@ for the public-surface audit see [AUDIT.md](AUDIT.md).
 - **Live:** [nexusmcp.site](https://nexusmcp.site) (Cloudflare → Cloud Run)
 - **Version:** 0.1.0
 - **Stack:** Python 3.12 · FastAPI · FastMCP · sync httpx · asyncpg · mypy `--strict` · ruff
-- **Tests:** 580-test suite (`pytest`)
+- **Tests:** ~594-test suite (`pytest`)
 - **Posture:** public, read-only, no client data, no auth, no public write endpoints
 
 ## Public REST surface
@@ -30,9 +30,9 @@ endpoint returns `None` / empty / `503` rather than failing the service.
 
 | Endpoint | Data source | Required key |
 |----------|-------------|--------------|
-| `GET /api/regime` | RegimeEngine (Gold/SPX vs 200WMA, real rates, DXY, VIX, credit spreads) | `FRED_API_KEY` for macro precision |
+| `GET /api/regime` | RegimeEngine — core: Gold/SPX vs 200WMA, real rates, DXY, VIX, credit spreads (BBB OAS); supplementary: yield curve, precious metals | `FRED_API_KEY` for macro precision |
 | `GET /api/regime/signals` | RegimeEngine — raw per-signal readings | `FRED_API_KEY` for macro precision |
-| `GET /api/score/{ticker}` | EMF 8-check scoring on SEC EDGAR XBRL fundamentals | — (EDGAR is keyless) |
+| `GET /api/score/{ticker}` | EMF 8-check scoring on SEC EDGAR XBRL fundamentals; supports `ScoreExplanation` + `as_of` deterministic replay | — (EDGAR is keyless) |
 
 ### Market & economic data
 
@@ -65,9 +65,21 @@ endpoint returns `None` / empty / `503` rather than failing the service.
 | `GET /api/vaults/chains` | vaults.fyi v2 — chains with vault data | `VAULTSFYI_API_KEY` |
 | `GET /api/lp/chains` | — chains/versions with LP analytics | — |
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/analytics` | The Graph + RPC (Tatum) + Merkl | `THEGRAPH_API_KEY`, `TATUM_API_KEY` (uncollected fees); USD prices are required query params |
+| `GET /api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` | same + hold-strategy benchmark returns over a window | `THEGRAPH_API_KEY`, `TATUM_API_KEY`; USD prices are required query params |
 
 Uniswap V3 analytics computes value, in-range status, **exact** impermanent-loss-vs-HODL,
 fee-APR estimate, uncollected fees (RPC `tokensOwed`), and Merkl reward APR → total APR.
+LP coverage spans **ethereum, base, optimism, polygon** (Arbitrum's published subgraph
+ID uses an incompatible schema → unsupported). `vs-benchmark` adds hold-strategy
+benchmark returns over the position window. The CLMM math in `engine/lp/uniswap_v3.py`
+is pure and protocol-agnostic — reused across all chains.
+
+### Solana prices
+
+| Endpoint | Data source | Required key |
+|----------|-------------|--------------|
+| `GET /api/solana/price/{mint}` | Jupiter v3 — single SPL token USD price | — (keyless) |
+| `GET /api/solana/prices?mints=` | Jupiter v3 — batch SPL token USD prices | — (keyless) |
 
 ### Benchmarks
 
@@ -90,13 +102,13 @@ Compositions are buy-and-hold, base-100: BTC / ETH / SOL singles; ETH-USDC 50/50
 
 | Area | Modules |
 |------|---------|
-| Data — onchain | `data/onchain/{debank,tatum,thegraph,merkl,vaultsfyi,defillama}.py` |
+| Data — onchain | `data/onchain/{debank,tatum,thegraph,merkl,vaultsfyi,defillama,jupiter}.py` |
 | Data — market | `data/market/{coingecko,mboum,marketstack,yfinance}_provider` + cache + composite |
 | Data — macro | `data/macro` (FRED) |
 | Data — fundamentals | `data/edgar` (SEC) |
 | Data — derivatives | `data/derivatives` (Deribit) |
 | Data — persistence | `data/db.py` + `data/snapshots.py` (asyncpg) |
-| Engine | `engine/regime` (RegimeEngine), `engine/scoring/emf` (8-check), `engine/pricing` (Black-Scholes), `engine/lp/uniswap_v3.py` (CLMM tick math, `get_amounts_for_liquidity`, exact IL, fee APR), `engine/benchmarks.py` (base-100 + buy-and-hold) |
+| Engine | `engine/regime` (RegimeEngine), `engine/scoring/emf` (8-check) + `engine/scoring/framework` (`ScoreExplanation` / `as_of` replay), `engine/pricing` (Black-Scholes), `engine/lp/uniswap_v3.py` (CLMM tick math, `get_amounts_for_liquidity`, exact IL, fee APR), `engine/benchmarks.py` (base-100 + buy-and-hold) |
 | Jobs | `jobs/daily_snapshot.py` |
 | CLI | `nexus-core {serve \| mcp \| snapshot}` |
 
@@ -167,16 +179,29 @@ key is absent.
 
 ## Recent work (this cycle)
 
-- Tatum multi-chain native balances (`/api/chain/*`)
-- vaults.fyi vault discovery (`/api/vaults`)
-- Uniswap V3 LP analytics — exact IL + fees + Merkl reward APR (`/api/lp/*`)
-- CoinGecko hold-strategy benchmarks — on-demand + persisted (`/api/benchmarks/*`)
-- Private market-data Cloud SQL + daily snapshot Cloud Run Job + Cloud Scheduler
-- Spoofing-resistant rate-limiter fix
+- Multi-chain Uniswap V3 LP analytics — base / optimism / polygon (joining ethereum)
+- LP position `vs-benchmark` route — pairs IL with hold-strategy returns ("was LPing worth it?")
+- Jupiter Solana SPL token USD prices — single + batch, keyless (`/api/solana/*`)
+
+Prior cycle: Tatum multi-chain native balances (`/api/chain/*`), vaults.fyi vault
+discovery (`/api/vaults`), Uniswap V3 LP analytics (exact IL + fees + Merkl reward APR),
+CoinGecko hold-strategy benchmarks (on-demand + persisted), private market-data Cloud SQL
++ daily snapshot Cloud Run Job + Cloud Scheduler, spoofing-resistant rate-limiter fix.
 
 ## Next (roadmap)
 
-- Position-PnL-vs-benchmark surface — pair LP IL with hold benchmarks ("was LPing worth it?")
-- Jupiter Solana price source (Solana AMM coverage)
-- Uniswap V4 + Aerodrome / Balancer / Algebra LP adapters
-- Persisted LP-position snapshots
+- **Aerodrome / Velodrome Slipstream LP** — researched, **blocked on data source**: no
+  canonical Slipstream V3-schema subgraph exists on The Graph (name-matching ones are
+  Revert-automation + ICHI-vault subgraphs); Aerodrome indexes via Envio. Engine +
+  Slipstream NFPM (`0x827922686190790b37229fd06084350E74485b72`, decode-compatible) are
+  ready; needs an Envio client (full, incl. IL), on-chain RPC (partial, no IL — deposited
+  amounts are event-derived), or a self-hosted subgraph.
+- **Arbitrum Uniswap V3** — needs a correct V3-schema subgraph ID (published one is incompatible).
+- **Base subgraph data quality** — public Base V3 deployment has spam-token TVL
+  contamination (pollutes discovery + pool-aggregate fee APR; per-position value/IL stay
+  accurate) → consider self-hosting a cleaner indexer.
+- **Uniswap V4** via Envio (Unichain).
+- **Solana CLMM** (Raydium / Orca) — Q64.64 sibling engine; Jupiter price layer already shipped.
+- Subgraph health-gate (`_meta` block-lag → degraded).
+- Persisted position-PnL history.
+- Enrich Tatum Solana balance with Jupiter USD prices.

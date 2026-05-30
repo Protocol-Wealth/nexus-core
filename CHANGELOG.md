@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Multi-chain LP, position vs-benchmark, and Solana SPL prices
+
+- **Multi-chain Uniswap V3 LP analytics** — `GET /api/lp/uniswap-v3/{chain}/{token_id}/analytics`
+  now spans **ethereum, base, optimism, polygon**. The CLMM math in
+  `engine/lp/uniswap_v3.py` is pure and protocol-agnostic, so the same engine
+  drives every chain (per-chain config in `data/onchain/thegraph.py`). USD
+  prices remain required query params; returns position value, in-range flag,
+  exact IL-vs-HODL, fee-APR estimate, uncollected fees (Tatum `tokensOwed`),
+  and Merkl reward APR → total APR. Arbitrum is **not** supported — its
+  published subgraph ID uses an incompatible schema.
+- **Position vs-benchmark** — `GET /api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark`
+  compares a live LP position against hold-strategy benchmark returns over a
+  window, reusing `engine/benchmarks.py`. Same required USD-price params as the
+  analytics endpoint.
+- **Solana SPL token USD prices** — `data/onchain/jupiter.py` (Jupiter v3,
+  keyless) backing `GET /api/solana/price/{mint}` and
+  `GET /api/solana/prices?mints=`. No API key required; degrades gracefully when
+  the upstream is unavailable.
+
 ### Added — On-chain data, LP analytics, benchmarks, and a private market-data store (2026-05-19 → 2026-05-28)
 
 - **Multi-chain native balances** — `data/onchain/tatum.py` (Tatum) backing

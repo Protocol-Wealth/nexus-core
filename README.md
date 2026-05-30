@@ -76,6 +76,8 @@ The deployed surface is public, read-only, and carries no client data and no aut
 | `GET /api/chain/native/{address}` | Native balance lookup |
 | `GET /api/vaults` | DeFi vault discovery (vaults.fyi v2) |
 | `GET /api/vaults/chains` | Vault-supported chains |
+| `GET /api/solana/price/{mint}` | Solana SPL token USD price (Jupiter, keyless) |
+| `GET /api/solana/prices?mints=` | Batch Solana SPL token USD prices (Jupiter, keyless) |
 
 ### LP Analytics (Uniswap V3)
 
@@ -83,6 +85,9 @@ The deployed surface is public, read-only, and carries no client data and no aut
 |----------|-------------|
 | `GET /api/lp/chains` | Chains/versions with LP analytics |
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/analytics` | Position value, in-range status, exact impermanent-loss-vs-HODL, fee-APR estimate, uncollected fees, Merkl reward APR → total APR (USD prices required as query params) |
+| `GET /api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` | Position return vs. hold-strategy benchmark returns over a window (USD prices required as query params) |
+
+Supported chains: **ethereum, base, optimism, polygon**. (Arbitrum's published subgraph uses an incompatible schema and is not supported.)
 
 ### Benchmarks
 
@@ -109,6 +114,7 @@ Nexus Core (FastAPI + FastMCP)
 │   └── Black-Scholes price + Greeks, covered-call/CSP/collar overlays
 ├── LP Analytics (engine/lp/uniswap_v3.py)
 │   └── Pure CLMM math: tick math, get_amounts_for_liquidity, exact IL, fee APR
+│       (protocol-agnostic — reused across ethereum/base/optimism/polygon)
 ├── Benchmarks (engine/benchmarks.py)
 │   └── Base-100 buy-and-hold compositions
 ├── Data Clients (data/)
@@ -116,7 +122,7 @@ Nexus Core (FastAPI + FastMCP)
 │   ├── macro/    FRED, EIA, BEA, Treasury
 │   ├── edgar/    SEC fundamentals (XBRL)
 │   ├── derivatives/  Deribit
-│   └── onchain/  DeBank, Tatum, The Graph, Merkl, vaults.fyi, DefiLlama
+│   └── onchain/  DeBank, Tatum, The Graph, Merkl, vaults.fyi, DefiLlama, Jupiter
 ├── Persistence (data/db.py, data/snapshots.py)
 │   └── asyncpg → private Cloud SQL (daily benchmark snapshots)
 ├── Jobs (jobs/daily_snapshot.py)
@@ -258,7 +264,7 @@ runs without any of them, with reduced data coverage.
 
 ## Tech Stack
 
-Python 3.12 · FastAPI · FastMCP · `httpx` · `asyncpg` · PostgreSQL (Cloud SQL) · Redis · pandas · numpy · scipy · `mypy --strict` · ruff · 580-test suite
+Python 3.12 · FastAPI · FastMCP · `httpx` · `asyncpg` · PostgreSQL (Cloud SQL) · Redis · pandas · numpy · scipy · `mypy --strict` · ruff · ~594-test suite
 
 ## Documentation
 

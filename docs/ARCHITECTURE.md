@@ -14,14 +14,14 @@ and MCP.
 ```
 External providers (FRED, SEC EDGAR, CoinGecko, MBOUM, MarketStack, yfinance,
                     DeBank, Tatum, The Graph, Merkl, vaults.fyi, DefiLlama,
-                    Deribit)
+                    Jupiter, Deribit)
     │
     ▼
 data/            provider adapters (sync httpx)
   market/        coingecko, mboum, marketstack, yfinance + cache + composite
   macro/         fred, treasury, eia, bea
   edgar/         SEC fundamentals (edgartools wrapper)
-  onchain/       debank, tatum, thegraph, merkl, vaultsfyi, defillama
+  onchain/       debank, tatum, thegraph, merkl, vaultsfyi, defillama, jupiter
   derivatives/   deribit (crypto options)
   db.py          asyncpg seam to the private market-data Postgres
   snapshots.py   daily benchmark-price persistence
@@ -31,7 +31,8 @@ engine/          pure computation over provider data
   regime/        RegimeEngine — signal ensemble → regime classification
   scoring/       8-check EMF scoring (emf/ holds croic, fscore, hurst, …)
   pricing/       Black-Scholes + options overlays
-  lp/            uniswap_v3 — pure CLMM math (tick math, exact IL, fee APR)
+  lp/            uniswap_v3 — pure CLMM math (tick math, exact IL, fee APR),
+                 protocol-agnostic and reused across chains
   benchmarks.py  base-100 hold-strategy return series + compositions
     │
     ▼
@@ -98,7 +99,8 @@ FRED series 1 hr); Cloudflare is set to respect origin.
 | Wallet | `/api/wallet/{address}` (DeBank EVM balance) |
 | Chain | `/api/chain/chains`, `/api/chain/balance/{chain}/{address}`, `/api/chain/native/{address}` (Tatum) |
 | Vaults | `/api/vaults`, `/api/vaults/chains` (vaults.fyi v2) |
-| LP | `/api/lp/chains`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics` |
+| LP | `/api/lp/chains`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics`, `/api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` (ethereum, base, optimism, polygon) |
+| Solana | `/api/solana/price/{mint}`, `/api/solana/prices?mints=` (Jupiter v3 SPL token USD prices, keyless) |
 | Benchmarks | `/api/benchmarks`, `/api/benchmarks/series?days=`, `/api/benchmarks/history?days=` |
 | Usage | `/api/usage` (provider quota report) |
 | MCP | `/mcp` (MCP-over-HTTP, FastMCP) |
@@ -146,11 +148,21 @@ without changing the decision when absent (see `RegimeSignals` in
 
 `engine/lp/uniswap_v3.py` is pure concentrated-liquidity (CLMM) math: tick math,
 `get_amounts_for_liquidity`, **exact** impermanent-loss-vs-HODL, and a fee-APR
-estimate. `/api/lp/uniswap-v3/{chain}/{token_id}/analytics` combines this with
+estimate. The math is protocol-agnostic, so the same engine is reused unchanged
+across chains. `/api/lp/uniswap-v3/{chain}/{token_id}/analytics` combines this with
 position data from The Graph, uncollected fees read on-chain (`tokensOwed` via
 Tatum RPC), and Merkl reward APR to report position value, in-range status, IL,
 fee APR, uncollected fees, and total APR. USD prices are required query
 parameters (the engine does not assume a price oracle).
+
+Position analytics run on **ethereum, base, optimism, and polygon**. Arbitrum is
+not supported: its published subgraph ID uses a schema incompatible with the V3
+shape this client decodes.
+
+`/api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` extends the analytics with a
+side-by-side comparison against the hold-strategy benchmark returns (from
+`engine/benchmarks.py`) over a window, so a position's realized PnL can be read
+against simply having held the underlying.
 
 ## Benchmarks Engine
 
@@ -159,6 +171,14 @@ compositions (BTC/ETH/SOL singles; ETH-USDC 50/50, 60/40, 70/30; ETH-BTC 50/50;
 USDC held at $1; buy-and-hold) from raw daily USD prices. `/api/benchmarks/series`
 computes on demand from CoinGecko; `/api/benchmarks/history` reads from persisted
 daily snapshots. The normalization baseline is simply the earliest stored day.
+
+## Solana Token Pricing
+
+`data/onchain/jupiter.py` reads Solana SPL token USD prices from the Jupiter v3
+price API. It is keyless — no secret, no quota tracking — so it always runs.
+`/api/solana/price/{mint}` returns a single mint's USD price and
+`/api/solana/prices?mints=` batches several. The same client is positioned to
+enrich Tatum's Solana native-balance read with USD figures.
 
 ## Persistence
 
