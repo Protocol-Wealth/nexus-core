@@ -29,7 +29,7 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from .. import __version__
 from ..data import db
@@ -58,6 +58,7 @@ from ..engine.regime import RegimeEngine
 from .benchmarks import build_benchmarks_router
 from .chain import build_chain_router
 from .landing import render_landing
+from .llms_txt import render_llms_txt
 from .lp import build_lp_router
 from .mcp_guide import render_mcp_guide
 from .mcp_mount import build_mcp_app
@@ -67,10 +68,12 @@ from .planning import build_planning_router
 from .ratelimit import RateLimitMiddleware
 from .routes import build_router
 from .scoring import build_score_router
+from .security_headers import SecurityHeadersMiddleware
 from .snapshots import build_snapshots_router
 from .solana import build_solana_router
 from .vaults import build_vaults_router
 from .wallet import build_wallet_router
+from .well_known import render_security_txt
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +204,10 @@ def create_app(
         allow_headers=["*"],
         allow_credentials=False,
     )
+    # Added last → outermost: baseline security headers land on every response,
+    # including the 401s from MCPAuthGate and 429s from the limiter. CSP is
+    # scoped to HTML only so JSON/SSE responses are unaffected.
+    app.add_middleware(SecurityHeadersMiddleware)
 
     app.include_router(build_router(engine=engine, market=market, macro=macro))
     app.include_router(build_options_router(market=market))
@@ -237,6 +244,24 @@ def create_app(
     def mcp_guide() -> str:
         """How to connect an MCP client (hosted or local) to the server."""
         return render_mcp_guide()
+
+    @app.get("/llms.txt", response_class=PlainTextResponse, include_in_schema=False)
+    def llms_txt() -> PlainTextResponse:
+        """Agent-oriented site map (llmstxt.org): how to USE the server."""
+        return PlainTextResponse(
+            render_llms_txt(),
+            media_type="text/markdown; charset=utf-8",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+
+    @app.get("/.well-known/security.txt", response_class=PlainTextResponse, include_in_schema=False)
+    def security_txt() -> PlainTextResponse:
+        """RFC 9116 security-contact + disclosure-policy pointer."""
+        return PlainTextResponse(
+            render_security_txt(),
+            media_type="text/plain; charset=utf-8",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
 
     @app.get("/health/db", include_in_schema=False)
     async def health_db() -> dict[str, str]:
