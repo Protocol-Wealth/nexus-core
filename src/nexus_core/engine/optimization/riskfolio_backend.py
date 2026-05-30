@@ -29,7 +29,7 @@ class RiskfolioNotInstalledError(RuntimeError):
 
 def _require_riskfolio() -> Any:
     try:
-        import riskfolio as rp  # type: ignore[import-not-found]
+        import riskfolio as rp
 
         return rp
     except ImportError as exc:

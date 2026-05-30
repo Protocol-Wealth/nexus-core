@@ -40,7 +40,7 @@ class FinanceToolkitNotInstalledError(RuntimeError):
 
 def _require_finance_toolkit() -> Any:
     try:
-        from financetoolkit import Toolkit  # type: ignore[import-not-found]
+        from financetoolkit import Toolkit
 
         return Toolkit
     except ImportError as exc:

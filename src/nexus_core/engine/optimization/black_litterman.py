@@ -97,7 +97,7 @@ def black_litterman_posterior(
         ``pd.Series`` of posterior expected returns (one per asset).
     """
     try:
-        from pypfopt import BlackLittermanModel  # type: ignore[import-not-found]
+        from pypfopt import BlackLittermanModel
     except ImportError as exc:
         raise RuntimeError(
             "PyPortfolioOpt not installed. Install with: pip install nexus-core[optimization]"
@@ -112,7 +112,7 @@ def black_litterman_posterior(
     n = len(assets)
 
     try:
-        import numpy as np  # type: ignore[import-not-found]
+        import numpy as np
     except ImportError as exc:
         raise RuntimeError("numpy required") from exc
 

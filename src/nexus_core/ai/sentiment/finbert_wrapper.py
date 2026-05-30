@@ -32,7 +32,7 @@ from typing import Any
 try:
     from transformers import pipeline as hf_pipeline
 except ImportError:  # pragma: no cover
-    hf_pipeline = None  # type: ignore[assignment]
+    hf_pipeline = None
 
 
 @dataclass
