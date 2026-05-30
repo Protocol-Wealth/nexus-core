@@ -13,6 +13,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from nexus_core.app import create_app
+from nexus_core.app.landing import render_landing
+from nexus_core.app.mcp_guide import render_mcp_guide
 from nexus_core.data.providers import PriceBar, Quote
 
 
@@ -63,6 +65,28 @@ def test_landing_page() -> None:
     assert response.status_code == 200
     assert "Nexus Core" in response.text
     assert "text/html" in response.headers["content-type"]
+
+
+def test_mcp_guide_page_served() -> None:
+    with _rest_client() as client:
+        response = client.get("/mcp-guide")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "Connect to the MCP server" in response.text
+
+
+def test_mcp_guide_connection_details() -> None:
+    html = render_mcp_guide()
+    assert "nexusmcp.site/mcp" in html  # hosted endpoint
+    assert "nexus-core mcp" in html  # local stdio command
+    assert "claude_desktop_config" in html  # Claude Desktop setup
+    assert "not investment advice" in html.lower()
+
+
+def test_landing_advertises_guide_when_mcp_enabled() -> None:
+    assert "/mcp-guide" in render_landing(mcp_enabled=True)
+    assert "MCP setup guide" in render_landing(mcp_enabled=True)
+    assert "/mcp-guide" not in render_landing(mcp_enabled=False)
 
 
 def test_health() -> None:
