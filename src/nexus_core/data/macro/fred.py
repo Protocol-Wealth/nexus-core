@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any
 
 import httpx
@@ -34,6 +35,20 @@ _DEFAULT_TIMEOUT = 10.0
 
 #: FRED encodes a missing observation as a literal ``"."``.
 _MISSING_VALUES = frozenset({None, ".", ""})
+
+#: Retries (after the first attempt) on a 429. The regime engine fetches several
+#: FRED series in quick succession; a burst can trip FRED's rate limit and a 429
+#: would otherwise silently null a signal. A short backoff lets the burst recover.
+_MAX_FRED_RETRIES = 2
+_RETRY_BASE_DELAY = 0.5
+
+
+def _retry_after_seconds(response: httpx.Response) -> float | None:
+    """Parse a ``Retry-After`` header (integer seconds), if present and valid."""
+    raw = response.headers.get("Retry-After", "").strip()
+    if raw.isdigit():
+        return float(raw)
+    return None
 
 
 class FredMacroData:
@@ -64,34 +79,7 @@ class FredMacroData:
         """Return the latest observed value for ``series_id``, or ``None``."""
         if self._api_key is None:
             return None
-        try:
-            payload = fetch_json(
-                _OBSERVATIONS_URL,
-                params={
-                    "series_id": series_id,
-                    "api_key": self._api_key,
-                    "file_type": "json",
-                    "sort_order": "desc",
-                    "limit": 10,
-                },
-                client=self._http_client,
-                timeout=self._timeout,
-            )
-        except httpx.HTTPStatusError as exc:
-            # A 4xx here usually means an invalid/expired FRED_API_KEY (FRED
-            # returns 400 for a bad key). Log it at WARNING so the cause is
-            # visible instead of silently surfacing as generic "No data".
-            logger.warning(
-                "FRED upstream %s for %s — check FRED_API_KEY: %s",
-                exc.response.status_code,
-                series_id,
-                exc.response.text[:200],
-            )
-            return None
-        except (httpx.HTTPError, ValueError) as exc:
-            logger.debug("FRED fetch for %s failed: %s", series_id, exc)
-            return None
-
+        payload = self._fetch_observations(series_id)
         observations = payload.get("observations") if isinstance(payload, dict) else None
         if not isinstance(observations, list):
             return None
@@ -103,6 +91,55 @@ class FredMacroData:
                 return float(value)
             except (TypeError, ValueError):
                 continue
+        return None
+
+    def _fetch_observations(self, series_id: str) -> Any | None:
+        """Fetch raw observations for ``series_id``, retrying on a 429.
+
+        Returns the parsed JSON payload, or ``None`` if the request fails after
+        retries (the caller degrades gracefully to a neutral prior).
+        """
+        params = {
+            "series_id": series_id,
+            "api_key": self._api_key,
+            "file_type": "json",
+            "sort_order": "desc",
+            "limit": 10,
+        }
+        for attempt in range(_MAX_FRED_RETRIES + 1):
+            try:
+                return fetch_json(
+                    _OBSERVATIONS_URL,
+                    params=params,
+                    client=self._http_client,
+                    timeout=self._timeout,
+                )
+            except httpx.HTTPStatusError as exc:
+                status = exc.response.status_code
+                if status == 429 and attempt < _MAX_FRED_RETRIES:
+                    delay = _retry_after_seconds(exc.response) or _RETRY_BASE_DELAY * (2**attempt)
+                    logger.warning(
+                        "FRED rate-limited (429) for %s; retry %d/%d in %.1fs",
+                        series_id,
+                        attempt + 1,
+                        _MAX_FRED_RETRIES,
+                        delay,
+                    )
+                    time.sleep(delay)
+                    continue
+                # Non-retryable 4xx/5xx (or exhausted 429 retries). A 4xx usually
+                # means an invalid/expired FRED_API_KEY — log at WARNING so the
+                # cause is visible rather than surfacing as generic "No data".
+                logger.warning(
+                    "FRED upstream %s for %s — check FRED_API_KEY: %s",
+                    status,
+                    series_id,
+                    exc.response.text[:200],
+                )
+                return None
+            except (httpx.HTTPError, ValueError) as exc:
+                logger.debug("FRED fetch for %s failed: %s", series_id, exc)
+                return None
         return None
 
 
