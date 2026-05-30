@@ -24,11 +24,10 @@ from dataclasses import dataclass
 from typing import Any
 
 try:
-    import numpy as np
     import pandas as pd
     from pypfopt import EfficientFrontier, HRPOpt, expected_returns, risk_models
 except ImportError:  # pragma: no cover
-    np = pd = EfficientFrontier = HRPOpt = expected_returns = risk_models = None  # type: ignore[assignment]
+    pd = EfficientFrontier = HRPOpt = expected_returns = risk_models = None  # type: ignore[assignment]
 
 
 @dataclass
