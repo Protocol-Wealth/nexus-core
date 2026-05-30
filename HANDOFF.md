@@ -83,6 +83,10 @@ degrade gracefully to `None`/empty/`503` when their API key is absent.
   analytics: value, in-range, exact impermanent-loss-vs-HODL, fee-APR
   estimate, uncollected fees (RPC `tokensOwed` via Tatum), Merkl reward APR →
   total APR. USD prices are required query params. (The Graph + RPC + Merkl.)
+- `/api/lp/aerodrome/{token_id}/analytics` — Aerodrome Slipstream on **Base**,
+  read directly on-chain via Tatum RPC (no subgraph; `data/onchain/slipstream.py`).
+  Same pure engine. `data_mode: onchain_rpc` — value, in-range, token amounts,
+  uncollected fees; IL, fee APR, AERO gauge APR null/zero (Envio = follow-on).
 
 **Benchmarks**
 
@@ -198,8 +202,13 @@ All three should be green.
 
 ## Next up (ROADMAP)
 
-1. **Position-PnL-vs-benchmark surface** — pair LP impermanent loss with the
-   hold benchmarks to answer "was LPing worth it?" (the headline next item).
-2. **Jupiter Solana price source** — for Solana AMM coverage.
-3. **Uniswap V4 + Aerodrome / Balancer / Algebra LP adapters.**
-4. **Persisted LP-position snapshots.**
+Shipped since this handoff was first written: the position-vs-benchmark surface
+(`/api/lp/.../vs-benchmark`), the Jupiter Solana price source (`/api/solana`), and
+Aerodrome Slipstream on Base via on-chain RPC (`/api/lp/aerodrome/{token_id}/analytics`,
+partial — value/in-range/amounts/uncollected fees). Remaining:
+
+1. **Aerodrome Slipstream full coverage via Envio** — the RPC path can't derive
+   IL, fee APR, or AERO gauge reward APR; an Envio client (or self-hosted
+   subgraph) would. Engine + decode-compatible NFPM are already wired.
+2. **Uniswap V4 + Balancer / Algebra LP adapters.**
+3. **Persisted LP-position snapshots.**

@@ -99,7 +99,7 @@ FRED series 1 hr); Cloudflare is set to respect origin.
 | Wallet | `/api/wallet/{address}` (DeBank EVM balance) |
 | Chain | `/api/chain/chains`, `/api/chain/balance/{chain}/{address}`, `/api/chain/native/{address}` (Tatum) |
 | Vaults | `/api/vaults`, `/api/vaults/chains` (vaults.fyi v2) |
-| LP | `/api/lp/chains`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics`, `/api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` (ethereum, base, optimism, polygon) |
+| LP | `/api/lp/chains`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics`, `/api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` (ethereum, base, optimism, polygon); `/api/lp/aerodrome/{token_id}/analytics` (Base Slipstream, on-chain RPC) |
 | Solana | `/api/solana/price/{mint}`, `/api/solana/prices?mints=` (Jupiter v3 SPL token USD prices, keyless) |
 | Benchmarks | `/api/benchmarks`, `/api/benchmarks/series?days=`, `/api/benchmarks/history?days=` |
 | Usage | `/api/usage` (provider quota report) |
@@ -158,6 +158,15 @@ parameters (the engine does not assume a price oracle).
 Position analytics run on **ethereum, base, optimism, and polygon**. Arbitrum is
 not supported: its published subgraph ID uses a schema incompatible with the V3
 shape this client decodes.
+
+`/api/lp/aerodrome/{token_id}/analytics` brings the same engine to Aerodrome
+Slipstream on Base — a Uniswap-V3 CLMM sibling. No Slipstream subgraph exists on
+The Graph, so `data/onchain/slipstream.py` reads position state directly on-chain
+via Tatum RPC (NFPM `positions` → CLFactory `getPool` → CLPool `slot0` → token
+`decimals`/`symbol`). In this on-chain-only mode (`data_mode: onchain_rpc`) it
+reports value, in-range status, token amounts, and uncollected fees; impermanent
+loss, fee APR, and AERO gauge reward APR require an indexer (Envio) and are
+reported null/zero.
 
 `/api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` extends the analytics with a
 side-by-side comparison against the hold-strategy benchmark returns (from

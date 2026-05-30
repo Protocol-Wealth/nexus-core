@@ -127,6 +127,7 @@ nexus-core --version
 | `/api/chain/chains`, `/api/chain/balance/{chain}/{address}`, `/api/chain/native/{address}` | Multi-chain native balances (Tatum: EVM `eth_getBalance` + Solana `getBalance`) |
 | `/api/vaults`, `/api/vaults/chains` | DeFi vault discovery (vaults.fyi v2) |
 | `/api/lp/chains`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics`, `/api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` | Uniswap V3 position analytics on **ethereum, base, optimism, polygon** — value, in-range, **exact IL-vs-HODL**, fee-APR, uncollected fees (RPC `tokensOwed` via Tatum), Merkl reward APR → total APR; `vs-benchmark` adds hold-strategy benchmark returns over a window. USD prices are **required query params**. (The Graph + RPC + Merkl) — Arbitrum NOT supported (its published subgraph ID uses an incompatible schema) |
+| `/api/lp/aerodrome/{token_id}/analytics` | Aerodrome Slipstream position on **Base**, read on-chain via Tatum RPC (`data/onchain/slipstream.py`: NFPM `positions` → CLFactory `getPool` → CLPool `slot0` → `decimals`/`symbol`) — value, in-range, token amounts, uncollected fees. Same pure `engine/lp/uniswap_v3.py` math. USD prices **required**. `data_mode: onchain_rpc` — IL, fee APR, AERO gauge APR null/zero (Envio = follow-on for full coverage) |
 | `/api/solana/price/{mint}`, `/api/solana/prices?mints=` | Solana SPL token USD prices (Jupiter v3, keyless — no API key) |
 | `/api/benchmarks`, `/api/benchmarks/series?days=`, `/api/benchmarks/history?days=` | Base-100 hold-strategy returns (BTC/ETH/SOL + ETH-USDC 50/50,60/40,70/30 + ETH-BTC 50/50; USDC held at $1; buy-and-hold). `/series` on-demand from CoinGecko; `/history` from persisted daily snapshots |
 | `/api/usage` | Provider usage/quota report (non-sensitive; no keys, no client data) |
@@ -217,10 +218,10 @@ Hard NOs. Each is enforced by review + tooling where possible:
 
 ## Roadmap
 
-Recently shipped (see `CHANGELOG.md`): multi-chain Uniswap V3 LP (base/optimism/polygon added to ethereum); position `vs-benchmark` (pair LP IL with hold benchmarks — "was LPing worth it?"); Jupiter Solana SPL prices (`/api/solana`, keyless).
+Recently shipped (see `CHANGELOG.md`): multi-chain Uniswap V3 LP (base/optimism/polygon added to ethereum); position `vs-benchmark` (pair LP IL with hold benchmarks — "was LPing worth it?"); Jupiter Solana SPL prices (`/api/solana`, keyless); **Aerodrome Slipstream LP on Base via on-chain RPC** (`/api/lp/aerodrome/{token_id}/analytics`, partial — value/in-range/amounts/uncollected fees; no IL/fee-APR/gauge-APR without an indexer).
 
 Next surfaces (see `CHANGELOG.md` / `ROADMAP` for detail):
-- **Aerodrome/Velodrome Slipstream LP** — RESEARCHED + BLOCKED on data source: no canonical Slipstream V3-schema subgraph exists on The Graph (name-matching ones are Revert-automation + ICHI-vault subgraphs); Aerodrome indexes via Envio. The engine + Slipstream NFPM (`0x827922686190790b37229fd06084350E74485b72`, decode-compatible) are ready; needs an Envio client (full, incl. IL), on-chain RPC (partial, no IL — deposited amounts are event-derived), or a self-hosted subgraph.
+- **Aerodrome Slipstream — full coverage via Envio** — the on-chain RPC path is **live** (partial: value, in-range, amounts, uncollected fees; `data_mode: onchain_rpc`). No canonical Slipstream V3-schema subgraph exists on The Graph (name-matching ones are Revert-automation + ICHI-vault subgraphs), and the on-chain-only path cannot derive IL (needs deposit history), fee APR (needs pool volume), or AERO gauge reward APR. An **Envio** client would add those; the pure engine + Slipstream NFPM (`0x827922686190790b37229fd06084350E74485b72`, decode-compatible) are already wired.
 - **Arbitrum Uniswap V3** — needs a correct V3-schema subgraph ID (the published one is incompatible).
 - **Base subgraph data quality** — the public Base V3 deployment has spam-token TVL contamination (pollutes discovery + pool-aggregate fee APR; per-position value/IL stays accurate) → consider self-hosting a cleaner indexer.
 - **Uniswap V4 via Envio (Unichain).**

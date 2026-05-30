@@ -79,15 +79,16 @@ The deployed surface is public, read-only, and carries no client data and no aut
 | `GET /api/solana/price/{mint}` | Solana SPL token USD price (Jupiter, keyless) |
 | `GET /api/solana/prices?mints=` | Batch Solana SPL token USD prices (Jupiter, keyless) |
 
-### LP Analytics (Uniswap V3)
+### LP Analytics (Uniswap V3 + Aerodrome Slipstream)
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/lp/chains` | Chains/versions with LP analytics |
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/analytics` | Position value, in-range status, exact impermanent-loss-vs-HODL, fee-APR estimate, uncollected fees, Merkl reward APR → total APR (USD prices required as query params) |
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` | Position return vs. hold-strategy benchmark returns over a window (USD prices required as query params) |
+| `GET /api/lp/aerodrome/{token_id}/analytics` | Aerodrome Slipstream position on **Base**, read on-chain (RPC) — value, in-range, token amounts, uncollected fees (USD prices required as query params). IL, fee APR, and AERO gauge APR are not available in on-chain-only mode (reported null/zero) |
 
-Supported chains: **ethereum, base, optimism, polygon**. (Arbitrum's published subgraph uses an incompatible schema and is not supported.)
+Supported chains (Uniswap V3): **ethereum, base, optimism, polygon**. (Arbitrum's published subgraph uses an incompatible schema and is not supported.) Aerodrome Slipstream — a Uniswap-V3 CLMM sibling — is read directly on-chain on Base, so the same pure engine drives it with no subgraph dependency.
 
 ### Benchmarks
 
