@@ -27,7 +27,7 @@ Requires ``fastmcp>=2.0.0``. Install via::
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from typing import Any, Protocol
 
@@ -79,6 +79,7 @@ def build_server(
     defillama: DefiLlamaClient | None = None,
     filters: list[ResponseFilter] | None = None,
     disclaimer: str | None = None,
+    extra_tools: Sequence[tuple[str, str, Callable[..., str]]] | None = None,
 ) -> Any:
     """Build a FastMCP server with regime + scoring tools.
 
@@ -93,6 +94,11 @@ def build_server(
         filters: Response post-processors applied before return.
         disclaimer: Appended to every financial-content tool response. Keep
             this aligned with your regulator's disclosure requirements.
+        extra_tools: Additional tools to register, as ``(name, description,
+            fn)`` triples where ``fn`` is a JSON-string-returning callable.
+            Kept generic so the library scaffold stays decoupled from any
+            specific tool layer — the deployment wires its own tools (e.g. the
+            planning gateway) in through here.
 
     Returns:
         A configured ``FastMCP`` instance. Call ``.run()`` to start.
@@ -163,6 +169,11 @@ def build_server(
         _register_crypto_options_tools(mcp, deribit, disclaimer, filters)
     if defillama is not None:
         _register_defi_tools(mcp, defillama, disclaimer, filters)
+
+    # Caller-supplied tools (e.g. the planning gateway). Registered generically
+    # so this scaffold never imports a specific deployment's tool layer.
+    for tool_name, tool_description, tool_fn in extra_tools or ():
+        mcp.tool(tool_fn, name=tool_name, description=tool_description)
 
     return mcp
 

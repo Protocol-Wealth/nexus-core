@@ -166,6 +166,45 @@ npx @modelcontextprotocol/inspector {mcp_url}
 # local
 npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
 
+  <h2>Connecting pwplan-core to nexus-core</h2>
+  <p>
+    <a href="https://github.com/Protocol-Wealth/pwplan-core" style="color:#c7d2fe">pwplan-core</a>
+    is the open-source, browser-based financial-planning shell. It runs entirely
+    in the browser and calls nexus-core's planning engine directly over HTTP —
+    no account, no API key, no SDK. These are plain REST endpoints (distinct from
+    the MCP transport above), served with permissive CORS so a browser can reach
+    them.
+  </p>
+  <h3>The handshake</h3>
+  <p>
+    Call <code>GET /mcp/tools</code> first — it returns the contract version and
+    the available tool ids, so the client can confirm compatibility before
+    sending any work:
+  </p>
+  <pre><code>GET {mcp_url}tools
+&rarr; {{ "contractVersion": "0.1.0", "tools": [ ... ] }}</code></pre>
+  <p>
+    The wire contract is <code>contractVersion 0.1.0</code> — every successful
+    tool response echoes it, and the client rejects a mismatch.
+  </p>
+  <h3>The six planning tools</h3>
+  <p>Invoke a tool with <code>POST /mcp/tools/{{tool_id}}</code> and a JSON body:</p>
+  <ul>
+    <li><code>monte_carlo_decumulation</code> — primary retirement decumulation simulation</li>
+    <li><code>glide_path</code> — equity weight by age across the horizon</li>
+    <li><code>tax_aware_withdrawal</code> — RMD-first, tax-efficient withdrawal sequencing</li>
+    <li><code>correlation_matrix</code> — real-data return correlation across asset classes</li>
+    <li><code>capital_market_assumptions</code> — forward return / volatility / correlation assumptions</li>
+    <li><code>regime_return_generator</code> — live regime + transition matrix for path generation</li>
+  </ul>
+  <div class="note">
+    <code>monte_carlo_decumulation</code> takes an optional <code>retirementAge</code>:
+    the portfolio accumulates untouched until that age, then decumulates. Omit it
+    and the engine withdraws from <code>currentAge</code>; pwplan-core's UI defaults
+    the field to <strong>65</strong>. Inputs are de-identified — the engine is
+    PII-free and works on age, never date of birth.
+  </div>
+
   <div class="grid"></div>
 
   <footer>
