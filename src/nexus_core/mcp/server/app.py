@@ -26,6 +26,7 @@ Requires ``fastmcp>=2.0.0``. Install via::
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from collections.abc import Callable, Sequence
@@ -34,9 +35,12 @@ from typing import Any, Protocol
 
 try:
     from fastmcp import FastMCP
+    from mcp.types import ToolAnnotations
 except ImportError:  # pragma: no cover
     FastMCP = None  # type: ignore[assignment,misc]
+    ToolAnnotations = None  # type: ignore[assignment,misc]
 
+from ... import __version__
 from ...data.derivatives import DeribitClient
 from ...data.onchain import DefiLlamaClient
 from ...data.providers import MacroDataProvider, MarketDataProvider
@@ -55,6 +59,21 @@ logger = logging.getLogger(__name__)
 
 #: Upper bound on option tenor (days), mirroring the REST surface's le=1095.
 _MAX_OPTION_DAYS = 1095
+
+# Tool annotations (MCP spec hints). Every nexus-core tool is read-only — these
+# let clients (claude.ai, Cursor) show a read-only badge and auto-approve calls
+# instead of prompting per invocation. ``openWorldHint`` = touches a live
+# upstream; the pure-compute tools set it False.
+_RO_OPEN = (
+    ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True)
+    if ToolAnnotations is not None
+    else None
+)
+_RO_CLOSED = (
+    ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False)
+    if ToolAnnotations is not None
+    else None
+)
 
 
 class ResponseFilter(Protocol):
@@ -127,7 +146,7 @@ def build_server(
 
     if regime_engine is not None:
 
-        @mcp.tool()
+        @mcp.tool(annotations=_RO_OPEN)
         def current_regime() -> str:
             """Get the current macro regime classification.
 
@@ -139,7 +158,7 @@ def build_server(
             response = _apply_filters("current_regime", response, filters, {})
             return json.dumps(response, indent=2)
 
-        @mcp.tool()
+        @mcp.tool(annotations=_RO_OPEN)
         def regime_signals() -> str:
             """Get the raw signal readings used for regime classification."""
             signals = regime_engine.fetch_signals()
@@ -151,7 +170,7 @@ def build_server(
 
     if scoring_framework is not None and score_context_factory is not None:
 
-        @mcp.tool()
+        @mcp.tool(annotations=_RO_OPEN)
         def score_asset(ticker: str) -> str:
             """Score an asset using the configured N-check framework.
 
@@ -180,9 +199,76 @@ def build_server(
         _register_defi_tools(mcp, defillama, disclaimer, filters)
 
     # Caller-supplied tools (e.g. the planning gateway). Registered generically
-    # so this scaffold never imports a specific deployment's tool layer.
+    # so this scaffold never imports a specific deployment's tool layer. All are
+    # read-only educational tools.
     for tool_name, tool_description, tool_fn in extra_tools or ():
-        mcp.tool(tool_fn, name=tool_name, description=tool_description)
+        mcp.tool(tool_fn, name=tool_name, description=tool_description, annotations=_RO_OPEN)
+
+    @mcp.tool(annotations=_RO_CLOSED)
+    def health() -> str:
+        """Per-upstream health for nexus-core. Call this first if a data tool errors —
+        it reports which upstreams (market quotes, FRED, Deribit, DefiLlama) are
+        available so you can route around a degraded source."""
+        upstreams: dict[str, Any] = {}
+        if market is not None:
+            try:
+                upstreams["market_quotes"] = {
+                    "status": "ok" if market.get_quote("SPY") is not None else "no_data"
+                }
+            except Exception:  # pragma: no cover — best-effort probe
+                logger.exception("health: market probe failed")
+                upstreams["market_quotes"] = {"status": "error"}
+            usage_fn = getattr(market, "usage_report", None)
+            if callable(usage_fn):
+                with contextlib.suppress(Exception):  # pragma: no cover — best-effort
+                    upstreams["market_usage"] = usage_fn()
+        if macro is not None:
+            upstreams["fred"] = {"configured": bool(macro.is_configured())}
+        if deribit is not None:
+            try:
+                upstreams["crypto_options"] = {"currencies": list(deribit.supported_currencies())}
+            except Exception:  # pragma: no cover
+                upstreams["crypto_options"] = {"status": "error"}
+        if defillama is not None:
+            upstreams["defi"] = {"status": "configured"}
+        return _ok(
+            "health", {"service": "nexus-core", "version": __version__, "upstreams": upstreams},
+            filters, disclaimer,
+        )
+
+    @mcp.tool(annotations=_RO_CLOSED)
+    def describe() -> str:
+        """Self-orientation: the tool catalog by category, symbology rules, and the
+        planning contract version. Read this to learn how to address assets — the
+        same coin uses different ids per tool (see ``symbology``)."""
+        return _ok(
+            "describe",
+            {
+                "service": "nexus-core",
+                "purpose": "Educational/research financial analysis. Not advice.",
+                "categories": {
+                    "regime": ["current_regime", "regime_signals"],
+                    "scoring": ["score_asset"],
+                    "market": ["get_quote", "get_quotes", "get_price_history"],
+                    "economic": ["get_economic_series"],
+                    "options": ["option_price", "covered_call", "cash_secured_put", "collar"],
+                    "crypto_options": ["crypto_option_instruments", "crypto_option_ticker"],
+                    "defi": ["defi_protocols", "defi_protocol", "defi_chains"],
+                    "planning": [name for name, _d, _f in (extra_tools or ())],
+                    "meta": ["health", "describe"],
+                },
+                "symbology": {
+                    "equities_etfs_indices": "Yahoo ticker, e.g. AAPL, SPY, ^GSPC",
+                    "crypto_quotes": "CoinGecko coin id, e.g. bitcoin, ethereum, solana (NOT BTC-USD)",
+                    "crypto_scoring": "Yahoo-style pair for score_asset, e.g. BTC-USD",
+                    "crypto_options": "Deribit code, e.g. BTC, ETH, SOL, XRP, TRX, AVAX",
+                    "fred_series": "FRED series id, e.g. DGS10, DFII10, DTWEXBGS",
+                },
+                "planning_contract_version": "0.1.0",
+            },
+            filters,
+            disclaimer,
+        )
 
     return mcp
 
@@ -251,7 +337,7 @@ def _annualized_vol(market: MarketDataProvider, symbol: str) -> float:
 def _register_market_tools(
     mcp: FastMCP, market: MarketDataProvider, disclaimer: str, filters: list[ResponseFilter]
 ) -> None:
-    @mcp.tool()
+    @mcp.tool(annotations=_RO_OPEN)
     def get_quote(symbol: str) -> str:
         """Latest quote for a stock, ETF, index, or crypto coin id (e.g. AAPL, SPY, bitcoin)."""
         quote = market.get_quote(symbol)
@@ -259,7 +345,21 @@ def _register_market_tools(
             return _err("get_quote", f"No quote for '{symbol}'", filters, disclaimer)
         return _ok("get_quote", {"quote": asdict(quote)}, filters, disclaimer)
 
-    @mcp.tool()
+    @mcp.tool(annotations=_RO_OPEN)
+    def get_quotes(symbols: list[str]) -> str:
+        """Latest quotes for up to 25 symbols in one call (stocks, ETFs, indices,
+        crypto coin ids). Cuts round-trips for multi-name workflows."""
+        quotes: dict[str, Any] = {}
+        errors: dict[str, str] = {}
+        for symbol in symbols[:25]:
+            quote = market.get_quote(symbol)
+            if quote is None:
+                errors[symbol] = "no_data"
+            else:
+                quotes[symbol] = asdict(quote)
+        return _ok("get_quotes", {"quotes": quotes, "errors": errors}, filters, disclaimer)
+
+    @mcp.tool(annotations=_RO_OPEN)
     def get_price_history(symbol: str, days: int = 365) -> str:
         """OHLCV price history covering roughly ``days`` days for a symbol."""
         bars = market.get_price_history(symbol, days=days, interval="1d")
@@ -276,7 +376,7 @@ def _register_market_tools(
 def _register_economic_tools(
     mcp: FastMCP, macro: MacroDataProvider, disclaimer: str, filters: list[ResponseFilter]
 ) -> None:
-    @mcp.tool()
+    @mcp.tool(annotations=_RO_OPEN)
     def get_economic_series(series_id: str) -> str:
         """Latest value for a FRED economic series (e.g. DGS10, DFII10, DTWEXBGS)."""
         if not macro.is_configured():
@@ -292,7 +392,7 @@ def _register_economic_tools(
 def _register_equity_options_tools(
     mcp: FastMCP, market: MarketDataProvider, disclaimer: str, filters: list[ResponseFilter]
 ) -> None:
-    @mcp.tool()
+    @mcp.tool(annotations=_RO_CLOSED)
     def option_price(
         spot: float, strike: float, days: int, volatility: float, kind: str = "call"
     ) -> str:
@@ -318,7 +418,7 @@ def _register_equity_options_tools(
             disclaimer,
         )
 
-    @mcp.tool()
+    @mcp.tool(annotations=_RO_OPEN)
     def covered_call(symbol: str, strike: float, days: int) -> str:
         """Educational covered-call overlay illustration on a public ticker (live spot). Not advice."""
         bad = _validate_option_inputs(strike=strike, days=days, min_days=1)
@@ -334,7 +434,7 @@ def _register_equity_options_tools(
             "covered_call", {"symbol": symbol, "spot": quote.price, **asdict(result)}, filters, disclaimer
         )
 
-    @mcp.tool()
+    @mcp.tool(annotations=_RO_OPEN)
     def cash_secured_put(symbol: str, strike: float, days: int) -> str:
         """Educational cash-secured-put overlay illustration on a public ticker. Not advice."""
         bad = _validate_option_inputs(strike=strike, days=days, min_days=1)
@@ -353,7 +453,7 @@ def _register_equity_options_tools(
             disclaimer,
         )
 
-    @mcp.tool()
+    @mcp.tool(annotations=_RO_OPEN)
     def collar(symbol: str, put_strike: float, call_strike: float, days: int) -> str:
         """Educational protective-collar overlay illustration on a public ticker. Not advice."""
         bad = _validate_option_inputs(strike=put_strike, days=days, min_days=1) or _validate_option_inputs(
@@ -375,7 +475,7 @@ def _register_equity_options_tools(
 def _register_crypto_options_tools(
     mcp: FastMCP, deribit: DeribitClient, disclaimer: str, filters: list[ResponseFilter]
 ) -> None:
-    @mcp.tool()
+    @mcp.tool(annotations=_RO_OPEN)
     def crypto_option_instruments(currency: str) -> str:
         """Listed crypto option instruments — BTC/ETH/SOL/XRP/TRX/AVAX (Deribit)."""
         cur = currency.upper()
@@ -399,7 +499,7 @@ def _register_crypto_options_tools(
             disclaimer,
         )
 
-    @mcp.tool()
+    @mcp.tool(annotations=_RO_OPEN)
     def crypto_option_ticker(instrument_name: str) -> str:
         """Mark price, implied vol + Greeks for a Deribit option instrument."""
         try:
@@ -415,7 +515,7 @@ def _register_crypto_options_tools(
 def _register_defi_tools(
     mcp: FastMCP, defillama: DefiLlamaClient, disclaimer: str, filters: list[ResponseFilter]
 ) -> None:
-    @mcp.tool()
+    @mcp.tool(annotations=_RO_OPEN)
     def defi_protocols(limit: int = 20) -> str:
         """Top DeFi protocols by Total Value Locked (DefiLlama)."""
         protocols = defillama.get_protocols(limit=limit)
@@ -426,7 +526,7 @@ def _register_defi_tools(
             disclaimer,
         )
 
-    @mcp.tool()
+    @mcp.tool(annotations=_RO_OPEN)
     def defi_protocol(slug: str) -> str:
         """TVL detail for one DeFi protocol by DefiLlama slug (e.g. aave, lido)."""
         detail = defillama.get_protocol(slug)
@@ -434,7 +534,7 @@ def _register_defi_tools(
             return _err("defi_protocol", f"No protocol '{slug}'", filters, disclaimer)
         return _ok("defi_protocol", detail, filters, disclaimer)
 
-    @mcp.tool()
+    @mcp.tool(annotations=_RO_OPEN)
     def defi_chains() -> str:
         """Aggregate DeFi TVL per blockchain (DefiLlama)."""
         return _ok("defi_chains", {"chains": defillama.get_chains()}, filters, disclaimer)

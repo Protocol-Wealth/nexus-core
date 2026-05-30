@@ -101,8 +101,10 @@ def test_full_tool_set_registers() -> None:
     assert expected <= names
 
 
-def test_minimal_server_registers_no_tools() -> None:
-    assert _tool_names(build_server()) == set()
+def test_minimal_server_registers_only_meta_tools() -> None:
+    # health + describe are always available (server self-description), even with
+    # no providers wired.
+    assert _tool_names(build_server()) == {"health", "describe"}
 
 
 def test_only_supplied_groups_register() -> None:
@@ -208,6 +210,47 @@ def test_option_price_rejects_bad_inputs_preserves_bs_limits() -> None:
         body = json.loads(_call_text(server, "option_price", {**base, "days": 30, **ok}))
         assert "error" not in body, ok
         assert body["price"] >= 0.0
+
+
+def test_enhancement_tools_register() -> None:
+    names = _tool_names(_configured_server())
+    assert {"health", "describe", "get_quotes"} <= names
+
+
+def test_tools_are_annotated_read_only() -> None:
+    server = _configured_server()
+    tools = asyncio.run(server.list_tools())  # type: ignore[attr-defined]
+    annotated = [t for t in tools if t.annotations is not None]
+    assert annotated, "expected ToolAnnotations on tools"
+    assert all(t.annotations.readOnlyHint for t in annotated)
+
+
+def test_describe_reports_symbology_and_contract() -> None:
+    import json
+
+    server = _configured_server()
+    body = json.loads(_call_text(server, "describe", {}))
+    assert body["planning_contract_version"] == "0.1.0"
+    assert "BTC-USD" in body["symbology"]["crypto_scoring"]
+    assert "bitcoin" in body["symbology"]["crypto_quotes"]
+    assert "monte_carlo_decumulation" in body["categories"]["planning"]
+
+
+def test_health_reports_upstreams() -> None:
+    import json
+
+    server = _configured_server()
+    body = json.loads(_call_text(server, "health", {}))
+    assert body["service"] == "nexus-core"
+    assert "fred" in body["upstreams"]
+
+
+def test_get_quotes_batch() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket())  # type: ignore[arg-type]
+    body = json.loads(_call_text(server, "get_quotes", {"symbols": ["AAPL", "SPY"]}))
+    assert set(body["quotes"]) == {"AAPL", "SPY"}
 
 
 def test_native_research_tools_carry_disclaimer() -> None:
