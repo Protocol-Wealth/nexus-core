@@ -128,6 +128,35 @@ SECTOR_SCORING_MAP: dict[str, str] = {
     "solar": "energy",
     "renewable": "energy",
     "thermal coal": "energy",
+    # Technology hardware / consumer electronics (non-SaaS, non-semiconductor).
+    "electronic computers": "technology_hardware",
+    "consumer electronics": "technology_hardware",
+    "communications equipment": "technology_hardware",
+    "technology hardware": "technology_hardware",
+    # Communication services.
+    "telecom": "communication",
+    "entertainment": "communication",
+    "media": "communication",
+    "advertising": "communication",
+    "broadcasting": "communication",
+    "publishing": "communication",
+    # Basic materials.
+    "chemicals": "materials",
+    "metals & mining": "materials",
+    "steel": "materials",
+    "copper": "materials",
+    "gold": "materials",
+    "building materials": "materials",
+    "agricultural inputs": "materials",
+    "paper & paper products": "materials",
+    # Utilities.
+    "utilities": "utilities",
+    "electric utilities": "utilities",
+    "gas utilities": "utilities",
+    "water utilities": "utilities",
+    # Real estate.
+    "reit": "real_estate",
+    "real estate services": "real_estate",
 }
 
 SECTOR_FIELD_MAP: dict[str, str] = {
@@ -140,6 +169,14 @@ SECTOR_FIELD_MAP: dict[str, str] = {
     "consumer staples": "consumer",
     "industrials": "industrial",
     "energy": "energy",
+    # Non-SaaS technology (SaaS + semiconductors are matched on industry first).
+    "technology": "technology_hardware",
+    "communication services": "communication",
+    "communication": "communication",
+    "basic materials": "materials",
+    "materials": "materials",
+    "utilities": "utilities",
+    "real estate": "real_estate",
 }
 
 STRUCTURAL_THRESHOLD: int = 2  # >= 2 of 3 factors passes
@@ -166,7 +203,9 @@ def classify_sector(sector: str | None, industry: str | None) -> str:
     """Classify into a scoring type.
 
     Returns one of: ``saas``, ``semiconductor``, ``financial``, ``healthcare``,
-    ``consumer``, ``industrial``, ``energy`` or ``unknown``.
+    ``consumer``, ``industrial``, ``energy``, ``technology_hardware``,
+    ``communication``, ``materials``, ``utilities``, ``real_estate`` or
+    ``unknown``.
     """
     industry_lower = (industry or "").lower()
     sector_lower = (sector or "").lower()
@@ -283,6 +322,45 @@ def _structural_score(sector_type: str, fundamentals: dict[str, Any]) -> int:
             score += 1
         if market_cap is not None and market_cap > 30_000_000_000:
             score += 1
+    # --- Buckets below added for D3 (technology-hardware / utilities /
+    #     communication / materials / real-estate). Thresholds follow the same
+    #     gross-margin / growth / scale pattern as the existing buckets and are
+    #     PENDING CCO/framework ratification (see emf-canonical.md).
+    elif sector_type == "technology_hardware":
+        if gm is not None and gm > 0.35:
+            score += 1
+        if rev_growth is not None and rev_growth > 0.05:
+            score += 1
+        if market_cap is not None and market_cap > 50_000_000_000:
+            score += 1
+    elif sector_type == "communication":
+        if op_margin is not None and op_margin > 0.15:
+            score += 1
+        if rev_growth is not None and rev_growth > 0.03:
+            score += 1
+        if market_cap is not None and market_cap > 30_000_000_000:
+            score += 1
+    elif sector_type == "materials":
+        if op_margin is not None and op_margin > 0.12:
+            score += 1
+        if rev_growth is not None and rev_growth > 0:
+            score += 1
+        if market_cap is not None and market_cap > 15_000_000_000:
+            score += 1
+    elif sector_type == "utilities":
+        if op_margin is not None and op_margin > 0.15:
+            score += 1
+        if roe is not None and roe > 0.08:
+            score += 1
+        if market_cap is not None and market_cap > 10_000_000_000:
+            score += 1
+    elif sector_type == "real_estate":
+        if op_margin is not None and op_margin > 0.30:
+            score += 1
+        if rev_growth is not None and rev_growth > 0:
+            score += 1
+        if market_cap is not None and market_cap > 10_000_000_000:
+            score += 1
 
     return score
 
@@ -292,8 +370,11 @@ class ASANScreenCheck:
 
     SaaS path: ASAN Trinity vulnerability (pass when ``< 2`` of 3 markers).
     Non-SaaS path: sector structural advantage (pass when ``>= 2`` of 3).
-    Unclassified sectors auto-pass. Degrades to ``passed=None`` when neither
-    a precomputed score nor any sector/industry classification data exists.
+    A sector that cannot be classified is **not evaluated** (``passed=None``,
+    ``insufficient_data``) — it is *not* auto-passed, so an unmapped sector can
+    never inflate the pass count (fail-safe, per emf-canonical "never silently
+    default"). Also degrades to ``passed=None`` when neither a precomputed score
+    nor any sector/industry classification data exists.
     """
 
     def __init__(self, threshold: int = STRUCTURAL_THRESHOLD) -> None:
@@ -335,7 +416,7 @@ class ASANScreenCheck:
         if is_saas:
             return self._saas_result(ticker, str(industry or ""))
         if sector_type == "unknown":
-            return self._auto_pass(sector_type)
+            return self._not_evaluated(sector, industry)
         return self._sector_result(sector_type, fundamentals)
 
     # --- result builders ---------------------------------------------------
@@ -396,19 +477,29 @@ class ASANScreenCheck:
             },
         )
 
-    def _auto_pass(self, sector_type: str) -> CheckResult:
+    def _not_evaluated(self, sector: str | None, industry: str | None) -> CheckResult:
+        """Fail-safe for a sector/industry the framework cannot classify.
+
+        Returns ``passed=None`` (insufficient_data) rather than auto-passing, so
+        an unmapped name never inflates the pass count or earns a stronger tier
+        than its evaluable checks support.
+        """
+        descriptor = (industry or sector or "").strip() or "unknown"
         return CheckResult(
             check_number=8,
             name="ASAN Screen",
             value=None,
             threshold=float(self.threshold),
-            passed=True,  # auto-pass for unclassified sectors
-            signal="GREEN",
-            interpretation=f"N/A — {sector_type} sector, auto-pass",
+            passed=None,
+            signal="insufficient_data",
+            interpretation=(
+                f"Sector/industry '{descriptor}' is not classifiable for the ASAN "
+                "structural-advantage screen — not evaluated (not a negative result)."
+            ),
             details={
                 "applicable": False,
-                "sector_type": sector_type,
-                "threshold_desc": "Sector-specific structural advantage",
+                "sector_type": "unknown",
+                "threshold_desc": "sector/industry not classifiable — not evaluated",
             },
         )
 

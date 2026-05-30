@@ -27,6 +27,14 @@ the full set is safe to register today. Use ``total_checks_override=8`` on the
 framework so tier classification is calibrated to all eight regardless of how
 many evaluated.
 
+ASAN (Check 8) classifies the subject into a scoring bucket — SaaS, or one of
+the non-SaaS sector buckets (semiconductor, financial, healthcare, consumer,
+industrial, energy, technology_hardware, communication, materials, utilities,
+real_estate). A sector/industry that matches no bucket is **not evaluated**
+(``passed=None``) — never auto-passed — so an unmapped name can never inflate
+the pass count or earn a stronger confidence tier than its evaluable checks
+support (fail-safe; "never silently default").
+
 All outputs are for educational and research purposes only — not individualized
 investment advice.
 """
