@@ -352,9 +352,16 @@ def _blended_weights(
 
 
 def _net_spend_schedule(
-    *, current_age: int, years: int, annual_spend: float, spend_cola: float, body: dict[str, Any]
+    *,
+    current_age: int,
+    retirement_age: int,
+    years: int,
+    annual_spend: float,
+    spend_cola: float,
+    body: dict[str, Any],
 ) -> list[float]:
-    """Per-year net withdrawal = COLA-grown spend minus active guaranteed income."""
+    """Per-year net withdrawal: 0 while accumulating (age < retirementAge), then
+    COLA-grown spend minus active guaranteed income once decumulating."""
     incomes = body.get("guaranteedIncome", [])
     if not isinstance(incomes, list):
         raise PlanningInputError("guaranteedIncome must be a list")
@@ -376,6 +383,9 @@ def _net_spend_schedule(
     schedule: list[float] = []
     for year in range(years):
         age = current_age + year
+        if age < retirement_age:
+            schedule.append(0.0)  # accumulation: portfolio grows untouched
+            continue
         spend = annual_spend * (1.0 + spend_cola) ** year
         income_total = sum(
             amount * (1.0 + cola) ** (age - start) for amount, start, cola in parsed if age >= start
@@ -445,6 +455,20 @@ def _monte_carlo_decumulation_tool(
         raise PlanningInputError("asset volatility must be non-negative")
     lambdas = [float(a.get("lambda", 0.0)) if isinstance(a.get("lambda"), (int, float)) else 0.0 for a in asset_classes]
 
+    # Optional retirementAge: the portfolio accumulates untouched until then,
+    # then decumulates. Omitted ⇒ currentAge (withdraw from the start).
+    retirement_age = body.get("retirementAge")
+    if retirement_age is None:
+        retirement_age = current_age
+    elif (
+        isinstance(retirement_age, bool)
+        or not isinstance(retirement_age, int)
+        or not current_age <= retirement_age <= horizon_age
+    ):
+        raise PlanningInputError(
+            "retirementAge must be an integer with currentAge <= retirementAge <= horizonAge"
+        )
+
     weights, initial_balance = _blended_weights(body.get("accounts"), asset_ids)
     annual_spend = _as_number(body, "annualSpend")
     if annual_spend < 0:
@@ -453,8 +477,8 @@ def _monte_carlo_decumulation_tool(
     if isinstance(spend_cola, bool) or not isinstance(spend_cola, (int, float)):
         raise PlanningInputError("spendColaRate must be a number")
     net_spend = _net_spend_schedule(
-        current_age=current_age, years=years, annual_spend=annual_spend,
-        spend_cola=float(spend_cola), body=body,
+        current_age=current_age, retirement_age=retirement_age, years=years,
+        annual_spend=annual_spend, spend_cola=float(spend_cola), body=body,
     )
 
     paths = body.get("paths", 10000)

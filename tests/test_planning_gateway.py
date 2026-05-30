@@ -96,6 +96,7 @@ def test_list_tools_version_handshake() -> None:
 _MC_PAYLOAD: dict[str, Any] = {
     "contractVersion": "0.1.0",
     "currentAge": 45,
+    "retirementAge": 65,
     "horizonAge": 95,
     "accounts": [
         {"type": "traditional", "balance": 1200000, "allocation": {"us_equity": 0.6, "us_bonds": 0.4}},
@@ -117,16 +118,29 @@ _MC_PAYLOAD: dict[str, Any] = {
 }
 
 
-def test_monte_carlo_default_scenario_shape() -> None:
+def test_monte_carlo_default_scenario_non_degenerate() -> None:
+    # §5.2 default with retirementAge 65 (accumulate 45→65, then decumulate):
+    # a plausible, non-degenerate result.
     r = _client().post("/mcp/tools/monte_carlo_decumulation", json=_MC_PAYLOAD)
     assert r.status_code == 200
     body = r.json()
     assert body["contractVersion"] == CONTRACT_VERSION
-    assert 0.0 <= body["successProbability"] <= 1.0
+    assert 0.0 < body["successProbability"] <= 1.0
     assert set(body["terminalValues"]) == {"p10", "p25", "p50", "p75", "p90"}
+    assert body["terminalValues"]["p90"] > 0  # upside paths retain wealth
     assert len(body["medianBalanceByYear"]) == 50  # horizonAge - currentAge
     assert len(body["regimePathSummary"]) == 50  # emf_regime populated
     assert body["seedUsed"] == 12345
+
+
+def test_monte_carlo_retirement_age_lifts_success() -> None:
+    # Accumulating until 65 must beat withdrawing from 45 (the no-retirementAge case).
+    with_ret = _client().post("/mcp/tools/monte_carlo_decumulation", json=_MC_PAYLOAD).json()
+    no_ret = _client().post(
+        "/mcp/tools/monte_carlo_decumulation",
+        json={k: v for k, v in _MC_PAYLOAD.items() if k != "retirementAge"},
+    ).json()
+    assert with_ret["successProbability"] > no_ret["successProbability"]
 
 
 def test_monte_carlo_deterministic() -> None:
