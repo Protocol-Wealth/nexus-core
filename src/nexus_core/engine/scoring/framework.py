@@ -167,7 +167,7 @@ class ScoringFramework:
         )
 
         result = ScoreResult(
-            subject=subject or getattr(ctx, "ticker", str(ctx)),
+            subject=str(subject or getattr(ctx, "ticker", str(ctx))),
             checks=results,
             total_passed=total_passed,
             total_evaluated=total_evaluated,

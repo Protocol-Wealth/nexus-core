@@ -1,0 +1,38 @@
+name: CI
+
+# Runs the real quality gate the repo relied on locally: ruff, mypy --strict,
+# and the pytest suite with a coverage floor. The pre-existing workflows only
+# checked SPDX headers + dependency licenses, so test/type/lint regressions
+# could ship undetected. CodeQL is configured separately (default code scanning).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: ruff + mypy + pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install (deployed surface + dev tools)
+        run: pip install -e ".[dev,serve]"
+      - name: Lint (ruff)
+        run: ruff check src/ tests/
+      - name: Type-check (mypy --strict)
+        run: mypy --strict src/nexus_core/
+      - name: Tests + coverage gate
+        run: pytest -q --cov=src/nexus_core --cov-report=term-missing --cov-fail-under=80

@@ -44,7 +44,7 @@ if BaseModel is not None:
 
         period: Period
         period_end: str = Field(..., description="ISO-8601 period end date.")
-        currency: str = Field("USD", description="ISO 4217.")
+        currency: str = Field(default="USD", description="ISO 4217.")
 
         # Revenue + costs
         revenue: float | None = None

@@ -44,7 +44,7 @@ def discrete_allocate(
             value that may be shorted. ``None`` disables shorts.
     """
     try:
-        from pypfopt import DiscreteAllocation  # type: ignore[import-not-found]
+        from pypfopt import DiscreteAllocation
     except ImportError as exc:
         raise RuntimeError(
             "PyPortfolioOpt not installed. Install with: pip install nexus-core[optimization]"

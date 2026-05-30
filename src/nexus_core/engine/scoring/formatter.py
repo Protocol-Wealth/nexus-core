@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 from .attribution import CHECK_METADATA, CheckMetadata
+from .checks import CheckResult
 from .framework import ScoreResult
 
 
@@ -110,7 +111,7 @@ def format_structured(
     }
 
 
-def _fallback_display(check) -> str:  # noqa: ANN001
+def _fallback_display(check: CheckResult) -> str:
     """Short human-readable fallback when no interpretation is set."""
     if check.value is None:
         return "data unavailable"

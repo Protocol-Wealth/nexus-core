@@ -34,7 +34,7 @@ from typing import Any
 try:
     from edgar import Company, set_identity
 except ImportError:  # pragma: no cover
-    Company = set_identity = None  # type: ignore[assignment,misc]
+    Company = set_identity = None
 
 
 @dataclass
@@ -54,7 +54,7 @@ class Filing:
         ticker: Requesting ticker (may differ from company name).
         form: Filing form type ("10-K", "10-Q", "8-K", "DEF 14A", etc.).
         accession_number: SEC accession number.
-        filed_at: Date filed with SEC.
+        filed_at: Date filed with SEC (``None`` if the upstream omits it).
         period_of_report: Fiscal period covered (if applicable).
         company_name: Registrant name.
         cik: SEC CIK number.
@@ -66,7 +66,7 @@ class Filing:
     ticker: str
     form: str
     accession_number: str
-    filed_at: date
+    filed_at: date | None
     company_name: str
     cik: str
     period_of_report: date | None = None
