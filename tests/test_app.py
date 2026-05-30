@@ -125,6 +125,25 @@ def test_openapi_schema_lists_endpoints() -> None:
     assert "/api/economic/{series_id}" in paths
 
 
+def test_openapi_has_servers_and_tag_descriptions() -> None:
+    with _rest_client() as client:
+        spec = client.get("/openapi.json").json()
+    assert any("nexusmcp.site" in s["url"] for s in spec.get("servers", []))
+    tags = {t["name"]: t.get("description", "") for t in spec.get("tags", [])}
+    assert tags.get("planning") and tags.get("regime")
+
+
+def test_landing_has_curl_quickstart() -> None:
+    html = render_landing(mcp_enabled=True)
+    assert "Try it" in html
+    assert "curl" in html and "/mcp/tools/glide_path" in html
+
+
+def test_mcp_guide_has_troubleshooting() -> None:
+    html = render_mcp_guide()
+    assert "Tools not showing up" in html
+
+
 def test_quote_endpoint() -> None:
     with _rest_client() as client:
         response = client.get("/api/market/quote/SPY")

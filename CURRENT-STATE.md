@@ -8,7 +8,7 @@ for the public-surface audit see [AUDIT.md](AUDIT.md).
 - **Live:** [nexusmcp.site](https://nexusmcp.site) (Cloudflare → Cloud Run)
 - **Version:** 0.1.0
 - **Stack:** Python 3.12 · FastAPI · FastMCP · sync httpx · asyncpg · mypy `--strict` · ruff
-- **Tests:** ~594-test suite (`pytest`)
+- **Tests:** CI-gated test suite (`pytest`)
 - **Posture:** public, read-only, no client data, no auth, no public write endpoints
 
 ## Public REST surface

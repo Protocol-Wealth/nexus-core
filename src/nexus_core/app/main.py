@@ -89,6 +89,30 @@ advisory workflows.
 *{_FULL_DISCLAIMER}*
 """
 
+#: OpenAPI servers block so /docs "Try it out" + generated clients know the
+#: hosted base URL (not just same-origin).
+_SERVERS = [
+    {"url": "https://nexusmcp.site", "description": "Hosted public deployment"},
+    {"url": "/", "description": "This server"},
+]
+
+#: Tag descriptions so /docs groups are self-documenting.
+_OPENAPI_TAGS = [
+    {"name": "regime", "description": "Current macro regime classification + raw signals."},
+    {"name": "scoring", "description": "EMF 8-check durability score over SEC EDGAR fundamentals (educational)."},
+    {"name": "market", "description": "Quotes + OHLCV history (stocks, ETFs, indices, crypto)."},
+    {"name": "economic", "description": "FRED economic series."},
+    {"name": "options", "description": "Black-Scholes pricing + covered-call / CSP / collar overlays + Deribit crypto options (educational)."},
+    {"name": "planning", "description": "PII-free retirement-planning tools (pwplan-core contract). Public, browser-callable."},
+    {"name": "lp", "description": "Uniswap V3 / Aerodrome Slipstream LP analytics."},
+    {"name": "wallet", "description": "Anonymous EVM wallet balances (DeBank)."},
+    {"name": "chain", "description": "Multi-chain native balances (Tatum)."},
+    {"name": "vaults", "description": "DeFi vault discovery (vaults.fyi)."},
+    {"name": "solana", "description": "Solana SPL token USD prices (Jupiter, keyless)."},
+    {"name": "benchmarks", "description": "Base-100 buy-and-hold benchmark returns."},
+    {"name": "meta", "description": "Liveness + provider usage stats."},
+]
+
 
 def build_market_provider() -> CachedMarketData:
     """Assemble the cached, composite market data provider.
@@ -168,6 +192,8 @@ def create_app(
         title="Nexus Core",
         description=_DESCRIPTION,
         version=__version__,
+        servers=_SERVERS,
+        openapi_tags=_OPENAPI_TAGS,
         license_info={
             "name": "Apache-2.0",
             "url": "https://www.apache.org/licenses/LICENSE-2.0",

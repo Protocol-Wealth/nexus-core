@@ -13,7 +13,7 @@ guarantees, no marketing.
 ## Done
 
 The current production surface. Python 3.12 · FastAPI · FastMCP · sync
-`httpx` · `asyncpg` · `mypy --strict` · `ruff`. ~594-test suite. Public,
+`httpx` · `asyncpg` · `mypy --strict` · `ruff`. CI-gated test suite. Public,
 read-only, no auth, no client data. Every external integration degrades
 gracefully to `None` / empty / `503` when its key is absent.
 
