@@ -317,11 +317,15 @@ def _register_crypto_options_tools(
 ) -> None:
     @mcp.tool()
     def crypto_option_instruments(currency: str) -> str:
-        """Listed BTC / ETH / SOL option instruments (Deribit)."""
+        """Listed crypto option instruments — BTC/ETH/SOL/XRP/TRX/AVAX (Deribit)."""
         cur = currency.upper()
-        if cur not in ("BTC", "ETH", "SOL"):
+        supported = deribit.supported_currencies()
+        if cur not in supported:
             return _err(
-                "crypto_option_instruments", f"Unsupported '{currency}' (BTC/ETH/SOL)", filters, disclaimer
+                "crypto_option_instruments",
+                f"Unsupported '{currency}' ({'/'.join(supported)})",
+                filters,
+                disclaimer,
             )
         instruments = deribit.list_option_instruments(cur)
         return _ok(

@@ -75,11 +75,63 @@ def test_list_option_instruments_parses_and_filters() -> None:
     assert first.details["base_currency"] == "BTC"
 
 
+def test_list_option_instruments_linear_uses_usdc_umbrella_and_filters() -> None:
+    """SOL/XRP/TRX/AVAX are USDC-settled: query the USDC umbrella, prefix-filter."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v2/public/get_instruments"
+        # Linear underliers query the USDC umbrella, NOT currency=SOL.
+        assert request.url.params["currency"] == "USDC"
+        assert request.url.params["kind"] == "option"
+        return httpx.Response(
+            200,
+            json={
+                "result": [
+                    {
+                        "instrument_name": "SOL_USDC-30MAY26-70-C",
+                        "base_currency": "SOL",
+                        "option_type": "call",
+                        "strike": 70.0,
+                        "expiration_timestamp": 1748563200000,
+                        "is_active": True,
+                    },
+                    {
+                        "instrument_name": "SOL_USDC-30MAY26-72-P",
+                        "base_currency": "SOL",
+                        "option_type": "put",
+                        "strike": 72.0,
+                        "expiration_timestamp": 1748563200000,
+                        "is_active": True,
+                    },
+                    # Other bases in the same umbrella must be filtered out.
+                    {"instrument_name": "XRP_USDC-30MAY26-1d15-C", "base_currency": "XRP"},
+                    {"instrument_name": "BTC_USDC-30MAY26-70000-C", "base_currency": "BTC"},
+                ],
+            },
+        )
+
+    instruments = DeribitClient(http_client=_client(handler)).list_option_instruments("sol")
+    assert [i.instrument_name for i in instruments] == [
+        "SOL_USDC-30MAY26-70-C",
+        "SOL_USDC-30MAY26-72-P",
+    ]
+    assert all(i.base_currency == "SOL" for i in instruments)
+
+
 def test_list_option_instruments_unsupported_currency_returns_empty() -> None:
     def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover - never called
         raise AssertionError("should not hit the network for an unsupported currency")
 
     assert DeribitClient(http_client=_client(handler)).list_option_instruments("DOGE") == []
+
+
+def test_supported_currencies_and_settlement_model() -> None:
+    assert DeribitClient.supported_currencies() == ["BTC", "ETH", "SOL", "XRP", "TRX", "AVAX"]
+    assert DeribitClient.settlement_model("BTC") == "inverse"
+    assert DeribitClient.settlement_model("eth") == "inverse"
+    assert DeribitClient.settlement_model("sol") == "linear_usdc"
+    assert DeribitClient.settlement_model("AVAX") == "linear_usdc"
+    assert DeribitClient.settlement_model("DOGE") is None
 
 
 def test_get_option_ticker_extracts_mark_iv_greeks_and_book() -> None:
@@ -170,11 +222,21 @@ def test_get_index_price_maps_currency_to_index_name() -> None:
     assert price == 142.37
 
 
+def test_get_index_price_linear_underlier_maps_to_usd_index() -> None:
+    """A USDC-settled underlier still resolves spot via its ``<code>_usd`` index."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["index_name"] == "trx_usd"
+        return httpx.Response(200, json={"result": {"index_price": 0.3428}})
+
+    assert DeribitClient(http_client=_client(handler)).get_index_price("TRX") == 0.3428
+
+
 def test_get_index_price_unsupported_currency_returns_none() -> None:
     def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover - never called
         raise AssertionError("should not hit the network for an unsupported currency")
 
-    assert DeribitClient(http_client=_client(handler)).get_index_price("XRP") is None
+    assert DeribitClient(http_client=_client(handler)).get_index_price("DOGE") is None
 
 
 def test_http_error_degrades_gracefully() -> None:

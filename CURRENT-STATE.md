@@ -50,8 +50,13 @@ endpoint returns `None` / empty / `503` rather than failing the service.
 | `GET /api/options/overlay/covered-call` | Black-Scholes overlay illustration | — |
 | `GET /api/options/overlay/cash-secured-put` | Black-Scholes overlay illustration | — |
 | `GET /api/options/overlay/collar` | Black-Scholes overlay illustration | — |
-| `GET /api/options/crypto/{currency}/instruments` | Deribit | — |
+| `GET /api/options/crypto/currencies` | Deribit — supported underliers + settlement model | — |
+| `GET /api/options/crypto/{currency}/instruments` | Deribit — BTC/ETH (inverse) + SOL/XRP/TRX/AVAX (USDC-linear) | — |
 | `GET /api/options/crypto/instrument/{instrument_name}` | Deribit | — |
+
+Crypto option underliers: **BTC, ETH** are coin-settled (inverse, queried as `currency=BTC|ETH`);
+**SOL, XRP, TRX, AVAX** are USDC-settled (linear) and listed under Deribit's `USDC` umbrella as
+`<CODE>_USDC-…` — the client queries the umbrella and filters by instrument-name prefix. Keyless.
 
 ### On-chain & DeFi
 

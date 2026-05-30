@@ -34,6 +34,17 @@ class _FakeMarket:
 
 
 class _FakeDeribit:
+    _SUPPORTED = ["BTC", "ETH", "SOL", "XRP", "TRX", "AVAX"]
+
+    def supported_currencies(self) -> list[str]:
+        return list(self._SUPPORTED)
+
+    def settlement_model(self, currency: str) -> str | None:
+        cur = currency.upper()
+        if cur not in self._SUPPORTED:
+            return None
+        return "inverse" if cur in ("BTC", "ETH") else "linear_usdc"
+
     def list_option_instruments(self, currency: str) -> list[OptionInstrument]:
         return [
             OptionInstrument(
@@ -106,6 +117,16 @@ def test_unknown_symbol_404() -> None:
     assert r.status_code == 404
 
 
+def test_crypto_currencies() -> None:
+    r = _client().get("/api/options/crypto/currencies")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["currencies"] == ["BTC", "ETH", "SOL", "XRP", "TRX", "AVAX"]
+    assert body["settlement"]["BTC"] == "inverse"
+    assert body["settlement"]["SOL"] == "linear_usdc"
+    assert "not investment advice" in body["disclaimer"].lower()
+
+
 def test_crypto_instruments() -> None:
     r = _client().get("/api/options/crypto/btc/instruments")
     assert r.status_code == 200
@@ -113,6 +134,14 @@ def test_crypto_instruments() -> None:
     assert body["currency"] == "BTC"
     assert body["count"] == 1
     assert body["instruments"][0]["base_currency"] == "BTC"
+
+
+def test_crypto_instruments_linear_currency() -> None:
+    r = _client().get("/api/options/crypto/sol/instruments")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["currency"] == "SOL"
+    assert body["count"] == 1
 
 
 def test_crypto_instruments_unsupported_404() -> None:
