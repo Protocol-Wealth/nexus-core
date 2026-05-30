@@ -7,6 +7,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Platform hardening — compliance, security, reliability, MCP, EMF coverage
+
+A broad pass making the public deployment agent-reliable and audit-ready. Test
+suite grew 636 → 724; `mypy --strict` + ruff are now CI-enforced (previously
+neither ran in CI). Deployed at `nexus-core-00040`.
+
+#### Added
+
+- **Planning tools are now native MCP tools.** The six pwplan-core planning
+  tools (`monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`,
+  `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`)
+  register in `tools/list` over both the `/mcp` HTTP transport and stdio — not
+  only via the REST gateway — reusing the same handlers (contractVersion `0.1.0`).
+- **`health` and `describe` MCP tools.** `health` reports per-upstream status
+  (market quotes, FRED, Deribit, DefiLlama); `describe` returns the tool catalog
+  by category, the symbology rules, and the planning contract version.
+- **`get_quotes` batch tool** — up to 25 quotes per call.
+- **Read-only tool annotations** (`readOnlyHint`) on every MCP tool, so clients
+  can auto-approve calls.
+- **Data provenance** — quotes carry `as_of` (the data point's session date),
+  `source` (the provider), and `market_status` (`current` / `last_close`); FRED
+  responses carry `as_of` (observation date) + `source`. A Friday close pulled
+  on a Saturday now reads as `last_close`, not a live price.
+- **Regime breadth + precious-metals signals** — `breadth` = % of the 11 SPDR
+  sector ETFs above their 200-day MA; `precious_metals_signal` = GLD vs its
+  200-day MA (bullish/neutral/bearish). Free, no new API.
+- **Agent + discovery files** — `/llms.txt` (llmstxt.org), `AGENTS.md`,
+  `/.well-known/security.txt` (RFC 9116), and a `Connecting pwplan-core` section
+  in `/mcp-guide`.
+- **OpenAPI** `servers` block (hosted base URL) + per-tag descriptions.
+- **CI** — `.github/workflows/ci.yml` runs `ruff` + `mypy --strict` + `pytest`
+  with an 80% coverage floor on every push/PR.
+- **EMF coverage** — ASAN gained five sector buckets (technology_hardware,
+  communication, materials, utilities, real_estate); Perez resolves capex-light
+  sectors (banks/REITs) from revenue growth; `layer_for` routes crypto
+  (BTC→L1, ETH→L2) and sector/commodity ETFs to a durability layer.
+
+#### Changed
+
+- **Canonical disclaimers** — a single `disclaimers.py` (TERSE / MC / FULL +
+  Safeguards) wired across every MCP tool, REST route, web page, and the OpenAPI
+  description; the prior seven ad-hoc strings now share one auditable text that
+  also covers tax / legal / AI-generated-content / as-is.
+- **Score tier gating** — `score_asset` returns `NOT APPLICABLE` + a `tier_note`
+  when fewer than half the checks evaluate (e.g. ETFs/crypto with no SEC
+  fundamentals), instead of a verdict-shaped `BELOW THRESHOLD`.
+- **ASAN fail-safe** — an unclassifiable sector is now *not evaluated*
+  (`passed=None`) rather than auto-passed (which silently inflated scores, e.g.
+  AAPL 6/8 HIGH → a true 5/8 MODERATE).
+- `layer_assignment` is hoisted to the top level of a score result.
+- `fastmcp` pinned `>=3.0.0,<4`.
+
+#### Fixed
+
+- **`mypy --strict` is green** — fixed 12 pre-existing errors that had drifted
+  in undetected (no CI ran mypy before).
+- **`defi_protocol`** now returns TVL — derived from `currentChainTvls` with an
+  `excludeTotalDataChart` query param that also avoids the multi-MB-payload
+  timeout that broke aave/uniswap.
+- **FRED resilience** — `get_series` retries on a 429 (rate-limit burst) and
+  logs an upstream 4xx (invalid key) at WARNING instead of silent "No data".
+- **Option input validation** at the MCP tools — `days<0` / `spot<=0` /
+  `strike<=0` / `volatility<0` are rejected (was: silent raw intrinsic), while
+  the valid `days=0` / `volatility=0` Black-Scholes limits still work.
+- README quick-start used non-existent APIs and linked dead `/opensource`
+  `/patent` routes; stale `~594`/`~580` test counts across docs.
+
+#### Security
+
+- **`mask_error_details=True`** on the MCP server — an unexpected tool exception
+  can no longer leak `str(e)` (upstream URL/key/path) to the client.
+- **Security-headers middleware** — `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy` on every response; a CSP on HTML
+  responses only.
+
 ### Added — Deribit crypto options coverage: SOL fix + XRP/TRX/AVAX
 
 - **Crypto option underliers expanded to six** — `GET /api/options/crypto/{currency}/instruments`

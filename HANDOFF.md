@@ -9,9 +9,11 @@ the next session.
 Stack: Python 3.12, FastAPI + FastMCP, sync `httpx`, `asyncpg`, `mypy --strict`,
 `ruff`. Version `0.1.0`. CI-gated test suite.
 
-Branch at last update: `fix/ratelimit-xff`. PRs #64 (snapshot-job) and #65
-(ratelimit) may still be open at read time — both capabilities are already
-running in production, so describe them as present.
+> **For the current handoff read [NEXT-SESSION.md](NEXT-SESSION.md)** (latest
+> forward state) and **[CURRENT-STATE.md](CURRENT-STATE.md)** (live snapshot).
+> This file retains earlier-cycle operator detail; where it disagrees with those
+> two, they win. Live as of 2026-05-30: deployed `nexus-core-00040`, suite 724,
+> `ruff` + `mypy --strict` CI-enforced.
 
 ---
 
