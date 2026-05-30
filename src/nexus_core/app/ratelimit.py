@@ -92,12 +92,40 @@ class RateLimitMiddleware:
 
 
 def _client_ip(scope: Scope) -> str:
-    """Resolve the client IP, honouring the ``X-Forwarded-For`` proxy header."""
+    """Resolve a spoofing-resistant client key for rate limiting.
+
+    This service runs on Cloud Run, fronted by Cloudflare for ``nexusmcp.site``.
+    The previous implementation used the **leftmost** ``X-Forwarded-For`` entry,
+    which is client-controlled — an attacker could rotate ``X-Forwarded-For``
+    per request and never share a bucket, defeating the limiter. Instead:
+
+    1. ``CF-Connecting-IP`` — set by Cloudflare to the real client on the
+       primary (``nexusmcp.site``) path; use it when present.
+    2. Otherwise the **rightmost** ``X-Forwarded-For`` entry: trusted
+       infrastructure (the Cloud Run frontend) *appends* the caller, so the last
+       hop is the real client and any client-prepended fakes sit to its left.
+    3. Fall back to the transport peer.
+
+    Residual: a caller hitting the ``run.app`` origin directly *and* spoofing
+    ``CF-Connecting-IP`` could still rotate buckets. That path is mitigated by
+    Cloudflare's edge rate-limit on the cost-bearing endpoints; this in-process
+    limiter is a best-effort second layer, not a security boundary. Fully
+    closing it requires restricting origin ingress to Cloudflare (infra).
+    """
+    cf_connecting_ip = ""
+    forwarded_for = ""
     for name, value in scope.get("headers", []):
-        if name == b"x-forwarded-for":
-            forwarded = str(value.decode("latin-1")).split(",")[0].strip()
-            if forwarded:
-                return forwarded
+        if name == b"cf-connecting-ip":
+            cf_connecting_ip = value.decode("latin-1").strip()
+        elif name == b"x-forwarded-for":
+            forwarded_for = value.decode("latin-1")
+
+    if cf_connecting_ip:
+        return cf_connecting_ip
+    if forwarded_for:
+        hops = [hop.strip() for hop in forwarded_for.split(",") if hop.strip()]
+        if hops:
+            return hops[-1]
     client = scope.get("client")
     if client:
         return str(client[0])
