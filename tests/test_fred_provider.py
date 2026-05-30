@@ -69,6 +69,36 @@ def test_get_series_http_error_returns_none() -> None:
     assert provider.get_series("BOGUS") is None
 
 
+def test_get_series_retries_on_429_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    # FRED rate-limits a burst with 429; a retry after backoff should recover
+    # the value rather than nulling the signal.
+    monkeypatch.setattr("nexus_core.data.macro.fred.time.sleep", lambda _s: None)
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(429, json={"error_code": 429, "error_message": "Too Many Requests"})
+        return httpx.Response(200, json={"observations": [{"date": "2026-05-28", "value": "2.72"}]})
+
+    provider = FredMacroData(api_key="k", http_client=_client(handler))
+    assert provider.get_series("BAMLH0A0HYM2") == 2.72
+    assert calls["n"] == 2  # one 429, one retry
+
+
+def test_get_series_persistent_429_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("nexus_core.data.macro.fred.time.sleep", lambda _s: None)
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(429, json={"error_code": 429})
+
+    provider = FredMacroData(api_key="k", http_client=_client(handler))
+    assert provider.get_series("DGS10") is None
+    assert calls["n"] == 3  # initial + 2 retries, then give up (graceful)
+
+
 def test_api_key_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FRED_API_KEY", "env-key")
     provider = FredMacroData()
