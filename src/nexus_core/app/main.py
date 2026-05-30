@@ -43,7 +43,14 @@ from ..data.market import (
     UsageTrackingMarketData,
     YFinanceMarketData,
 )
-from ..data.onchain import DeBankClient, MerklClient, TatumClient, TheGraphClient, VaultsFyiClient
+from ..data.onchain import (
+    DeBankClient,
+    JupiterClient,
+    MerklClient,
+    TatumClient,
+    TheGraphClient,
+    VaultsFyiClient,
+)
 from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..engine.regime import RegimeEngine
 from .benchmarks import build_benchmarks_router
@@ -56,6 +63,7 @@ from .ratelimit import RateLimitMiddleware
 from .routes import build_router
 from .scoring import build_score_router
 from .snapshots import build_snapshots_router
+from .solana import build_solana_router
 from .vaults import build_vaults_router
 from .wallet import build_wallet_router
 
@@ -190,6 +198,7 @@ def create_app(
     app.include_router(build_wallet_router(debank=DeBankClient()))
     app.include_router(build_chain_router(tatum=TatumClient()))
     app.include_router(build_vaults_router(vaultsfyi=VaultsFyiClient()))
+    app.include_router(build_solana_router(jupiter=JupiterClient()))
     app.include_router(
         build_lp_router(
             thegraph=TheGraphClient(),
