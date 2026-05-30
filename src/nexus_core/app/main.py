@@ -47,6 +47,7 @@ from ..data.onchain import (
     DeBankClient,
     JupiterClient,
     MerklClient,
+    SlipstreamClient,
     TatumClient,
     TheGraphClient,
     VaultsFyiClient,
@@ -205,6 +206,7 @@ def create_app(
             tatum=TatumClient(),
             merkl=MerklClient(),
             coingecko=CoinGeckoMarketData(),
+            slipstream=SlipstreamClient(TatumClient()),
         )
     )
     app.include_router(build_benchmarks_router(coingecko=CoinGeckoMarketData()))

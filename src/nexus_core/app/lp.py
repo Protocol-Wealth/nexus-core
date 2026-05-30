@@ -30,7 +30,13 @@ from typing import Annotated, Any
 from fastapi import APIRouter, HTTPException, Path, Query, Response
 
 from ..data.market import CoinGeckoMarketData
-from ..data.onchain import CHAIN_IDS, MerklClient, TatumClient, TheGraphClient
+from ..data.onchain import (
+    CHAIN_IDS,
+    MerklClient,
+    SlipstreamClient,
+    TatumClient,
+    TheGraphClient,
+)
 from ..engine.lp import PositionAnalytics, analyze_uniswap_v3_position
 from .benchmarks import fetch_benchmark_series
 
@@ -47,6 +53,12 @@ _COMPARISON_NOTE = (
     "returns are buy-and-hold over the last N days. These are different baselines — "
     "read them together directionally, not as a single outperformance number."
 )
+_AERODROME_NOTE = (
+    "Aerodrome Slipstream read on-chain (Base) — position value, in-range, token "
+    "amounts, and uncollected fees only. Impermanent loss (needs deposit history), "
+    "fee APR (needs pool volume), and AERO gauge reward APR are NOT available in "
+    "on-chain-only mode and are reported as null/zero."
+)
 
 
 def build_lp_router(
@@ -55,6 +67,7 @@ def build_lp_router(
     tatum: TatumClient,
     merkl: MerklClient,
     coingecko: CoinGeckoMarketData,
+    slipstream: SlipstreamClient,
 ) -> APIRouter:
     """Build the LP position-analytics router around its data clients."""
     router = APIRouter(prefix="/api/lp", tags=["lp"])
@@ -176,6 +189,61 @@ def build_lp_router(
                 "benchmark_returns_pct": benchmark_returns,
                 "note": _COMPARISON_NOTE,
             },
+            "disclaimer": _DISCLAIMER,
+        }
+
+    @router.get(
+        "/aerodrome/{token_id}/analytics",
+        summary="Aerodrome Slipstream position analytics (Base, on-chain RPC)",
+    )
+    def aerodrome(
+        response: Response,
+        token_id: Annotated[str, Path(description="Aerodrome Slipstream position NFT tokenId")],
+        price_token0_usd: Annotated[float, Query(ge=0, description="USD price of token0")],
+        price_token1_usd: Annotated[float, Query(ge=0, description="USD price of token1")],
+    ) -> dict[str, Any]:
+        """Value, in-range, amounts, and uncollected fees for a Base Slipstream position."""
+        if not slipstream.is_configured():
+            raise HTTPException(
+                status_code=503, detail="Aerodrome analytics unavailable: TATUM_API_KEY not configured"
+            )
+        fetched = slipstream.fetch_position(token_id)
+        if fetched is None:
+            raise HTTPException(
+                status_code=404, detail=f"No Aerodrome Slipstream position '{token_id}' on base"
+            )
+        pos, uncollected0, uncollected1 = fetched
+        result = analyze_uniswap_v3_position(
+            token_id=pos.token_id,
+            chain=pos.chain,
+            pool=pos.pool_address,
+            token0_symbol=pos.token0_symbol,
+            token1_symbol=pos.token1_symbol,
+            decimals0=pos.decimals0,
+            decimals1=pos.decimals1,
+            fee_tier=pos.fee_tier,
+            liquidity=pos.liquidity,
+            tick_lower=pos.tick_lower,
+            tick_upper=pos.tick_upper,
+            current_tick=pos.current_tick,
+            sqrt_price_x96=pos.sqrt_price_x96,
+            deposited0=pos.deposited0,
+            deposited1=pos.deposited1,
+            pool_liquidity=pos.pool_liquidity,
+            pool_tvl_usd=pos.pool_tvl_usd,
+            pool_avg_daily_volume_usd=pos.pool_avg_daily_volume_usd,
+            price_token0_usd=price_token0_usd,
+            price_token1_usd=price_token1_usd,
+            uncollected0=uncollected0,
+            uncollected1=uncollected1,
+            reward_apr=0.0,
+        )
+        response.headers["Cache-Control"] = f"public, max-age={_LP_TTL}"
+        return {
+            **asdict(result),
+            "protocol": "aerodrome-slipstream",
+            "data_mode": "onchain_rpc",
+            "note": _AERODROME_NOTE,
             "disclaimer": _DISCLAIMER,
         }
 
