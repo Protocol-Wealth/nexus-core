@@ -221,7 +221,7 @@ def create_app(
     app.include_router(build_snapshots_router())
     # Planning tool gateway. Included before the FastMCP `/mcp` mount (below) so
     # the explicit `/mcp/tools/...` routes take precedence over the transport.
-    app.include_router(build_planning_router(market=market))
+    app.include_router(build_planning_router(market=market, regime_engine=engine))
     # Transparent OAuth for the MCP transport (claude.ai connector handshake).
     # These endpoints are public; the gate above protects only the /mcp transport.
     app.include_router(build_oauth_router())

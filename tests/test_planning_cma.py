@@ -4,12 +4,19 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from nexus_core.app.planning import CONTRACT_VERSION, build_planning_router
 from nexus_core.app.planning.universe import ASSET_UNIVERSE, universe_ids
 from nexus_core.data.providers import PriceBar
+
+
+class _FakeRegimeEngine:
+    def classify(self) -> SimpleNamespace:
+        return SimpleNamespace(regime="GROWTH", confidence_score=80)
 
 
 class _FakeMarket:
@@ -30,7 +37,7 @@ class _FakeMarket:
 
 def _client() -> TestClient:
     app = FastAPI()
-    app.include_router(build_planning_router(market=_FakeMarket()))
+    app.include_router(build_planning_router(market=_FakeMarket(), regime_engine=_FakeRegimeEngine()))
     return TestClient(app)
 
 
