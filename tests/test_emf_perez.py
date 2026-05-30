@@ -75,16 +75,48 @@ def test_compute_uses_plural_capex_key() -> None:
     assert compute_perez_phase(inc, cf) == "Installation"
 
 
+# --- D8: revenue-only fallback for capex-light sectors (banks/REITs/insurers) --
+
+
+def test_compute_capex_light_steady_growth_is_deployment() -> None:
+    # No capex (financial/REIT), revenue +8% (within -10%..+40%) -> Deployment (PASS).
+    inc = [{"revenue": 108.0}, {"revenue": 100.0}]
+    cf = [{}, {}]  # no capex line at all
+    assert compute_perez_phase(inc, cf) == "Deployment"
+
+
+def test_compute_capex_light_contraction_is_turning_point() -> None:
+    # No capex, revenue -15% (< -10%) -> Turning Point (FAIL).
+    inc = [{"revenue": 85.0}, {"revenue": 100.0}]
+    cf = [{}, {}]
+    assert compute_perez_phase(inc, cf) == "Turning Point"
+
+
+def test_compute_capex_light_implausible_growth_is_frenzy() -> None:
+    # No capex, revenue +60% (> 40%) -> Frenzy (FAIL) for a capex-light business.
+    inc = [{"revenue": 160.0}, {"revenue": 100.0}]
+    cf = [{}, {}]
+    assert compute_perez_phase(inc, cf) == "Frenzy"
+
+
+def test_compute_no_capex_and_no_revenue_is_undeterminable() -> None:
+    inc = [{"revenue": 0.0}, {"revenue": 0.0}]
+    cf = [{}, {}]
+    assert compute_perez_phase(inc, cf) is None
+
+
 def test_compute_insufficient_statements() -> None:
     assert compute_perez_phase([{"revenue": 100.0}], [{"capitalExpenditure": -10.0}]) is None
     assert compute_perez_phase(None, None) is None
     assert compute_perez_phase([{"revenue": 100.0}, {"revenue": 90.0}], None) is None
 
 
-def test_compute_capex_missing_undeterminable() -> None:
+def test_compute_capex_zero_uses_revenue_only_fallback() -> None:
+    # Pre-D8 this returned None; now an explicit-zero-capex subject with healthy
+    # revenue growth resolves via the revenue-only fallback (Deployment).
     inc = [{"revenue": 110.0}, {"revenue": 100.0}]
     cf = [{"capitalExpenditure": 0.0}, {"capitalExpenditure": 0.0}]
-    assert compute_perez_phase(inc, cf) is None
+    assert compute_perez_phase(inc, cf) == "Deployment"
 
 
 def test_frenzy_thresholds_match_pw_nexus() -> None:

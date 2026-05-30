@@ -115,9 +115,14 @@ def compute_perez_phase(
     - Deployment: revenue growth >= capex growth (harvesting returns)
     - Frenzy / Early Frenzy: high frenzy-score (capex outpacing, both growing fast)
 
+    For a capex-light subject (no PP&E capex — banks, REITs, insurers) the phase
+    is derived from revenue growth alone (D8): contraction (< -10%) -> Turning
+    Point; steady (-10%..+40%) -> Deployment; implausibly fast (> +40%) -> Frenzy.
+
     Returns the phase label string (one of "Installation", "Deployment",
-    "Frenzy", "Early Frenzy"), or ``None`` when data is insufficient (fewer
-    than two income statements, no cash flows, or capex truly missing).
+    "Frenzy", "Early Frenzy", "Turning Point"), or ``None`` when data is
+    insufficient (fewer than two income statements, no cash flows, or neither
+    capex nor revenue present).
     """
     if not income_statements or len(income_statements) < 2:
         return None
@@ -136,9 +141,21 @@ def compute_perez_phase(
     curr_capex = abs(_get_val(cf[0], *_capex_keys))
     prev_capex = abs(_get_val(cf[1], *_capex_keys)) if len(cf) > 1 else curr_capex
 
-    # If capex is truly absent from all providers, the phase is undeterminable.
-    if curr_capex == 0 and prev_capex == 0 and curr_rev > 0:
-        return None
+    # Capex-light subject (banks, REITs, insurers — no PP&E capex). The
+    # capex-vs-revenue detector below can't run, so derive the phase from
+    # revenue growth alone, per the operator-ratified bands (D8): a steady or
+    # modestly-growing business is in Deployment (PASS); a contracting one is at
+    # a Turning Point (FAIL); implausibly fast growth for a capex-light business
+    # reads as Frenzy (FAIL). No revenue either → still undeterminable.
+    if curr_capex == 0 and prev_capex == 0:
+        if curr_rev <= 0:
+            return None
+        rev_only_growth = (curr_rev - prev_rev) / prev_rev if prev_rev > 0 else 0.0
+        if rev_only_growth < -0.10:
+            return TURNING_POINT
+        if rev_only_growth > 0.40:
+            return FRENZY
+        return DEPLOYMENT
 
     rev_growth = (curr_rev - prev_rev) / prev_rev if prev_rev > 0 else 0.0
     capex_growth = (curr_capex - prev_capex) / prev_capex if prev_capex > 0 else 0.0

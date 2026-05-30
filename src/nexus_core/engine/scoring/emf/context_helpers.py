@@ -86,6 +86,32 @@ SECTOR_LAYER_DEFAULTS: dict[str, str] = {
     "real estate": "L2",
 }
 
+# Asset-class layer routing (D2-B) for instruments that are not individual
+# operating companies. Broad-market ETFs (SPY/VOO/VTI/QQQ/IWM/DIA) are
+# DELIBERATELY ABSENT — a diversified index has no single durability layer, so
+# they fall through to UNCLASSIFIED (NOT APPLICABLE), which is the honest result.
+CRYPTO_LAYER: dict[str, str] = {
+    "BTC-USD": "L1",  # Bitcoin — monetary foundation (matches IBIT already in L1)
+    "BTC": "L1",
+    "ETH-USD": "L2",  # Ethereum — settlement backbone
+    "ETH": "L2",
+}
+SECTOR_ETF_LAYER: dict[str, str] = {
+    "XLK": "L3",  # technology
+    "XLF": "L4",  # financials
+    "XLV": "L6",  # healthcare
+    "XLE": "L1",  # energy
+    "XLB": "L1",  # basic materials
+    "XLU": "L2",  # utilities
+    "XLI": "L2",  # industrials
+    "XLRE": "L2",  # real estate
+    "XLP": "L5",  # consumer defensive
+    "XLY": "L5",  # consumer cyclical
+    "XLC": "L5",  # communication services
+    "GLD": "L1",  # gold (also in MODEL_TICKERS L1)
+    "SLV": "L1",  # silver
+}
+
 #: Returned when a layer cannot be positively classified (never a silent L5
 #: default, per emf-canonical §5.2). ``normalize_layer`` rejects this, so the
 #: downstream checks correctly stay at ``insufficient_data``.
@@ -150,6 +176,9 @@ def layer_for(sector_or_ticker: str | None, *, fundamentals: Any = None) -> str:
     Faithful port of ``PortfolioEngine._classify_layer`` priority order:
 
     1. ``MODEL_TICKERS`` exact ticker match.
+    1b. Asset-class routing (D2-B): crypto (``BTC-USD``->L1, ``ETH-USD``->L2)
+        and sector/commodity ETFs (``XLK``->L3, ``GLD``->L1, ...). Broad-market
+        ETFs are intentionally not mapped, so they fall to ``UNCLASSIFIED``.
     2. Sector / industry keyword classification (from ``fundamentals``).
     3. ``SECTOR_LAYER_DEFAULTS`` for a matched-but-unspecific sector.
     4. ``UNCLASSIFIED`` — never a silent L5 default (emf-canonical §5.2).
@@ -164,9 +193,16 @@ def layer_for(sector_or_ticker: str | None, *, fundamentals: Any = None) -> str:
 
     # 1. Known-ticker exact match (case-insensitive).
     if token:
-        hit = _TICKER_TO_LAYER.get(token.upper())
+        upper = token.upper()
+        hit = _TICKER_TO_LAYER.get(upper)
         if hit is not None:
             return hit
+        # 1b. Asset-class routing (D2-B): crypto + sector/commodity ETFs that
+        # aren't individual operating companies. Broad-market ETFs are absent
+        # here, so they continue to UNCLASSIFIED (NOT APPLICABLE).
+        asset_layer = CRYPTO_LAYER.get(upper) or SECTOR_ETF_LAYER.get(upper)
+        if asset_layer is not None:
+            return asset_layer
 
     # Sector / industry come from fundamentals when present; otherwise treat
     # the bare token as a sector name (so ``layer_for("Energy")`` works).

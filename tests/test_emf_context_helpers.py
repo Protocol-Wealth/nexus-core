@@ -166,6 +166,28 @@ def test_layer_for_unclassified() -> None:
     assert layer_for("", fundamentals={}) == UNCLASSIFIED
 
 
+# --- D2-B: asset-class layer routing (crypto + sector/commodity ETFs) ---------
+
+
+def test_layer_for_crypto() -> None:
+    assert layer_for("BTC-USD") == "L1"  # Bitcoin — monetary foundation
+    assert layer_for("ETH-USD") == "L2"  # Ethereum — settlement backbone
+    assert layer_for("btc-usd") == "L1"  # case-insensitive
+
+
+def test_layer_for_sector_and_commodity_etfs() -> None:
+    assert layer_for("XLK") == "L3"  # technology
+    assert layer_for("XLF") == "L4"  # financials
+    assert layer_for("XLE") == "L1"  # energy
+    assert layer_for("SLV") == "L1"  # silver
+
+
+def test_layer_for_broad_market_etf_is_unclassified() -> None:
+    # A diversified index has no single durability layer -> NOT APPLICABLE.
+    assert layer_for("SPY") == UNCLASSIFIED
+    assert layer_for("VTI") == UNCLASSIFIED
+
+
 # --- compute_sector_return / compute_spy_return -----------------------------
 
 
