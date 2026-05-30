@@ -79,8 +79,10 @@ gracefully to `None` / empty / `503` when its key is absent.
 
 - **`GET /health`, `/health/db`** — liveness + DB connectivity probe.
 - **`GET /api/usage`** — provider usage / quota report.
-- **`POST /mcp`** — MCP-over-HTTP transport (FastMCP) exposing the above as
-  tools to any MCP client.
+- **`POST /mcp`** — MCP-over-HTTP transport (FastMCP, also `nexus-core mcp` over
+  stdio) exposing the above as tools, plus `health` / `describe` / `get_quotes`
+  and the six planning tools. `GET /mcp/tools` + `POST /mcp/tools/{id}` are the
+  REST planning gateway (contractVersion `0.1.0`) for the pwplan-core shell.
 - **Persistence** — private Cloud SQL (`nexus-marketdata`, POSTGRES_16,
   private-IP-only on `pwllc-prod-vpc`, backups + deletion protection).
   Reached over Direct VPC egress; `asyncpg` (`data/db.py`, `data/snapshots.py`).
@@ -93,6 +95,20 @@ gracefully to `None` / empty / `503` when its key is absent.
   client IP from `CF-Connecting-IP` (else rightmost `X-Forwarded-For`).
   Cloudflare methods rule blocks non-GET/POST/OPTIONS; edge rate-limit on cost
   endpoints. Secrets live only in Google Secret Manager.
+
+### Compliance, agents & platform hardening
+
+- **CI quality gate** — `ruff` + `mypy --strict` + `pytest` (80% floor) on every
+  push/PR. **Disclaimers** are canonical (`disclaimers.py`) across every surface;
+  `score_asset` emits `NOT APPLICABLE` (not a verdict) on insufficient coverage.
+- **MCP ergonomics** — `readOnlyHint` annotations; `health` (per-upstream status)
+  + `describe` (catalog + symbology) tools; `get_quotes` batch; native planning tools.
+- **Data provenance** — quotes/FRED carry `as_of` / `source` / `market_status`.
+- **Regime signals** — `breadth` (% sectors > 200DMA) + `precious_metals_signal`.
+- **Agent/discovery** — `/llms.txt`, `AGENTS.md`, `/.well-known/security.txt`,
+  security-headers middleware, OpenAPI servers/tags.
+- **EMF coverage** — ASAN fail-safe + 5 sector buckets; Perez capex-light path;
+  crypto/ETF durability-layer router (aligned with `SHARED/strategy/emf-canonical.md`).
 
 ## Next
 
@@ -130,6 +146,12 @@ Prioritized. Top item first.
 7. **Persisted LP-position PnL history** — snapshot LP positions over time the
    way benchmarks are already snapshotted daily, enabling historical PnL/IL
    series.
+
+Agent/analytics capability ideas (from the consumer-diagnostic roadmap, not yet built):
+real options chains + IV (Tradier) and IV-rank to replace the theoretical σ;
+`score_portfolio` (sleeve-level aggregate of the 8-check); `defi_yields` / `defi_risk`;
+a `resolve_symbol` resolver; and structured provenance/versioning (`framework_version`)
+on score outputs for Rule 17a-4 reproducibility.
 
 ---
 

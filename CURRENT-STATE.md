@@ -25,6 +25,10 @@ endpoint returns `None` / empty / `503` rather than failing the service.
 | `GET /health` | — (liveness probe) | — |
 | `GET /health/db` | Cloud SQL connectivity probe | `DATABASE_URL` |
 | `GET /api/usage` | in-process cache + provider usage report | — |
+| `GET /docs` · `GET /openapi.json` | OpenAPI (servers block + per-tag descriptions) | — |
+| `GET /mcp-guide` | MCP client setup guide (hosted + local) | — |
+| `GET /llms.txt` | agent site map (llmstxt.org) | — |
+| `GET /.well-known/security.txt` | RFC 9116 disclosure pointer → security@protocolwealthllc.com | — |
 
 ### Regime & scoring
 
@@ -109,7 +113,26 @@ Compositions are buy-and-hold, base-100: BTC / ETH / SOL singles; ETH-USDC 50/50
 
 | Endpoint | Data source | Required key |
 |----------|-------------|--------------|
-| `POST /mcp` | FastMCP-over-HTTP transport over the regime + scoring engines | — |
+| `POST /mcp` | FastMCP-over-HTTP transport (also `nexus-core mcp` over stdio) | — |
+| `GET /mcp/tools` | planning contract handshake — `{contractVersion, tools[]}` | — |
+| `POST /mcp/tools/{tool_id}` | planning gateway — invoke a planning tool (JSON in/out, PII-free) | — |
+
+**MCP tool surface** (in `tools/list`, identical over HTTP + stdio; every tool is
+read-only with `readOnlyHint` + the educational disclaimer):
+
+- **Regime** — `current_regime`, `regime_signals`
+- **Scoring** — `score_asset` (EMF 8-check; emits `NOT APPLICABLE` + `tier_note` on insufficient coverage)
+- **Market** — `get_quote`, `get_quotes` (batch), `get_price_history` (carry `as_of` / `source` / `market_status`)
+- **Economic** — `get_economic_series` (carries `as_of` observation date + `source`)
+- **Options** — `option_price`, `covered_call`, `cash_secured_put`, `collar`
+- **Crypto options** — `crypto_option_instruments`, `crypto_option_ticker`
+- **DeFi** — `defi_protocols`, `defi_protocol`, `defi_chains`
+- **Planning** (6) — `monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`
+- **Meta** — `health` (per-upstream status), `describe` (catalog + symbology + contract version)
+
+The 6 planning tools are served *both* natively (above) and via the REST gateway
+(`POST /mcp/tools/{id}`) for the browser-based pwplan-core shell — same handlers,
+contractVersion `0.1.0`.
 
 ## Code layout
 
@@ -189,19 +212,40 @@ key is absent.
 - Cloudflare methods rule blocks non-`GET`/`POST`/`OPTIONS`; edge rate-limit on the
   cost endpoints.
 - No client data, no PII at risk.
+- **Disclaimers** — one canonical `disclaimers.py` (educational / not advice / AI / as-is)
+  on every MCP tool, REST route, web page, and the OpenAPI description.
+- **Security headers** (`security_headers.py`, outermost) — `nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy` on every response; CSP on HTML only.
+  Errors are masked (`mask_error_details=True`) so no `str(e)` leaks to the wire.
+- **CI** gates `ruff` + `mypy --strict` + `pytest` (80% floor) on every push/PR.
 
-## Recent work (this cycle)
+## Recent work (this cycle — platform hardening, deployed `nexus-core-00040`)
 
-- Multi-chain Uniswap V3 LP analytics — base / optimism / polygon (joining ethereum)
-- LP position `vs-benchmark` route — pairs IL with hold-strategy returns ("was LPing worth it?")
-- Jupiter Solana SPL token USD prices — single + batch, keyless (`/api/solana/*`)
+- **Native MCP planning tools** + `health`/`describe`/`get_quotes` + `readOnlyHint` annotations
+- **Compliance** — canonical disclaimers everywhere; `score_asset` → `NOT APPLICABLE` on
+  insufficient coverage (was a verdict-shaped `BELOW THRESHOLD`)
+- **Reliability** — `mask_error_details`; option input validation; `defi_protocol` TVL fix;
+  FRED 429-retry + invalid-key visibility
+- **Provenance** — `as_of` / `source` / `market_status` on quotes + FRED (Saturday close reads `last_close`)
+- **Regime signals** — `breadth` (% sectors > 200DMA) + `precious_metals_signal` (GLD vs 200DMA), free
+- **Agent/discovery** — `/llms.txt`, `AGENTS.md`, `/.well-known/security.txt`, OpenAPI servers/tags
+- **CI gate** + fixed 12 pre-existing `mypy --strict` errors
+- **EMF coverage** — ASAN fail-safe + 5 new sector buckets (AAPL 6/8→5/8); Perez capex-light
+  revenue path; crypto/ETF → durability-layer router. `SHARED/strategy/emf-canonical.md` updated to match.
 
-Prior cycle: Tatum multi-chain native balances (`/api/chain/*`), vaults.fyi vault
-discovery (`/api/vaults`), Uniswap V3 LP analytics (exact IL + fees + Merkl reward APR),
-CoinGecko hold-strategy benchmarks (on-demand + persisted), private market-data Cloud SQL
-+ daily snapshot Cloud Run Job + Cloud Scheduler, spoofing-resistant rate-limiter fix.
+Prior cycle: multi-chain Uniswap V3 LP analytics + `vs-benchmark`, Jupiter Solana SPL prices,
+Tatum multi-chain balances, vaults.fyi discovery, CoinGecko benchmarks (+ persisted Cloud SQL),
+daily snapshot Cloud Run Job + Scheduler, spoofing-resistant rate-limiter, Deribit 6-underlier crypto options.
 
 ## Next (roadmap)
+
+Deferred from the hardening pass (lower priority / governance):
+- **`SHARED/strategy/emf-canonical.md` numbering** — canon numbers Perez as Check 7 / ASAN as 8;
+  the code orders Perez 5 / ASAN 8. Content is aligned; the numbering mismatch predates this work.
+- **Reconcile the two `SECURITY.md` files** (root vs `.github/`); run `ruff format` (66 files; not CI-enforced).
+- **Roadmap §5 tier-3/4 features** (not built): real options chains + IV, `score_portfolio`,
+  `defi_yields`/`defi_risk`, structured provenance/versioning on scores, `resolve_symbol`.
+- **`breadth` / `precious_metals` are display-only** signals (not consumed by the classifier).
 
 - **Aerodrome Slipstream — full coverage via Envio** — the on-chain RPC path is **live**
   (`GET /api/lp/aerodrome/{token_id}/analytics`, partial: value, in-range, token amounts,

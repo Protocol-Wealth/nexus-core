@@ -7,7 +7,7 @@
 
 Python 3.12 package — a regime-adaptive financial-analysis + DeFi/market-data engine. It serves a **public, read-only HTTP API** (FastAPI) with an **MCP-over-HTTP transport** mounted at `/mcp`, so any MCP-compatible AI client (Claude, GPT, Gemini) can call regime-aware analysis without re-implementing financial domain logic. No account, no API key, no auth.
 
-Built and tested in production by Protocol Wealth LLC (SEC-registered RIA, CRD #335298). The public deployment at [nexusmcp.site](https://nexusmcp.site) runs the `nexus_core.app` surface from **this** repository, on **Google Cloud Run** (Cloudflare → Cloud Run); see [`DEPLOY.md`](DEPLOY.md). Version `0.1.0`; ~594-test suite; `mypy --strict` clean. The README's *Status* section is the source of truth on maturity — this is an alpha framework. Some subpackages are scaffold (`__init__.py` only); check the actual module contents before assuming an API exists.
+Built and tested in production by Protocol Wealth LLC (SEC-registered RIA, CRD #335298). The public deployment at [nexusmcp.site](https://nexusmcp.site) runs the `nexus_core.app` surface from **this** repository, on **Google Cloud Run** (Cloudflare → Cloud Run); see [`DEPLOY.md`](DEPLOY.md). Version `0.1.0`; CI-gated test suite (`ruff` + `mypy --strict` + `pytest`, 80% coverage floor). The README's *Status* section is the source of truth on maturity — this is an alpha framework. Some subpackages are scaffold (`__init__.py` only); check the actual module contents before assuming an API exists.
 
 Sibling: [`pwos-core`](https://github.com/Protocol-Wealth/pwos-core) — TypeScript compliance primitives. **Math + analytical engine lives here; data shapes + audit/compliance primitives live in pwos-core.** Do not port primitives across that boundary.
 
@@ -80,7 +80,7 @@ nexus-core/
 | MCP transport | FastMCP (`@mcp.tool()`), mounted at `/mcp` |
 | Web framework | FastAPI + uvicorn |
 | Hosting | Google Cloud Run (Cloudflare → Cloud Run), region `us-central1` |
-| CI | GitHub Actions — license-compliance scan; CodeQL (auto-config) |
+| CI | GitHub Actions — `ci.yml` (ruff + `mypy --strict` + pytest, 80% coverage floor); license-compliance scan; SPDX-header check; CodeQL (auto-config) |
 | License | Apache 2.0 + USPTO #64/034,229 defensive patent + OIN member |
 
 ## Development
@@ -91,7 +91,7 @@ pip install -e ".[dev]"           # Dev tooling only (pytest, pytest-asyncio, py
 pip install -e ".[all]"           # All capability extras (heavy: torch, transformers, QuantLib, zipline)
 pip install -e "."                # Core only (regime + scoring + market/macro/onchain HTTP clients)
 
-pytest                            # Full suite (~594 tests)
+pytest                            # Full suite (CI-gated; ~724 tests)
 pytest tests/test_regime_engine.py
 ruff check src/ tests/
 mypy src/nexus_core/              # strict
@@ -131,9 +131,12 @@ nexus-core --version
 | `/api/solana/price/{mint}`, `/api/solana/prices?mints=` | Solana SPL token USD prices (Jupiter v3, keyless — no API key) |
 | `/api/benchmarks`, `/api/benchmarks/series?days=`, `/api/benchmarks/history?days=` | Base-100 hold-strategy returns (BTC/ETH/SOL + ETH-USDC 50/50,60/40,70/30 + ETH-BTC 50/50; USDC held at $1; buy-and-hold). `/series` on-demand from CoinGecko; `/history` from persisted daily snapshots |
 | `/api/usage` | Provider usage/quota report (non-sensitive; no keys, no client data) |
-| `/mcp` | MCP-over-HTTP transport (FastMCP) — exempt from the rate limiter |
+| `/mcp` | MCP-over-HTTP transport (FastMCP) — exempt from the rate limiter. `tools/list` includes the research tools + `health`/`describe`/`get_quotes` + the 6 planning tools; every tool is `readOnlyHint` + carries the disclaimer |
+| `/mcp/tools`, `POST /mcp/tools/{id}` | Planning REST gateway (pwplan-core, contractVersion `0.1.0`, PII-free) |
+| `/docs`, `/openapi.json`, `/mcp-guide`, `/llms.txt`, `/.well-known/security.txt` | OpenAPI (servers + tags), MCP setup guide, agent site map, RFC 9116 disclosure |
 
-All external integrations degrade gracefully to `None`/empty/503 when their key is absent.
+Quote responses carry `as_of`/`source`/`market_status`; FRED carries `as_of`/`source`. All
+external integrations degrade gracefully to `None`/empty/503 when their key is absent.
 
 ## Persistence & Infra
 
@@ -170,6 +173,8 @@ All external integrations degrade gracefully to `None`/empty/503 when their key 
 - **Tests under `tests/test_<module>.py`** matching source file names. Hermetic — no network calls, no live data, no API keys, no real adopter credentials. Tests use `create_app(enable_mcp=False, market=<fake>)` to exercise the REST API without upstreams.
 - **Stubs in `examples/`.** Example scripts must run without network credentials.
 - **License-name comment on every new dep** in `pyproject.toml` (e.g. `"yfinance>=1.4.0",  # Apache 2.0`). The license-compliance workflow fails the build if a forbidden license sneaks in.
+- **Disclaimers come from `src/nexus_core/disclaimers.py`** (TERSE / MC_DISCLAIMER / FULL / SAFEGUARDS) — never hand-write a disclaimer string. Every output surface attaches the appropriate variant.
+- **Confidence tiers are not verdicts.** They are probabilistic labels (SEC Rule 206(4)-1); never relabel as buy/sell/hold, and never emit a tier on insufficient evaluated checks (the framework returns `NOT APPLICABLE`).
 
 ## Adding a Regime Signal or Scoring Check
 
@@ -191,7 +196,7 @@ All external integrations degrade gracefully to `None`/empty/503 when their key 
 
 **HTTP route:** add or extend a `build_*_router(...)` factory under `src/nexus_core/app/`, then wire it in `app/main.py`'s `create_app()`. Keep handlers sync, set an explicit `Cache-Control`, and degrade to 503 (not 500) when a required key/provider is absent. Tools compose over the engines — do not reimplement engine logic at the route layer.
 
-**MCP tool:** add to `src/nexus_core/mcp/server/` with `@mcp.tool()`. Write the description for the LLM consumer (inputs, outputs, side effects — none expected, read-only by default; regime-state sensitivity if any). Add tests through a FastMCP test client.
+**MCP tool:** add to `src/nexus_core/mcp/server/` with `@mcp.tool(annotations=_RO_OPEN)` (or `_RO_CLOSED` for pure compute). Write the description for the LLM consumer (inputs, outputs, side effects — none expected, read-only by default; regime-state sensitivity if any). Attach the disclaimer via `_ok`/`_err`. Add tests through a FastMCP test client. Deployment-specific tools (e.g. the planning gateway) inject via `build_server(..., extra_tools=...)` from `app/mcp_mount.py` so the public scaffold stays decoupled.
 
 **Do NOT:**
 - Add routes or tools that mutate state (DB writes from HTTP, external API POSTs) without architecture-level review — the posture is read-only by default. Writes happen only in the Cloud Run Job.
