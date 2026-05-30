@@ -74,7 +74,20 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _serve_http(host: str, port: int) -> None:
-    uvicorn.run(create_app(), host=host, port=port)
+    # Trust the proxy's forwarding headers. Behind Cloudflare -> Cloud Run, TLS
+    # is terminated upstream and the app is reached over http, so without this
+    # uvicorn builds redirect URLs with scheme "http" — e.g. the `/mcp` ->
+    # `/mcp/` trailing-slash redirect would downgrade to http and browser MCP
+    # clients (claude.ai connectors) refuse the insecure hop. Honoring
+    # X-Forwarded-Proto keeps generated redirects on https. The container is
+    # only reachable via the Cloud Run frontend, so trusting all peers is safe.
+    uvicorn.run(
+        create_app(),
+        host=host,
+        port=port,
+        proxy_headers=True,
+        forwarded_allow_ips="*",
+    )
 
 
 def _serve_mcp_stdio() -> None:

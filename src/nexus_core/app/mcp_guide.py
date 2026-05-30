@@ -13,7 +13,7 @@ from __future__ import annotations
 from .. import __version__
 
 _REPO_URL = "https://github.com/Protocol-Wealth/nexus-core"
-_MCP_URL = "https://nexusmcp.site/mcp"
+_MCP_URL = "https://nexusmcp.site/mcp/"
 
 _PAGE = """\
 <!DOCTYPE html>
@@ -84,6 +84,14 @@ _PAGE = """\
   <p>
     The server is live at <code>{mcp_url}</code> (MCP over HTTP / Streamable
     HTTP). Clients that support remote MCP servers can add that URL directly.
+  </p>
+  <h3>Claude.ai (web &amp; desktop app)</h3>
+  <p>
+    Settings &rarr; Connectors &rarr; <em>Add custom connector</em>, then paste the URL
+    above (<strong>including the trailing slash</strong>) and add it. nexus-core is a
+    public server, so no sign-in / OAuth is required — if you hit a sign-in or
+    &ldquo;couldn't register&rdquo; error, make sure the URL ends in <code>/mcp/</code>
+    (a URL without the trailing slash is redirected and some clients reject the hop).
   </p>
   <h3>Claude Desktop</h3>
   <p>
