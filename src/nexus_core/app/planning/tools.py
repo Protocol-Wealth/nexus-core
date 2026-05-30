@@ -8,48 +8,31 @@ to HTTP status codes. Handlers validate their own inputs and raise
 :class:`PlanningInputError` (400) / :class:`PlanningInfeasibleError` (422) with
 human-readable messages (the consumer shows them verbatim).
 
-Tools that need data providers (e.g. ``correlation_matrix`` needs market data)
-are bound to them by :func:`build_tool_handlers`, so the registry is constructed
-per-app with its dependencies injected. Tool ids are the wire contract and must
-match the consumer exactly; the gateway 404s ids that aren't registered.
+Tools that need data providers (e.g. ``correlation_matrix`` and
+``capital_market_assumptions`` need market data) are bound to them by
+:func:`build_tool_handlers`, so the registry is constructed per-app with its
+dependencies injected. Tool ids are the wire contract and must match the consumer
+exactly; the gateway 404s ids that aren't registered.
 """
 
 from __future__ import annotations
 
 import math
+import statistics
 from collections.abc import Callable
 from typing import Any, cast
 
 from ...data.providers import MarketDataProvider
 from ...engine.planning import GlidePathShape, compute_glide_path, correlation_matrix
 from .contract import PlanningInfeasibleError, PlanningInputError
+from .universe import ASSET_UNIVERSE, proxy_tickers, universe_ids
 
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
-
-#: Asset-class id -> liquid ETF (or crypto) proxy ticker for return-series
-#: estimation. The engine does not hard-code an asset *universe* (callers pass
-#: arbitrary ids elsewhere); this map only backs correlation estimation from
-#: real market data. Unknown ids are reported as infeasible with this list.
-_ASSET_PROXIES: dict[str, str] = {
-    "us_equity": "VTI",
-    "us_large_cap": "SPY",
-    "us_small_cap": "IWM",
-    "intl_equity": "VXUS",
-    "developed_ex_us": "EFA",
-    "em_equity": "VWO",
-    "us_bonds": "AGG",
-    "us_treasuries": "GOVT",
-    "tips": "TIP",
-    "high_yield": "HYG",
-    "real_estate": "VNQ",
-    "commodities": "DBC",
-    "gold": "GLD",
-    "bitcoin": "BTC-USD",
-}
 
 _DEFAULT_LOOKBACK_DAYS = 1260  # ~5 trading years
 _MIN_LOOKBACK_DAYS = 30
 _MAX_LOOKBACK_DAYS = 3650
+_TRADING_DAYS = 252.0
 
 
 def _require(body: dict[str, Any], key: str) -> Any:
@@ -86,6 +69,46 @@ def _as_str_list(body: dict[str, Any], key: str) -> list[str]:
     return value
 
 
+def _fetch_aligned_returns(
+    market: MarketDataProvider,
+    tickers_by_id: dict[str, str],
+    *,
+    lookback: int,
+    as_of: str | None = None,
+) -> tuple[dict[str, list[float]], str]:
+    """Fetch daily closes per asset, align on common dates, build log returns.
+
+    Returns ``(log_returns_by_id, latest_aligned_iso_date)``. When ``as_of`` is
+    given, only closes on/before that ISO date are used. Raises
+    :class:`PlanningInfeasibleError` when an asset lacks history or the series do
+    not overlap enough to estimate.
+    """
+    closes_by_id: dict[str, dict[str, float]] = {}
+    for asset_id, ticker in tickers_by_id.items():
+        bars = market.get_price_history(ticker, days=lookback, interval="1d")
+        closes = {b.timestamp: float(b.close) for b in bars if b.close and b.close > 0}
+        if as_of is not None:
+            closes = {ts: c for ts, c in closes.items() if ts[:10] <= as_of}
+        if len(closes) < 3:
+            raise PlanningInfeasibleError(f"insufficient price history for '{asset_id}' ({ticker})")
+        closes_by_id[asset_id] = closes
+
+    common_dates = set.intersection(*(set(c) for c in closes_by_id.values()))
+    if len(common_dates) < 3:
+        raise PlanningInfeasibleError(
+            "not enough overlapping dates across the requested asset classes"
+        )
+    dates = sorted(common_dates)
+
+    returns_by_id: dict[str, list[float]] = {}
+    for asset_id, closes in closes_by_id.items():
+        series = [closes[d] for d in dates]
+        returns_by_id[asset_id] = [
+            math.log(series[k] / series[k - 1]) for k in range(1, len(series))
+        ]
+    return returns_by_id, dates[-1][:10]
+
+
 def glide_path_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``glide_path`` — equity weight by age across the planning horizon."""
     start = _as_number(body, "startEquityWeight")
@@ -106,12 +129,7 @@ def glide_path_tool(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _correlation_matrix_tool(body: dict[str, Any], market: MarketDataProvider) -> dict[str, Any]:
-    """``correlation_matrix`` — real-data return correlation across asset classes.
-
-    Each asset-class id is resolved to a liquid proxy (see :data:`_ASSET_PROXIES`),
-    its daily closes are fetched over ``lookbackDays``, aligned on common dates,
-    and converted to log returns for sample or Ledoit-Wolf correlation.
-    """
+    """``correlation_matrix`` — real-data return correlation across asset classes."""
     ids = _as_str_list(body, "assetClassIds")
     lookback = body.get("lookbackDays", _DEFAULT_LOOKBACK_DAYS)
     if (
@@ -126,39 +144,73 @@ def _correlation_matrix_tool(body: dict[str, Any], market: MarketDataProvider) -
     if not isinstance(shrinkage, bool):
         raise PlanningInputError("shrinkage must be a boolean")
 
-    closes_by_id: dict[str, dict[str, float]] = {}
+    proxies = proxy_tickers()
+    tickers: dict[str, str] = {}
     for asset_id in ids:
-        ticker = _ASSET_PROXIES.get(asset_id)
+        ticker = proxies.get(asset_id)
         if ticker is None:
-            supported = ", ".join(sorted(_ASSET_PROXIES))
             raise PlanningInfeasibleError(
                 f"no return series available for asset class '{asset_id}'. "
-                f"Supported asset classes: {supported}."
+                f"Supported asset classes: {', '.join(sorted(proxies))}."
             )
-        bars = market.get_price_history(ticker, days=lookback, interval="1d")
-        closes = {b.timestamp: float(b.close) for b in bars if b.close and b.close > 0}
-        if len(closes) < 3:
-            raise PlanningInfeasibleError(
-                f"insufficient price history for '{asset_id}' ({ticker})"
-            )
-        closes_by_id[asset_id] = closes
+        tickers[asset_id] = ticker
 
-    common_dates = set.intersection(*(set(c) for c in closes_by_id.values()))
-    if len(common_dates) < 3:
-        raise PlanningInfeasibleError(
-            "not enough overlapping dates across the requested asset classes to estimate correlation"
-        )
-    dates = sorted(common_dates)
-
-    returns_by_id: dict[str, list[float]] = {}
-    for asset_id, closes in closes_by_id.items():
-        series = [closes[d] for d in dates]
-        returns_by_id[asset_id] = [
-            math.log(series[k] / series[k - 1]) for k in range(1, len(series))
-        ]
-
+    returns_by_id, as_of = _fetch_aligned_returns(market, tickers, lookback=lookback)
     matrix = correlation_matrix(returns_by_id, shrinkage=shrinkage)
-    return {"matrix": matrix, "asOf": dates[-1][:10]}
+    return {"matrix": matrix, "asOf": as_of}
+
+
+def _capital_market_assumptions_tool(
+    body: dict[str, Any], market: MarketDataProvider
+) -> dict[str, Any]:
+    """``capital_market_assumptions`` — the engine's real-data asset assumptions.
+
+    Returns ``assetClasses`` (forward expectedReturn + lambda from the engine's
+    house view; volatility from the proxy's real history) and a real ``correlations``
+    matrix + an ``asOf`` date. Shapes are drop-in for a ``monte_carlo_decumulation``
+    request. Unknown id → 400; omitted ids → the full default universe.
+    """
+    raw_ids = body.get("assetClassIds")
+    if raw_ids is None or raw_ids == []:
+        ids = universe_ids()
+    elif isinstance(raw_ids, list) and all(isinstance(x, str) for x in raw_ids):
+        ids = raw_ids
+    else:
+        raise PlanningInputError("assetClassIds must be a list of strings (or omitted)")
+
+    unknown = [i for i in ids if i not in ASSET_UNIVERSE]
+    if unknown:
+        raise PlanningInputError(
+            f"unknown asset class id(s): {', '.join(unknown)}. "
+            f"Known asset classes: {', '.join(universe_ids())}."
+        )
+
+    as_of = body.get("asOf")
+    if as_of is not None and not isinstance(as_of, str):
+        raise PlanningInputError("asOf must be an ISO date string (or omitted)")
+
+    tickers = {i: ASSET_UNIVERSE[i].ticker for i in ids}
+    returns_by_id, resolved_as_of = _fetch_aligned_returns(
+        market, tickers, lookback=_DEFAULT_LOOKBACK_DAYS, as_of=as_of
+    )
+
+    asset_classes: list[dict[str, Any]] = []
+    for asset_id in ids:
+        assumption = ASSET_UNIVERSE[asset_id]
+        returns = returns_by_id[asset_id]
+        volatility = statistics.pstdev(returns) * math.sqrt(_TRADING_DAYS) if len(returns) > 1 else 0.0
+        asset_classes.append(
+            {
+                "id": asset_id,
+                "label": assumption.label,
+                "expectedReturn": assumption.expected_return,
+                "volatility": round(volatility, 4),
+                "lambda": assumption.lambda_,
+            }
+        )
+
+    correlations = correlation_matrix(returns_by_id, shrinkage=True)
+    return {"assetClasses": asset_classes, "correlations": correlations, "asOf": resolved_as_of}
 
 
 def build_tool_handlers(*, market: MarketDataProvider) -> dict[str, ToolHandler]:
@@ -170,9 +222,13 @@ def build_tool_handlers(*, market: MarketDataProvider) -> dict[str, ToolHandler]
     def correlation_matrix_tool(body: dict[str, Any]) -> dict[str, Any]:
         return _correlation_matrix_tool(body, market)
 
+    def capital_market_assumptions_tool(body: dict[str, Any]) -> dict[str, Any]:
+        return _capital_market_assumptions_tool(body, market)
+
     return {
         "glide_path": glide_path_tool,
         "correlation_matrix": correlation_matrix_tool,
+        "capital_market_assumptions": capital_market_assumptions_tool,
     }
 
 
