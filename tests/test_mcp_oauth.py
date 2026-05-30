@@ -194,6 +194,8 @@ def _gated_app() -> FastAPI:
 
     @app.get("/mcp")
     @app.post("/mcp")
+    @app.get("/mcp/")
+    @app.post("/mcp/")
     def mcp() -> dict[str, bool]:
         return {"transport": True}
 

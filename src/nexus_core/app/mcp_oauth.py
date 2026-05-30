@@ -21,8 +21,9 @@ Design (stateless, so it works across Cloud Run instances):
   match (open-redirect protection) without a client store.
 - PKCE **S256** is required. Authorization codes are short-lived (60s) and bound to
   the PKCE challenge, redirect URI, and resource. Access tokens are short-lived (1h)
-  and **audience-bound** to this server's canonical resource URI (RFC 8707); the gate
-  rejects tokens whose audience is not this resource. Refresh tokens rotate.
+  and carry an audience claim (RFC 8707) the gate verifies. Tokens are HMAC-signed
+  with this deployment's key, so they are only ever valid against this server — the
+  audience check is a secondary guard. Refresh tokens rotate on use.
 
 Security note: because the data is public, a replayed authorization code only ever
 yields another public-scope token — there is no privilege to escalate. Tokens grant
@@ -288,6 +289,10 @@ def build_oauth_router() -> APIRouter:
         grant_type = form.get("grant_type")
 
         if grant_type == "authorization_code":
+            # Codes are stateless signed tokens (no server-side store), so a code is
+            # replayable within its 60s TTL — a deliberate trade for statelessness.
+            # Acceptable here: a replay only yields another public-scope token (no
+            # privilege to escalate), and PKCE still binds the code to one verifier.
             code = read_token(key, str(form.get("code", "")), typ="code")
             if code is None:
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
@@ -329,38 +334,45 @@ class MCPAuthGate:
         self.app = app
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        path = scope.get("path", "")
+        if scope.get("type") != "http" or not _is_transport_path(path):
+            await self.app(scope, receive, send)
+            return
+
         key = signing_key()
-        if scope.get("type") != "http" or key is None or not _is_transport_path(scope.get("path", "")):
-            await self.app(scope, receive, send)
-            return
+        if key is not None:
+            headers = dict(scope.get("headers") or [])
+            auth = headers.get(b"authorization", b"").decode("latin-1")
+            host = headers.get(b"host", b"").decode("latin-1")
+            resource = f"{scope.get('scheme', 'https')}://{host}/mcp"
+            token = auth[7:] if auth.lower().startswith("bearer ") else ""
+            if not (token and access_token_audience(key, token) == resource):
+                issuer = f"{scope.get('scheme', 'https')}://{host}"
+                www_auth = f'Bearer resource_metadata="{issuer}/.well-known/oauth-protected-resource/mcp"'
+                body = json.dumps(
+                    {"error": "invalid_token", "error_description": "MCP access token required"}
+                ).encode()
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 401,
+                        "headers": [
+                            (b"www-authenticate", www_auth.encode("latin-1")),
+                            (b"content-type", b"application/json"),
+                            (b"cache-control", b"no-store"),
+                        ],
+                    }
+                )
+                await send({"type": "http.response.body", "body": body})
+                return
 
-        headers = dict(scope.get("headers") or [])
-        auth = headers.get(b"authorization", b"").decode("latin-1")
-        host = headers.get(b"host", b"").decode("latin-1")
-        resource = f"{scope.get('scheme', 'https')}://{host}/mcp"
-
-        token = auth[7:] if auth.lower().startswith("bearer ") else ""
-        if token and access_token_audience(key, token) == resource:
-            await self.app(scope, receive, send)
-            return
-
-        issuer = f"{scope.get('scheme', 'https')}://{host}"
-        www_auth = (
-            f'Bearer resource_metadata="{issuer}/.well-known/oauth-protected-resource/mcp"'
-        )
-        body = json.dumps({"error": "invalid_token", "error_description": "MCP access token required"}).encode()
-        await send(
-            {
-                "type": "http.response.start",
-                "status": 401,
-                "headers": [
-                    (b"www-authenticate", www_auth.encode("latin-1")),
-                    (b"content-type", b"application/json"),
-                    (b"cache-control", b"no-store"),
-                ],
-            }
-        )
-        await send({"type": "http.response.body", "body": body})
+        # Authenticated (or OAuth disabled): serve the transport. Normalize the
+        # no-slash path to /mcp/ so the mount does NOT issue a 307 redirect —
+        # clients drop the Authorization header when following a redirect, which
+        # would 401 an otherwise-valid token (security-review finding 6a).
+        if path == "/mcp":
+            scope = {**scope, "path": "/mcp/", "raw_path": b"/mcp/"}
+        await self.app(scope, receive, send)
 
 
 __all__ = [
