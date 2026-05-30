@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from nexus_core.data.market import CompositeMarketData
-from nexus_core.data.providers import PriceBar, Quote
+from nexus_core.data.providers import PriceBar, Quote, market_status_from
 
 
 class _StaticProvider:
@@ -78,3 +78,25 @@ def test_returns_first_non_empty_history() -> None:
 def test_empty_history_when_all_miss() -> None:
     composite = CompositeMarketData([_StaticProvider(), _StaticProvider()])
     assert composite.get_price_history("SPY") == []
+
+
+def test_market_status_from_classifies_freshness() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    old = (datetime.now(UTC) - timedelta(days=3)).strftime("%Y-%m-%d")
+    assert market_status_from(today) == "current"
+    assert market_status_from(old) == "last_close"
+    assert market_status_from(None) is None
+    assert market_status_from("garbage") is None
+
+
+def test_composite_stamps_market_status_from_as_of() -> None:
+    old = "2000-01-03"  # a long-past session -> last_close
+    composite = CompositeMarketData(
+        [_StaticProvider(quote=Quote(symbol="SPY", price=540.0, as_of=old, source="yfinance"))]
+    )
+    quote = composite.get_quote("SPY")
+    assert quote is not None
+    assert quote.source == "yfinance"
+    assert quote.market_status == "last_close"

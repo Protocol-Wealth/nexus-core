@@ -77,6 +77,15 @@ class FredMacroData:
 
     def get_series(self, series_id: str) -> float | None:
         """Return the latest observed value for ``series_id``, or ``None``."""
+        observation = self.get_series_observation(series_id)
+        return observation[0] if observation is not None else None
+
+    def get_series_observation(self, series_id: str) -> tuple[float, str] | None:
+        """Return the latest ``(value, observation_date)`` for ``series_id``, or ``None``.
+
+        The observation date is the data point's own date (e.g. ``2026-05-28``),
+        which lets callers surface real provenance instead of the fetch time.
+        """
         if self._api_key is None:
             return None
         payload = self._fetch_observations(series_id)
@@ -84,13 +93,17 @@ class FredMacroData:
         if not isinstance(observations, list):
             return None
         for observation in observations:
-            value: Any = observation.get("value") if isinstance(observation, dict) else None
+            if not isinstance(observation, dict):
+                continue
+            value: Any = observation.get("value")
             if value in _MISSING_VALUES:
                 continue
             try:
-                return float(value)
+                parsed = float(value)
             except (TypeError, ValueError):
                 continue
+            date = observation.get("date")
+            return parsed, str(date) if date else ""
         return None
 
     def _fetch_observations(self, series_id: str) -> Any | None:

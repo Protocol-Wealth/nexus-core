@@ -46,6 +46,10 @@ class _FakeMacro:
     def get_series(self, series_id: str) -> float | None:
         return 4.31 if series_id == "DGS10" else None
 
+    def get_series_observation(self, series_id: str) -> tuple[float, str] | None:
+        value = self.get_series(series_id)
+        return (value, "2026-01-05") if value is not None else None
+
     def is_configured(self) -> bool:
         return self._configured
 
@@ -173,7 +177,10 @@ def test_economic_endpoint() -> None:
     with _rest_client() as client:
         response = client.get("/api/economic/DGS10")
     assert response.status_code == 200
-    assert response.json()["value"] == 4.31
+    body = response.json()
+    assert body["value"] == 4.31
+    assert body["as_of"] == "2026-01-05"  # observation date, not fetch time
+    assert body["source"] == "FRED"
 
 
 def test_economic_unconfigured_returns_503() -> None:

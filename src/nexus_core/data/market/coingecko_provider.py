@@ -85,7 +85,9 @@ class CoinGeckoMarketData:
             return None
         if value <= 0:
             return None
-        return Quote(symbol=symbol, price=value, timestamp=datetime.now(UTC).isoformat())
+        now = datetime.now(UTC).isoformat()
+        # Crypto trades 24/7, so the live price's as_of is effectively now.
+        return Quote(symbol=symbol, price=value, timestamp=now, as_of=now, source="coingecko")
 
     def get_price_history(
         self,
