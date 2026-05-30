@@ -20,6 +20,7 @@ from ..data.market import CoinGeckoMarketData
 from ..engine.benchmarks import (
     ASSET_COIN_IDS,
     BENCHMARK_COMPOSITIONS,
+    BenchmarkSeries,
     build_benchmark_series,
 )
 
@@ -29,6 +30,40 @@ _DISCLAIMER = (
     "Public market data — educational only, not investment advice. Benchmarks are "
     "buy-and-hold (no rebalancing), base-100 normalized; USDC is held at $1."
 )
+
+
+def fetch_benchmark_series(coingecko: CoinGeckoMarketData, days: int) -> list[BenchmarkSeries]:
+    """Base-100 buy-and-hold benchmark series over ``days`` (empty on no data).
+
+    Shared by the ``/api/benchmarks/series`` route and the LP vs-benchmark view.
+    Fetches the volatile assets from CoinGecko, aligns them index-wise (OHLC for
+    one ``days`` value returns same-length, same-timestamp series), holds USDC at
+    $1, and builds each composition.
+    """
+    closes: dict[str, list[float]] = {}
+    timestamps: list[str] = []
+    for asset in _CRYPTO_ASSETS:
+        bars = coingecko.get_price_history(ASSET_COIN_IDS[asset], days=days)
+        if bars:
+            closes[asset] = [b.close for b in bars]
+            if not timestamps or len(bars) > len(timestamps):
+                timestamps = [b.timestamp for b in bars]
+    if not closes:
+        return []
+
+    length = min(len(s) for s in closes.values())
+    closes = {a: s[:length] for a, s in closes.items()}
+    closes["USDC"] = [1.0] * length
+    timestamps = timestamps[:length]
+
+    out: list[BenchmarkSeries] = []
+    for name, weights in BENCHMARK_COMPOSITIONS.items():
+        if any(a not in closes for a in weights):  # skip if an asset failed to load
+            continue
+        bench = build_benchmark_series(name, weights, closes, timestamps)
+        if bench is not None:
+            out.append(bench)
+    return out
 
 
 def build_benchmarks_router(*, coingecko: CoinGeckoMarketData) -> APIRouter:
@@ -53,40 +88,19 @@ def build_benchmarks_router(*, coingecko: CoinGeckoMarketData) -> APIRouter:
         days: Annotated[int, Query(ge=1, le=365, description="Lookback window in days")] = 90,
     ) -> dict[str, Any]:
         """Base-100 return series + total return for every benchmark over ``days``."""
-        # Fetch the volatile assets; align index-wise (CoinGecko OHLC for one
-        # `days` value returns same-length, same-timestamp series across coins).
-        closes: dict[str, list[float]] = {}
-        timestamps: list[str] = []
-        for asset in _CRYPTO_ASSETS:
-            bars = coingecko.get_price_history(ASSET_COIN_IDS[asset], days=days)
-            if bars:
-                closes[asset] = [b.close for b in bars]
-                if not timestamps or len(bars) > len(timestamps):
-                    timestamps = [b.timestamp for b in bars]
-
-        if not closes:
+        built = fetch_benchmark_series(coingecko, days)
+        if not built:
             raise HTTPException(
                 status_code=503,
                 detail="Benchmark data unavailable: no price history from CoinGecko",
             )
-
-        # Align everything to the shortest fetched series; USDC = constant $1.
-        length = min(len(s) for s in closes.values())
-        closes = {a: s[:length] for a, s in closes.items()}
-        closes["USDC"] = [1.0] * length
-        timestamps = timestamps[:length]
-
-        built = []
-        for name, weights in BENCHMARK_COMPOSITIONS.items():
-            # Skip a benchmark if any of its assets failed to load.
-            if any(a not in closes for a in weights):
-                continue
-            bench = build_benchmark_series(name, weights, closes, timestamps)
-            if bench is not None:
-                built.append(asdict(bench))
-
         response.headers["Cache-Control"] = f"public, max-age={_BENCH_TTL}"
-        return {"days": days, "points": length, "benchmarks": built, "disclaimer": _DISCLAIMER}
+        return {
+            "days": days,
+            "points": len(built[0].points),
+            "benchmarks": [asdict(b) for b in built],
+            "disclaimer": _DISCLAIMER,
+        }
 
     return router
 
