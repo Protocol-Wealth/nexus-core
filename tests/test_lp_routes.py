@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from nexus_core.app.lp import build_lp_router
+from nexus_core.data.market import CoinGeckoMarketData
 from nexus_core.data.onchain import MerklClient, TatumClient, TheGraphClient
 
 _POSITION_DATA = {
@@ -60,6 +61,14 @@ def _merkl_handler(request: httpx.Request) -> httpx.Response:
     )
 
 
+# CoinGecko OHLC for the benchmark series: close 2000 → 3000 (+50%).
+_OHLC = [[1_000_000, 2000, 2100, 1900, 2000], [2_000_000, 2900, 3100, 2800, 3000]]
+
+
+def _cg() -> CoinGeckoMarketData:
+    return CoinGeckoMarketData(http_client=_mk(lambda _req: httpx.Response(200, json=_OHLC)))
+
+
 def _app(*, graph_key: str | None = "k") -> FastAPI:
     app = FastAPI()
     app.include_router(
@@ -67,6 +76,7 @@ def _app(*, graph_key: str | None = "k") -> FastAPI:
             thegraph=TheGraphClient(api_key=graph_key, http_client=_mk(_graph_handler)),
             tatum=TatumClient(api_key="k", http_client=_mk(_tatum_handler)),
             merkl=MerklClient(http_client=_mk(_merkl_handler)),
+            coingecko=_cg(),
         )
     )
     return app
@@ -121,7 +131,27 @@ def test_lp_missing_position_404() -> None:
             ),
             tatum=TatumClient(api_key="k", http_client=_mk(_tatum_handler)),
             merkl=MerklClient(http_client=_mk(_merkl_handler)),
+            coingecko=_cg(),
         )
     )
     r = TestClient(app).get("/api/lp/uniswap-v3/ethereum/999/analytics?price_token0_usd=1&price_token1_usd=1")
     assert r.status_code == 404
+
+
+def test_lp_vs_benchmark() -> None:
+    client = TestClient(_app())
+    r = client.get(
+        "/api/lp/uniswap-v3/ethereum/123/vs-benchmark?price_token0_usd=1&price_token1_usd=2000&days=90"
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["position"]["token_id"] == "123"
+    assert body["position"]["reward_apr"] == 4.0
+    assert body["position"]["uncollected_fees_source"] == "rpc_tokens_owed"
+    # Benchmarks from the OHLC (+50% ETH): ETH ~+50%, 50/50 ETH-USDC ~+25%.
+    returns = body["benchmarks"]["returns_pct"]
+    assert returns["ETH"] == 50.0
+    assert returns["ETH-USDC 50/50"] == 25.0
+    comp = body["comparison"]
+    assert comp["position_total_apr_estimate"] == body["position"]["total_apr_estimate"]
+    assert "note" in comp

@@ -191,7 +191,12 @@ def create_app(
     app.include_router(build_chain_router(tatum=TatumClient()))
     app.include_router(build_vaults_router(vaultsfyi=VaultsFyiClient()))
     app.include_router(
-        build_lp_router(thegraph=TheGraphClient(), tatum=TatumClient(), merkl=MerklClient())
+        build_lp_router(
+            thegraph=TheGraphClient(),
+            tatum=TatumClient(),
+            merkl=MerklClient(),
+            coingecko=CoinGeckoMarketData(),
+        )
     )
     app.include_router(build_benchmarks_router(coingecko=CoinGeckoMarketData()))
     app.include_router(build_snapshots_router())
