@@ -182,6 +182,34 @@ def test_planning_tool_rejects_identity_keys() -> None:
         )
 
 
+def test_server_masks_error_details() -> None:
+    # Belt-and-suspenders: an unexpected tool exception must not leak str(e).
+    server = build_server()
+    assert server._mask_error_details is True
+
+
+def _call_text(server: object, tool: str, args: dict[str, object]) -> str:
+    result = asyncio.run(server.call_tool(tool, args))  # type: ignore[attr-defined]
+    return str(result.content[0].text)
+
+
+def test_option_price_rejects_bad_inputs_preserves_bs_limits() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket())  # type: ignore[arg-type]
+    base = {"spot": 100, "strike": 90, "volatility": 0.25}
+    # Rejections (fail before the fix, which returned raw intrinsic).
+    for bad in ({"days": -30}, {"days": 5000}, {"spot": -5, "days": 30}, {"strike": 0, "days": 30}):
+        args = {**base, **bad}
+        body = json.loads(_call_text(server, "option_price", args))
+        assert "error" in body, bad
+    # BS limits must STILL work: days=0 (expiry intrinsic) and vol=0 (forward intrinsic).
+    for ok in ({"days": 0}, {"days": 30, "volatility": 0.0}):
+        body = json.loads(_call_text(server, "option_price", {**base, "days": 30, **ok}))
+        assert "error" not in body, ok
+        assert body["price"] >= 0.0
+
+
 def test_native_research_tools_carry_disclaimer() -> None:
     # The not-advice disclaimer must be present on the /mcp transport, not only
     # on the REST equivalents (RIA Marketing-Rule guarantee, CI-enforced).

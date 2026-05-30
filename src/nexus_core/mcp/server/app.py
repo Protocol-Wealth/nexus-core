@@ -27,6 +27,7 @@ Requires ``fastmcp>=2.0.0``. Install via::
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from typing import Any, Protocol
@@ -49,6 +50,11 @@ from ...engine.pricing import (
 )
 from ...engine.regime import RegimeEngine, RegimeResult
 from ...engine.scoring import ScoringFramework, format_structured
+
+logger = logging.getLogger(__name__)
+
+#: Upper bound on option tenor (days), mirroring the REST surface's le=1095.
+_MAX_OPTION_DAYS = 1095
 
 
 class ResponseFilter(Protocol):
@@ -106,7 +112,10 @@ def build_server(
     if FastMCP is None:
         raise ImportError("fastmcp is required. Install with: pip install nexus-core[mcp]")
 
-    mcp = FastMCP(name)
+    # mask_error_details=True: if any tool body ever raises an unexpected
+    # exception, FastMCP returns a generic ToolError instead of leaking str(e)
+    # (which could carry an upstream URL, key, or internal path) to the client.
+    mcp = FastMCP(name, mask_error_details=True)
     filters = filters or []
     disclaimer = disclaimer or (
         "For educational and research purposes only. Not investment advice. "
@@ -197,6 +206,32 @@ def _err(tool: str, message: str, filters: list[ResponseFilter], disclaimer: str
     )
 
 
+def _validate_option_inputs(
+    *,
+    spot: float | None = None,
+    strike: float | None = None,
+    days: int | None = None,
+    volatility: float | None = None,
+    min_days: int = 0,
+) -> str | None:
+    """Return an error message if any option input is out of range, else ``None``.
+
+    Preserves the valid Black-Scholes limits: ``days == 0`` (expiry-day intrinsic)
+    and ``volatility == 0`` (zero-vol forward intrinsic) stay allowed; only
+    negative / non-positive / oversized values are rejected. ``min_days=1`` is
+    used for the overlay tools, whose annualized figures divide by the tenor.
+    """
+    if spot is not None and spot <= 0.0:
+        return f"spot must be > 0 (got {spot})"
+    if strike is not None and strike <= 0.0:
+        return f"strike must be > 0 (got {strike})"
+    if days is not None and (days < min_days or days > _MAX_OPTION_DAYS):
+        return f"days must be in [{min_days}, {_MAX_OPTION_DAYS}] (got {days})"
+    if volatility is not None and volatility < 0.0:
+        return f"volatility must be >= 0 (got {volatility})"
+    return None
+
+
 def _annualized_vol(market: MarketDataProvider, symbol: str) -> float:
     """Annualized volatility from ~90d of daily closes; 0.30 fallback."""
     import math
@@ -262,6 +297,9 @@ def _register_equity_options_tools(
         spot: float, strike: float, days: int, volatility: float, kind: str = "call"
     ) -> str:
         """Educational Black-Scholes price + Greeks. ``kind``: 'call' or 'put'. Not advice."""
+        bad = _validate_option_inputs(spot=spot, strike=strike, days=days, volatility=volatility)
+        if bad is not None:
+            return _err("option_price", bad, filters, disclaimer)
         k: OptionKind = "call"
         if str(kind).lower().startswith("p"):
             k = "put"
@@ -283,6 +321,9 @@ def _register_equity_options_tools(
     @mcp.tool()
     def covered_call(symbol: str, strike: float, days: int) -> str:
         """Educational covered-call overlay illustration on a public ticker (live spot). Not advice."""
+        bad = _validate_option_inputs(strike=strike, days=days, min_days=1)
+        if bad is not None:
+            return _err("covered_call", bad, filters, disclaimer)
         quote = market.get_quote(symbol)
         if quote is None:
             return _err("covered_call", f"No quote for '{symbol}'", filters, disclaimer)
@@ -296,6 +337,9 @@ def _register_equity_options_tools(
     @mcp.tool()
     def cash_secured_put(symbol: str, strike: float, days: int) -> str:
         """Educational cash-secured-put overlay illustration on a public ticker. Not advice."""
+        bad = _validate_option_inputs(strike=strike, days=days, min_days=1)
+        if bad is not None:
+            return _err("cash_secured_put", bad, filters, disclaimer)
         quote = market.get_quote(symbol)
         if quote is None:
             return _err("cash_secured_put", f"No quote for '{symbol}'", filters, disclaimer)
@@ -312,6 +356,11 @@ def _register_equity_options_tools(
     @mcp.tool()
     def collar(symbol: str, put_strike: float, call_strike: float, days: int) -> str:
         """Educational protective-collar overlay illustration on a public ticker. Not advice."""
+        bad = _validate_option_inputs(strike=put_strike, days=days, min_days=1) or _validate_option_inputs(
+            strike=call_strike, days=days, min_days=1
+        )
+        if bad is not None:
+            return _err("collar", bad, filters, disclaimer)
         quote = market.get_quote(symbol)
         if quote is None:
             return _err("collar", f"No quote for '{symbol}'", filters, disclaimer)
@@ -338,7 +387,11 @@ def _register_crypto_options_tools(
                 filters,
                 disclaimer,
             )
-        instruments = deribit.list_option_instruments(cur)
+        try:
+            instruments = deribit.list_option_instruments(cur)
+        except Exception:
+            logger.exception("crypto_option_instruments failed for %s", cur)
+            return _err("crypto_option_instruments", "upstream options data unavailable", filters, disclaimer)
         return _ok(
             "crypto_option_instruments",
             {"currency": cur, "count": len(instruments), "instruments": [asdict(i) for i in instruments]},
@@ -349,7 +402,11 @@ def _register_crypto_options_tools(
     @mcp.tool()
     def crypto_option_ticker(instrument_name: str) -> str:
         """Mark price, implied vol + Greeks for a Deribit option instrument."""
-        ticker = deribit.get_option_ticker(instrument_name)
+        try:
+            ticker = deribit.get_option_ticker(instrument_name)
+        except Exception:
+            logger.exception("crypto_option_ticker failed for %s", instrument_name)
+            return _err("crypto_option_ticker", "upstream options data unavailable", filters, disclaimer)
         if ticker is None:
             return _err("crypto_option_ticker", f"No ticker for '{instrument_name}'", filters, disclaimer)
         return _ok("crypto_option_ticker", asdict(ticker), filters, disclaimer)

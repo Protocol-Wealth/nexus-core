@@ -61,10 +61,11 @@ class DefiLlamaClient:
         self._http_client = http_client
         self._timeout = timeout
 
-    def _get(self, endpoint: str) -> Any | None:
+    def _get(self, endpoint: str, *, params: dict[str, Any] | None = None) -> Any | None:
         try:
             return fetch_json(
                 f"{_BASE_URL}{endpoint}",
+                params=params,
                 headers={"Accept": "application/json"},
                 client=self._http_client,
                 timeout=self._timeout,
@@ -72,6 +73,51 @@ class DefiLlamaClient:
         except (httpx.HTTPError, ValueError) as exc:
             logger.debug("DefiLlama fetch %s failed: %s", endpoint, exc)
             return None
+
+    @staticmethod
+    def _current_tvl(payload: dict[str, Any]) -> float | None:
+        """Derive current TVL from a ``/protocol/{slug}`` detail payload.
+
+        DefiLlama's detail endpoint does not expose a scalar ``tvl``; it nests
+        the figure under ``currentChainTvls`` (a chain -> USD dict) plus a long
+        ``tvl[]`` time series. Sum the base-chain entries (keys without a hyphen,
+        to skip the ``-borrowed`` / ``-staking`` / ``-pool2`` breakdown rows);
+        fall back to the latest ``tvl[]`` point, then to a legacy scalar.
+        """
+        cct = payload.get("currentChainTvls")
+        if isinstance(cct, dict):
+            total = sum(
+                float(v)
+                for k, v in cct.items()
+                if isinstance(k, str) and "-" not in k and isinstance(v, (int, float))
+            )
+            if total > 0:
+                return total
+        series = payload.get("tvl")
+        if isinstance(series, list) and series:
+            last = series[-1]
+            if isinstance(last, dict):
+                return DefiLlamaClient._as_float(last.get("totalLiquidityUSD"))
+            return None
+        return DefiLlamaClient._as_float(series) if not isinstance(series, list) else None
+
+    @staticmethod
+    def _detail_chains(payload: dict[str, Any]) -> list[str]:
+        """Chains for a detail payload: top-level ``chains`` if present, else the
+        distinct base-chain names derived from ``currentChainTvls`` keys."""
+        chains = payload.get("chains")
+        if isinstance(chains, list) and chains:
+            return list(chains)
+        cct = payload.get("currentChainTvls")
+        if isinstance(cct, dict):
+            seen: list[str] = []
+            for key in cct:
+                if isinstance(key, str):
+                    base = key.split("-")[0]
+                    if base and base not in seen:
+                        seen.append(base)
+            return seen
+        return []
 
     @staticmethod
     def _as_float(value: Any, default: float | None = None) -> float | None:
@@ -118,17 +164,27 @@ class DefiLlamaClient:
         return protocols
 
     def get_protocol(self, slug: str) -> dict[str, Any] | None:
-        """Return a single protocol's detail by its DefiLlama ``slug``."""
-        payload = self._get(f"/protocol/{slug}")
+        """Return a single protocol's detail by its DefiLlama ``slug``.
+
+        The ``excludeTotalDataChart*`` params drop the multi-MB ``tvl[]`` time
+        series DefiLlama would otherwise return (some protocols are ~10 MB,
+        which previously timed out); ``currentChainTvls`` — which carries the
+        current TVL we need — is still included.
+        """
+        payload = self._get(
+            f"/protocol/{slug}",
+            params={
+                "excludeTotalDataChart": "true",
+                "excludeTotalDataChartBreakdown": "true",
+            },
+        )
         if not isinstance(payload, dict):
             return None
-        tvl_field = payload.get("tvl")
-        chains = payload.get("chains")
         return {
             "name": payload.get("name"),
             "symbol": payload.get("symbol"),
-            "tvl": self._as_float(tvl_field) if not isinstance(tvl_field, list) else None,
-            "chains": list(chains) if isinstance(chains, list) else [],
+            "tvl": self._current_tvl(payload),
+            "chains": self._detail_chains(payload),
             "category": payload.get("category") or "Other",
             "url": payload.get("url") or "",
         }
