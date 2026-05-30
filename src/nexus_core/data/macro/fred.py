@@ -77,6 +77,17 @@ class FredMacroData:
                 client=self._http_client,
                 timeout=self._timeout,
             )
+        except httpx.HTTPStatusError as exc:
+            # A 4xx here usually means an invalid/expired FRED_API_KEY (FRED
+            # returns 400 for a bad key). Log it at WARNING so the cause is
+            # visible instead of silently surfacing as generic "No data".
+            logger.warning(
+                "FRED upstream %s for %s — check FRED_API_KEY: %s",
+                exc.response.status_code,
+                series_id,
+                exc.response.text[:200],
+            )
+            return None
         except (httpx.HTTPError, ValueError) as exc:
             logger.debug("FRED fetch for %s failed: %s", series_id, exc)
             return None

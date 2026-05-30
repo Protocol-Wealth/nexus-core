@@ -67,14 +67,54 @@ def test_get_protocol_detail() -> None:
     assert detail["tvl"] == 12_000_000_000.0
 
 
-def test_get_protocol_with_list_tvl_history_yields_none_tvl() -> None:
-    # Some /protocol/{slug} payloads return tvl as a historical series, not a scalar.
+def test_get_protocol_derives_tvl_from_current_chain_tvls() -> None:
+    # The real /protocol/{slug} shape: TVL lives in currentChainTvls, not a scalar.
+    # Base-chain entries are summed; -borrowed/-staking breakdown rows are skipped.
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"name": "X", "tvl": [{"date": 1, "totalLiquidityUSD": 1}]})
+        # The heavy tvl[] series must be excluded via query params.
+        assert request.url.params.get("excludeTotalDataChart") == "true"
+        assert request.url.params.get("excludeTotalDataChartBreakdown") == "true"
+        return httpx.Response(
+            200,
+            json={
+                "name": "Aave",
+                "symbol": "AAVE",
+                "category": None,
+                "chains": [],
+                "currentChainTvls": {
+                    "Ethereum": 20_000_000_000,
+                    "Ethereum-borrowed": 5_000_000_000,
+                    "Polygon": 1_000_000_000,
+                    "Polygon-borrowed": 300_000_000,
+                },
+                "tvl": [{"date": 1, "totalLiquidityUSD": 1}],
+            },
+        )
+
+    detail = DefiLlamaClient(http_client=_client(handler)).get_protocol("aave")
+    assert detail is not None
+    assert detail["tvl"] == 21_000_000_000.0  # base chains only, borrowed excluded
+    assert detail["chains"] == ["Ethereum", "Polygon"]  # derived from currentChainTvls keys
+    assert detail["category"] == "Other"  # graceful default for missing category
+
+
+def test_get_protocol_falls_back_to_latest_tvl_point() -> None:
+    # No currentChainTvls — take the latest point of the tvl[] series.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "name": "X",
+                "tvl": [
+                    {"date": 1, "totalLiquidityUSD": 100},
+                    {"date": 2, "totalLiquidityUSD": 250},
+                ],
+            },
+        )
 
     detail = DefiLlamaClient(http_client=_client(handler)).get_protocol("x")
     assert detail is not None
-    assert detail["tvl"] is None
+    assert detail["tvl"] == 250.0
 
 
 def test_get_chains_sorts_and_filters() -> None:
