@@ -68,6 +68,7 @@ _PAGE = """\
   </p>
 
   <div class="grid">
+    {mcp_guide_card}
     <a class="card" href="/docs">
       <div class="t">API documentation &rarr;</div>
       <div class="d">Interactive OpenAPI / Swagger explorer</div>
@@ -117,7 +118,15 @@ _PAGE = """\
 
 _MCP_LINE = (
     '<li><code>POST /mcp</code> — Model Context Protocol endpoint '
-    "(connect any MCP-compatible AI client)</li>"
+    '(connect any MCP-compatible AI client — <a href="/mcp-guide" '
+    'style="color:#c7d2fe">setup guide</a>)</li>'
+)
+
+_MCP_GUIDE_CARD = (
+    '<a class="card" href="/mcp-guide">'
+    '<div class="t">MCP setup guide &rarr;</div>'
+    '<div class="d">Connect Claude Desktop or any MCP client — hosted or local</div>'
+    "</a>"
 )
 
 
@@ -126,12 +135,13 @@ def render_landing(*, mcp_enabled: bool) -> str:
 
     Args:
         mcp_enabled: Whether the MCP HTTP transport is mounted; controls
-            whether the ``/mcp`` endpoint is advertised.
+            whether the ``/mcp`` endpoint and its setup guide are advertised.
     """
     return _PAGE.format(
         repo=_REPO_URL,
         version=__version__,
         mcp_line=_MCP_LINE if mcp_enabled else "",
+        mcp_guide_card=_MCP_GUIDE_CARD if mcp_enabled else "",
     )
 
 
