@@ -58,6 +58,7 @@ from .benchmarks import build_benchmarks_router
 from .chain import build_chain_router
 from .landing import render_landing
 from .lp import build_lp_router
+from .mcp_guide import render_mcp_guide
 from .mcp_mount import build_mcp_app
 from .options import build_options_router
 from .ratelimit import RateLimitMiddleware
@@ -217,6 +218,11 @@ def create_app(
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     def landing() -> str:
         return render_landing(mcp_enabled=mcp_enabled)
+
+    @app.get("/mcp-guide", response_class=HTMLResponse, include_in_schema=False)
+    def mcp_guide() -> str:
+        """How to connect an MCP client (hosted or local) to the server."""
+        return render_mcp_guide()
 
     @app.get("/health/db", include_in_schema=False)
     async def health_db() -> dict[str, str]:
