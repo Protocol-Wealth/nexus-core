@@ -27,7 +27,7 @@ try:
     import pandas as pd
     from pypfopt import EfficientFrontier, HRPOpt, expected_returns, risk_models
 except ImportError:  # pragma: no cover
-    pd = EfficientFrontier = HRPOpt = expected_returns = risk_models = None  # type: ignore[assignment]
+    pd = EfficientFrontier = HRPOpt = expected_returns = risk_models = None
 
 
 @dataclass
