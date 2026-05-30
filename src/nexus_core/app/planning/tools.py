@@ -29,14 +29,28 @@ from ...engine.planning import (
     InfeasiblePlanError,
     compute_glide_path,
     correlation_matrix,
+    monte_carlo_decumulation,
     tax_aware_withdrawal,
 )
-from ...engine.planning.regime import path_cache_key, to_generic_regime, transition_matrix
+from ...engine.planning.regime import (
+    path_cache_key,
+    seed_from_cache_key,
+    to_generic_regime,
+    transition_matrix,
+)
 from ...engine.regime import RegimeEngine
 from .contract import PlanningInfeasibleError, PlanningInputError
 from .universe import ASSET_UNIVERSE, proxy_tickers, universe_ids
 
 _MAX_SEED = 2**31 - 1
+_MC_MAX_PATHS = 50000
+_RETURN_MODELS = (
+    "multivariate_normal",
+    "student_t",
+    "block_bootstrap",
+    "markov_regime",
+    "emf_regime",
+)
 
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -292,6 +306,177 @@ def _regime_return_generator_tool(
     }
 
 
+def _num_field(asset: dict[str, Any], key: str) -> float:
+    value = asset.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise PlanningInputError(f"assetClass '{asset.get('id')}' field '{key}' must be a number")
+    return float(value)
+
+
+def _blended_weights(
+    accounts: Any, asset_ids: list[str]
+) -> tuple[list[float], float]:
+    """Validate accounts and return (blended portfolio weights, total balance)."""
+    if not isinstance(accounts, list) or not accounts:
+        raise PlanningInputError("accounts must be a non-empty list")
+    id_set = set(asset_ids)
+    weighted = dict.fromkeys(asset_ids, 0.0)
+    total = 0.0
+    for acct in accounts:
+        if not isinstance(acct, dict):
+            raise PlanningInputError("each account must be an object")
+        balance = acct.get("balance")
+        if isinstance(balance, bool) or not isinstance(balance, (int, float)) or balance < 0:
+            raise PlanningInputError("account balance must be a non-negative number")
+        allocation = acct.get("allocation")
+        if not isinstance(allocation, dict) or not allocation:
+            raise PlanningInputError("account allocation must be a non-empty object")
+        weight_sum = 0.0
+        for asset_id, weight in allocation.items():
+            if asset_id not in id_set:
+                raise PlanningInputError(
+                    f"account allocation references undeclared asset class '{asset_id}'"
+                )
+            if isinstance(weight, bool) or not isinstance(weight, (int, float)):
+                raise PlanningInputError("allocation weights must be numbers")
+            weight_sum += weight
+            weighted[asset_id] += float(balance) * float(weight)
+        if abs(weight_sum - 1.0) > 1e-6:
+            raise PlanningInputError(
+                f"allocation for {acct.get('type')} account sums to {weight_sum:.4f}, must sum to 1"
+            )
+        total += float(balance)
+    if total <= 0:
+        raise PlanningInfeasibleError("total portfolio balance must be positive")
+    return [weighted[aid] / total for aid in asset_ids], total
+
+
+def _net_spend_schedule(
+    *, current_age: int, years: int, annual_spend: float, spend_cola: float, body: dict[str, Any]
+) -> list[float]:
+    """Per-year net withdrawal = COLA-grown spend minus active guaranteed income."""
+    incomes = body.get("guaranteedIncome", [])
+    if not isinstance(incomes, list):
+        raise PlanningInputError("guaranteedIncome must be a list")
+    parsed: list[tuple[float, int, float]] = []
+    for income in incomes:
+        if not isinstance(income, dict):
+            raise PlanningInputError("each guaranteedIncome must be an object")
+        amount = income.get("annualAmount")
+        start = income.get("startAge")
+        cola = income.get("colaRate", 0.0)
+        if (
+            isinstance(amount, bool) or not isinstance(amount, (int, float))
+            or isinstance(start, bool) or not isinstance(start, int)
+            or isinstance(cola, bool) or not isinstance(cola, (int, float))
+        ):
+            raise PlanningInputError("guaranteedIncome needs numeric annualAmount, integer startAge, numeric colaRate")
+        parsed.append((float(amount), start, float(cola)))
+
+    schedule: list[float] = []
+    for year in range(years):
+        age = current_age + year
+        spend = annual_spend * (1.0 + spend_cola) ** year
+        income_total = sum(
+            amount * (1.0 + cola) ** (age - start) for amount, start, cola in parsed if age >= start
+        )
+        schedule.append(spend - income_total)
+    return schedule
+
+
+def _build_correlation(
+    body: dict[str, Any], asset_ids: list[str], market: MarketDataProvider
+) -> list[list[float]]:
+    """Use the client's correlations if given, else self-estimate via the same
+    Ledoit-Wolf estimator correlation_matrix exposes (proxy-mapped ids only;
+    unmapped ids default to uncorrelated)."""
+    provided = body.get("correlations")
+    if isinstance(provided, dict):
+        return [
+            [1.0 if a == b else float(provided.get(a, {}).get(b, 0.0)) for b in asset_ids]
+            for a in asset_ids
+        ]
+    if provided is not None:
+        raise PlanningInputError("correlations must be an object or null")
+
+    estimated: dict[str, dict[str, float]] = {}
+    proxies = proxy_tickers()
+    mapped = {aid: proxies[aid] for aid in asset_ids if aid in proxies}
+    if len(mapped) >= 2:
+        try:
+            returns_by_id, _ = _fetch_aligned_returns(
+                market, mapped, lookback=_DEFAULT_LOOKBACK_DAYS
+            )
+            estimated = correlation_matrix(returns_by_id, shrinkage=True)
+        except PlanningInfeasibleError:
+            estimated = {}
+    return [
+        [
+            1.0
+            if a == b
+            else float(estimated.get(a, {}).get(b, 0.0))
+            for b in asset_ids
+        ]
+        for a in asset_ids
+    ]
+
+
+def _monte_carlo_decumulation_tool(
+    body: dict[str, Any], market: MarketDataProvider, regime_engine: RegimeEngine
+) -> dict[str, Any]:
+    """``monte_carlo_decumulation`` — the primary decumulation simulation."""
+    current_age = _as_int(body, "currentAge")
+    horizon_age = _as_int(body, "horizonAge")
+    if not 0 < current_age < horizon_age <= 120:
+        raise PlanningInputError("ages must satisfy 0 < currentAge < horizonAge <= 120")
+    years = horizon_age - current_age
+
+    return_model = _as_str(body, "returnModel")
+    if return_model not in _RETURN_MODELS:
+        raise PlanningInputError(f"returnModel must be one of {', '.join(_RETURN_MODELS)}")
+
+    asset_classes = _validate_asset_classes(body, require_lambda=return_model == "emf_regime")
+    asset_ids = [str(a["id"]) for a in asset_classes]
+    if len(set(asset_ids)) != len(asset_ids):
+        raise PlanningInputError("asset class ids must be unique")
+    means = [_num_field(a, "expectedReturn") for a in asset_classes]
+    vols = [_num_field(a, "volatility") for a in asset_classes]
+    if any(v < 0 for v in vols):
+        raise PlanningInputError("asset volatility must be non-negative")
+    lambdas = [float(a.get("lambda", 0.0)) if isinstance(a.get("lambda"), (int, float)) else 0.0 for a in asset_classes]
+
+    weights, initial_balance = _blended_weights(body.get("accounts"), asset_ids)
+    annual_spend = _as_number(body, "annualSpend")
+    if annual_spend < 0:
+        raise PlanningInputError("annualSpend must be non-negative")
+    spend_cola = body.get("spendColaRate", 0.0)
+    if isinstance(spend_cola, bool) or not isinstance(spend_cola, (int, float)):
+        raise PlanningInputError("spendColaRate must be a number")
+    net_spend = _net_spend_schedule(
+        current_age=current_age, years=years, annual_spend=annual_spend,
+        spend_cola=float(spend_cola), body=body,
+    )
+
+    paths = body.get("paths", 10000)
+    if isinstance(paths, bool) or not isinstance(paths, int) or not 1 <= paths <= _MC_MAX_PATHS:
+        raise PlanningInputError(f"paths must be an integer in [1, {_MC_MAX_PATHS}]")
+
+    correlation = _build_correlation(body, asset_ids, market)
+    seed_used = _resolve_seed(body)
+    cache_seed = seed_from_cache_key(body.get("pathCacheKey"))
+    regime_seed = cache_seed if cache_seed is not None else seed_used
+    current_regime = "expansion"
+    if return_model == "emf_regime":
+        current_regime = to_generic_regime(regime_engine.classify().regime)
+
+    return monte_carlo_decumulation(
+        years=years, weights=weights, means=means, vols=vols, lambdas=lambdas,
+        correlation=correlation, initial_balance=initial_balance, net_spend_by_year=net_spend,
+        return_model=return_model, paths=paths, seed=seed_used, regime_seed=regime_seed,
+        current_regime=current_regime,
+    )
+
+
 def build_tool_handlers(
     *, market: MarketDataProvider, regime_engine: RegimeEngine
 ) -> dict[str, ToolHandler]:
@@ -309,7 +494,11 @@ def build_tool_handlers(
     def regime_return_generator_tool(body: dict[str, Any]) -> dict[str, Any]:
         return _regime_return_generator_tool(body, regime_engine)
 
+    def monte_carlo_decumulation_tool(body: dict[str, Any]) -> dict[str, Any]:
+        return _monte_carlo_decumulation_tool(body, market, regime_engine)
+
     return {
+        "monte_carlo_decumulation": monte_carlo_decumulation_tool,
         "glide_path": glide_path_tool,
         "tax_aware_withdrawal": tax_aware_withdrawal_tool,
         "correlation_matrix": correlation_matrix_tool,
