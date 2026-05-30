@@ -113,3 +113,69 @@ def test_only_supplied_groups_register() -> None:
     assert "current_regime" not in names
     assert "defi_protocols" not in names
     assert "crypto_option_instruments" not in names
+
+
+def test_extra_tools_register() -> None:
+    def _planner(body: dict) -> str:  # type: ignore[type-arg]
+        return '{"ok": true}'
+
+    server = build_server(extra_tools=[("my_planner", "desc", _planner)])
+    assert "my_planner" in _tool_names(server)
+
+
+_PLANNING_TOOL_IDS = {
+    "monte_carlo_decumulation",
+    "glide_path",
+    "tax_aware_withdrawal",
+    "correlation_matrix",
+    "capital_market_assumptions",
+    "regime_return_generator",
+}
+
+
+def _configured_server() -> object:
+    # build_configured_server wires the 6 planning tools via extra_tools.
+    from nexus_core.app.mcp_mount import build_configured_server
+
+    return build_configured_server(
+        regime_engine=_FakeRegime(),  # type: ignore[arg-type]
+        market=_FakeMarket(),  # type: ignore[arg-type]
+        macro=_FakeMacro(),  # type: ignore[arg-type]
+    )
+
+
+def test_planning_tools_register_natively() -> None:
+    # The 6 planning tools must appear in tools/list over the MCP transport,
+    # alongside the research tools — not only on the REST gateway.
+    names = _tool_names(_configured_server())
+    assert names >= _PLANNING_TOOL_IDS
+    assert "score_asset" in names  # research tools still present
+
+
+def test_planning_tool_call_echoes_contract_version() -> None:
+    server = _configured_server()
+    body = {
+        "currentAge": 40,
+        "retirementAge": 65,
+        "horizonAge": 95,
+        "startEquityWeight": 0.8,
+        "endEquityWeight": 0.4,
+        "shape": "linear",
+    }
+    result = asyncio.run(server.call_tool("glide_path", {"body": body}))  # type: ignore[attr-defined]
+    text = result.content[0].text
+    assert '"contractVersion": "0.1.0"' in text
+    assert "equityWeightByAge" in text
+
+
+def test_planning_tool_rejects_identity_keys() -> None:
+    from fastmcp.exceptions import ToolError
+
+    server = _configured_server()
+    with pytest.raises(ToolError, match="identity"):
+        asyncio.run(
+            server.call_tool(  # type: ignore[attr-defined]
+                "glide_path",
+                {"body": {"currentAge": 40, "email": "a@b.com"}},
+            )
+        )

@@ -83,6 +83,23 @@ def test_mcp_guide_connection_details() -> None:
     assert "not investment advice" in html.lower()
 
 
+def test_mcp_guide_documents_pwplan_core_integration() -> None:
+    html = render_mcp_guide()
+    assert "Connecting pwplan-core to nexus-core" in html
+    # All six planning tool ids are listed for the browser consumer.
+    for tool_id in (
+        "monte_carlo_decumulation",
+        "glide_path",
+        "tax_aware_withdrawal",
+        "correlation_matrix",
+        "capital_market_assumptions",
+        "regime_return_generator",
+    ):
+        assert tool_id in html, tool_id
+    assert '"contractVersion": "0.1.0"' in html  # version handshake documented
+    assert "retirementAge" in html  # the MC contract delta is called out
+
+
 def test_landing_advertises_guide_when_mcp_enabled() -> None:
     assert "/mcp-guide" in render_landing(mcp_enabled=True)
     assert "MCP setup guide" in render_landing(mcp_enabled=True)
