@@ -60,6 +60,7 @@ from .landing import render_landing
 from .lp import build_lp_router
 from .mcp_guide import render_mcp_guide
 from .mcp_mount import build_mcp_app
+from .mcp_oauth import MCPAuthGate, build_oauth_router
 from .options import build_options_router
 from .planning import build_planning_router
 from .ratelimit import RateLimitMiddleware
@@ -180,6 +181,11 @@ def create_app(
         if origin.strip()
     ]
 
+    # Innermost: the MCP transport's transparent-OAuth gate. 401s unauthenticated
+    # /mcp transport requests when a signing key is configured; a no-op otherwise.
+    # Never touches /mcp/tools (planning), /api/*, or /mcp-guide.
+    app.add_middleware(MCPAuthGate)
+
     # Added last → outermost: CORS wraps rate-limit responses too, and handles
     # preflight before the limiter sees the request.
     app.add_middleware(
@@ -216,6 +222,9 @@ def create_app(
     # Planning tool gateway. Included before the FastMCP `/mcp` mount (below) so
     # the explicit `/mcp/tools/...` routes take precedence over the transport.
     app.include_router(build_planning_router(market=market))
+    # Transparent OAuth for the MCP transport (claude.ai connector handshake).
+    # These endpoints are public; the gate above protects only the /mcp transport.
+    app.include_router(build_oauth_router())
 
     mcp_enabled = mcp_app is not None
 
