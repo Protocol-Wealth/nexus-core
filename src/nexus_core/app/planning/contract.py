@@ -9,8 +9,8 @@ Defines the versioned contract shared with the pwplan-core consumer:
 - PII rejection — the public engine is **PII-free by construction**. It accepts
   only de-identified planning inputs (age, not date of birth). Any identity-
   shaped key anywhere in a request body is rejected fail-closed.
-- Error types — :class:`PlanningBadRequest` (HTTP 400, malformed/invalid input)
-  and :class:`PlanningInfeasible` (HTTP 422, a well-formed but unsatisfiable
+- Error types — :class:`PlanningInputError` (HTTP 400, malformed/invalid input)
+  and :class:`PlanningInfeasibleError` (HTTP 422, a well-formed but unsatisfiable
   plan). Their messages are surfaced verbatim in the consumer's UI, so they are
   written to be human-readable.
 """

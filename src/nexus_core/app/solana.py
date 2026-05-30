@@ -17,13 +17,14 @@ from typing import Annotated, Any
 from fastapi import APIRouter, HTTPException, Path, Query, Response
 
 from ..data.onchain import JupiterClient, is_solana_mint
+from ..disclaimers import TERSE
 
 _PRICE_TTL = 60
 _MAX_BATCH = 50
-_DISCLAIMER = (
-    "Public market data — educational only, not investment advice. Solana token "
-    "prices are Jupiter v3 derived prices (aggregated from on-chain DEX liquidity)."
+_METHODOLOGY = (
+    "Solana token prices are Jupiter v3 derived prices (aggregated from on-chain DEX liquidity)."
 )
+_DISCLAIMER = f"{TERSE} {_METHODOLOGY}"
 
 
 def build_solana_router(*, jupiter: JupiterClient) -> APIRouter:

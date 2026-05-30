@@ -80,7 +80,7 @@ def test_mcp_guide_connection_details() -> None:
     assert "nexusmcp.site/mcp" in html  # hosted endpoint
     assert "nexus-core mcp" in html  # local stdio command
     assert "claude_desktop_config" in html  # Claude Desktop setup
-    assert "not investment advice" in html.lower()
+    assert "not investment, tax, legal, or financial advice" in html.lower()
 
 
 def test_mcp_guide_documents_pwplan_core_integration() -> None:

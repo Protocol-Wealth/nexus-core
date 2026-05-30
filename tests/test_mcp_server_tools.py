@@ -166,6 +166,7 @@ def test_planning_tool_call_echoes_contract_version() -> None:
     text = result.content[0].text
     assert '"contractVersion": "0.1.0"' in text
     assert "equityWeightByAge" in text
+    assert "not investment, tax, legal, or financial advice" in text.lower()
 
 
 def test_planning_tool_rejects_identity_keys() -> None:
@@ -179,3 +180,18 @@ def test_planning_tool_rejects_identity_keys() -> None:
                 {"body": {"currentAge": 40, "email": "a@b.com"}},
             )
         )
+
+
+def test_native_research_tools_carry_disclaimer() -> None:
+    # The not-advice disclaimer must be present on the /mcp transport, not only
+    # on the REST equivalents (RIA Marketing-Rule guarantee, CI-enforced).
+    server = _configured_server()
+    cases = [
+        ("get_quote", {"symbol": "AAPL"}),
+        ("current_regime", {}),
+        ("option_price", {"spot": 100, "strike": 100, "days": 30, "volatility": 0.3}),
+    ]
+    for tool, args in cases:
+        result = asyncio.run(server.call_tool(tool, args))  # type: ignore[attr-defined]
+        text = result.content[0].text.lower()
+        assert "not investment, tax, legal, or financial advice" in text, tool

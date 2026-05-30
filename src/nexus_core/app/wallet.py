@@ -16,9 +16,11 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Path, Response
 
 from ..data.onchain import DeBankClient, is_evm_address
+from ..disclaimers import TERSE
 
 _WALLET_TTL = 300
-_DISCLAIMER = "Anonymous public on-chain data — educational only, not investment advice."
+_METHODOLOGY = "Anonymous public on-chain data."
+_DISCLAIMER = f"{TERSE} {_METHODOLOGY}"
 
 
 def build_wallet_router(*, debank: DeBankClient) -> APIRouter:

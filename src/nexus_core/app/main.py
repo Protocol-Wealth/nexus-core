@@ -53,6 +53,7 @@ from ..data.onchain import (
     VaultsFyiClient,
 )
 from ..data.providers import MacroDataProvider, MarketDataProvider
+from ..disclaimers import FULL as _FULL_DISCLAIMER
 from ..engine.regime import RegimeEngine
 from .benchmarks import build_benchmarks_router
 from .chain import build_chain_router
@@ -73,7 +74,7 @@ from .wallet import build_wallet_router
 
 logger = logging.getLogger(__name__)
 
-_DESCRIPTION = """\
+_DESCRIPTION = f"""\
 Open, regime-adaptive financial analysis — market data, macro signals, and
 regime classification. Public and read-only: no account, no API key, no
 authentication required.
@@ -82,7 +83,7 @@ This is the analytical substrate of the [Protocol Wealth](https://protocolwealth
 research engine, extracted under Apache-2.0. It carries no client data and no
 advisory workflows.
 
-*For educational and research purposes only. Not investment advice.*
+*{_FULL_DISCLAIMER}*
 """
 
 

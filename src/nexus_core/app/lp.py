@@ -37,16 +37,17 @@ from ..data.onchain import (
     TatumClient,
     TheGraphClient,
 )
+from ..disclaimers import TERSE
 from ..engine.lp import PositionAnalytics, analyze_uniswap_v3_position
 from .benchmarks import fetch_benchmark_series
 
 _LP_TTL = 60
-_DISCLAIMER = (
-    "Anonymous public on-chain data — educational only, not investment advice. "
-    "Impermanent loss is vs holding the deposited token amounts at current prices; "
-    "fee APR is a pool-average estimate; uncollected fees are as of the position's "
-    "last interaction; reward APR is from Merkl liquidity incentives."
+_METHODOLOGY = (
+    "Anonymous public on-chain data. Impermanent loss is vs holding the deposited token "
+    "amounts at current prices; fee APR is a pool-average estimate; uncollected fees are "
+    "as of the position's last interaction; reward APR is from Merkl liquidity incentives."
 )
+_DISCLAIMER = f"{TERSE} {_METHODOLOGY}"
 _COMPARISON_NOTE = (
     "Impermanent loss is the position's value vs holding its OWN deposited tokens "
     "(at current prices); fee/total APR is an annualized estimated yield; benchmark "

@@ -66,7 +66,7 @@ def test_score_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     assert body["total_checks"] == 8
     assert len(body["checks"]) == 8
     assert body["tier"]
-    assert "not investment advice" in body["disclaimer"].lower()
+    assert "not investment, tax, legal, or financial advice" in body["disclaimer"].lower()
     assert r.headers["cache-control"] == "public, max-age=1800"
     by_name = {c["name"]: c for c in body["checks"]}
     # The injected fundamentals make CROIC + F-Score evaluate (and pass).
@@ -85,3 +85,7 @@ def test_score_without_fundamentals(monkeypatch: pytest.MonkeyPatch) -> None:
     assert body["total_checks"] == 8
     by_name = {c["name"]: c for c in body["checks"]}
     assert by_name["CROIC"]["passed"] is None
+    # Compliance: a sparsely-evaluable subject must NOT get a verdict-shaped tier.
+    assert body["total_evaluated"] < 4
+    assert body["tier"] == "NOT APPLICABLE"
+    assert body["tier_note"] and "insufficient" in body["tier_note"].lower()

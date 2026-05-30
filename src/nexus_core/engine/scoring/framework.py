@@ -26,6 +26,13 @@ from .checks import Check, CheckResult
 from .explanation import ScoreExplanation, build_score_explanation
 from .tiers import ConfidenceTier, classify_tier
 
+#: Minimum fraction of checks that must produce a pass/fail before a confidence
+#: tier is emitted. Below this, the result is reported as NOT APPLICABLE rather
+#: than a verdict-shaped label — a subject the framework cannot meaningfully
+#: evaluate (e.g. an ETF/crypto with no SEC fundamentals) must not read as a
+#: negative call (SEC Rule 206(4)-1 / Marketing Rule).
+_MIN_EVALUATED_FRACTION = 0.5
+
 
 @dataclass
 class ScoreResult:
@@ -58,6 +65,7 @@ class ScoreResult:
     total_evaluated: int
     total_checks: int
     tier: ConfidenceTier
+    tier_note: str | None = None
     enhancements: dict[str, Any] = field(default_factory=dict)
     layer_assignment: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -72,6 +80,7 @@ class ScoreResult:
             "total_evaluated": self.total_evaluated,
             "total_checks": self.total_checks,
             "tier": self.tier.value,
+            "tier_note": self.tier_note,
             "enhancements": self.enhancements,
             "layer_assignment": self.layer_assignment,
             "metadata": self.metadata,
@@ -148,7 +157,19 @@ class ScoringFramework:
         total_evaluated = sum(1 for r in results if r.passed is not None)
         total_passed = sum(1 for r in results if r.passed is True)
 
-        tier = classify_tier(total_passed, total_checks)
+        # Compliance gate: never emit a verdict-shaped tier for a subject the
+        # framework cannot meaningfully evaluate. When fewer than half the checks
+        # produced a pass/fail (e.g. an ETF/crypto with no SEC fundamentals), the
+        # honest result is NOT APPLICABLE, not "below threshold".
+        insufficient = total_checks > 0 and total_evaluated < _MIN_EVALUATED_FRACTION * total_checks
+        tier = classify_tier(total_passed, total_checks, not_applicable=insufficient)
+        tier_note: str | None = None
+        if insufficient:
+            tier_note = (
+                f"Confidence tier withheld: only {total_evaluated} of {total_checks} checks "
+                "could be evaluated for this subject (insufficient data — e.g. no SEC "
+                "fundamentals for an ETF or crypto). This is not a negative assessment."
+            )
 
         # Pull regime signal_statuses off the context if it carries them.
         regime_attr = getattr(ctx, "regime", None)
@@ -173,9 +194,18 @@ class ScoringFramework:
             total_evaluated=total_evaluated,
             total_checks=total_checks,
             tier=tier,
+            tier_note=tier_note,
             as_of=as_of,
             explanation=explanation,
         )
+
+        # Hoist the computed durability layer to the top level so consumers do
+        # not have to dig into per-check details (the layer is already exposed
+        # per-check; this surfaces it once on the result).
+        if result.layer_assignment is None:
+            layer = getattr(ctx, "extra", {}).get("layer")
+            if layer is not None:
+                result.layer_assignment = str(getattr(layer, "value", layer))
 
         # Run enhancements sequentially, in order; skip any that raise.
         for enhancement in self.enhancements:

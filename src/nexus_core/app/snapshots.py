@@ -20,6 +20,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 
 from ..data import db
 from ..data.snapshots import read_benchmark_snapshots
+from ..disclaimers import TERSE
 from ..engine.benchmarks import (
     ASSET_COIN_IDS,
     BENCHMARK_COMPOSITIONS,
@@ -27,11 +28,11 @@ from ..engine.benchmarks import (
 )
 
 _HISTORY_TTL = 1800
-_DISCLAIMER = (
-    "Public market data — educational only, not investment advice. Benchmarks are "
-    "buy-and-hold (no rebalancing), base-100 normalized from persisted daily prices; "
-    "USDC is held at $1."
+_METHODOLOGY = (
+    "Benchmarks are buy-and-hold (no rebalancing), base-100 normalized from persisted "
+    "daily prices; USDC is held at $1."
 )
+_DISCLAIMER = f"{TERSE} {_METHODOLOGY}"
 
 
 def build_snapshots_router() -> APIRouter:

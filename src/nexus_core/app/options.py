@@ -31,6 +31,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Response
 
 from ..data.derivatives import DeribitClient
 from ..data.providers import MarketDataProvider
+from ..disclaimers import TERSE
 from ..engine.pricing import (
     bs_price,
     cash_secured_put_overlay,
@@ -46,7 +47,7 @@ _PRICE_TTL = 300
 _DEFAULT_RATE = 0.04
 _DEFAULT_SIGMA = 0.30
 _TRADING_DAYS = 252.0
-_DISCLAIMER = "Educational illustration only — not investment advice."
+_DISCLAIMER = TERSE
 
 
 def _spot(market: MarketDataProvider, symbol: str) -> float:

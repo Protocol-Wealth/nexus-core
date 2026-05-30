@@ -17,6 +17,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, HTTPException, Query, Response
 
 from ..data.market import CoinGeckoMarketData
+from ..disclaimers import TERSE
 from ..engine.benchmarks import (
     ASSET_COIN_IDS,
     BENCHMARK_COMPOSITIONS,
@@ -26,10 +27,10 @@ from ..engine.benchmarks import (
 
 _BENCH_TTL = 3600
 _CRYPTO_ASSETS = ("BTC", "ETH", "SOL")  # USDC is treated as a constant $1
-_DISCLAIMER = (
-    "Public market data — educational only, not investment advice. Benchmarks are "
-    "buy-and-hold (no rebalancing), base-100 normalized; USDC is held at $1."
+_METHODOLOGY = (
+    "Benchmarks are buy-and-hold (no rebalancing), base-100 normalized; USDC is held at $1."
 )
+_DISCLAIMER = f"{TERSE} {_METHODOLOGY}"
 
 
 def fetch_benchmark_series(coingecko: CoinGeckoMarketData, days: int) -> list[BenchmarkSeries]:

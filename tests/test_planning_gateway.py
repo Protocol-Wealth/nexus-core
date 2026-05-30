@@ -80,6 +80,14 @@ def test_glide_path_happy_path() -> None:
     assert len(weights) == 51  # currentAge..horizonAge inclusive
 
 
+def test_planning_response_carries_disclaimer() -> None:
+    # Every planning result must carry the educational/not-a-projection disclaimer.
+    body = _client().post("/mcp/tools/glide_path", json=_GLIDE).json()
+    disclaimer = body["disclaimer"].lower()
+    assert "not investment, tax, legal, or financial advice" in disclaimer
+    assert "not predictions" in disclaimer  # MC variant: illustrative, not a forecast
+
+
 def test_list_tools_version_handshake() -> None:
     r = _client().get("/mcp/tools")
     assert r.status_code == 200
