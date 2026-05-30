@@ -32,6 +32,7 @@ from .debank import DeBankClient, WalletToken, is_evm_address
 from .defillama import DefiLlamaClient, DefiProtocol
 from .jupiter import JupiterClient, JupiterPrice, is_solana_mint
 from .merkl import MerklClient, RewardOpportunity
+from .slipstream import SlipstreamClient
 from .tatum import NativeBalance, TatumClient, is_solana_address
 from .thegraph import CHAIN_IDS, RawV3Position, TheGraphClient
 from .vaultsfyi import Vault, VaultsFyiClient, chain_alias, is_supported_chain
@@ -47,6 +48,7 @@ __all__ = [
     "NativeBalance",
     "RawV3Position",
     "RewardOpportunity",
+    "SlipstreamClient",
     "TatumClient",
     "TheGraphClient",
     "Vault",
