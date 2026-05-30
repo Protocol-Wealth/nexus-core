@@ -87,11 +87,10 @@ _PAGE = """\
   </p>
   <h3>Claude.ai (web &amp; desktop app)</h3>
   <p>
-    Settings &rarr; Connectors &rarr; <em>Add custom connector</em>, then paste the URL
-    above (<strong>including the trailing slash</strong>) and add it. nexus-core is a
-    public server, so no sign-in / OAuth is required — if you hit a sign-in or
-    &ldquo;couldn't register&rdquo; error, make sure the URL ends in <code>/mcp/</code>
-    (a URL without the trailing slash is redirected and some clients reject the hop).
+    Settings &rarr; Connectors &rarr; <em>Add custom connector</em>, paste the URL above,
+    and add it. Claude completes a <strong>transparent authorization automatically</strong> —
+    there is no account or login (nexus-core is public); you may briefly see an authorize
+    step that approves itself. No OAuth Client ID needs to be entered.
   </p>
   <h3>Claude Desktop</h3>
   <p>

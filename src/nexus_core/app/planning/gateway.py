@@ -22,6 +22,7 @@ explicit routes win over the mount.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -35,6 +36,8 @@ from .contract import (
     find_identity_keys,
 )
 from .tools import build_tool_handlers
+
+logger = logging.getLogger(__name__)
 
 
 def _error(status_code: int, message: str) -> PlainTextResponse:
@@ -84,8 +87,9 @@ def build_planning_router(*, market: MarketDataProvider) -> APIRouter:
             return _error(400, str(exc))
         except PlanningInfeasibleError as exc:
             return _error(422, str(exc))
-        except Exception as exc:  # defensive: never leak a stack trace to the client
-            return _error(500, f"planning engine error: {exc}")
+        except Exception:  # defensive: log server-side, never leak internals to the client
+            logger.exception("planning tool %r raised", tool_id)
+            return _error(500, "internal planning engine error")
 
         payload.setdefault("contractVersion", CONTRACT_VERSION)
         return JSONResponse(payload, headers={"Cache-Control": "no-store"})
