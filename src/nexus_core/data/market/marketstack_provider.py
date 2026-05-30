@@ -76,7 +76,10 @@ class MarketStackMarketData:
         close = _as_float(record.get("close"))
         if close is None or close <= 0:
             return None
-        return Quote(symbol=symbol, price=close, timestamp=record.get("date"))
+        as_of = record.get("date")  # MarketStack EOD: the data point's session date
+        return Quote(
+            symbol=symbol, price=close, timestamp=as_of, as_of=as_of, source="marketstack"
+        )
 
     def get_price_history(
         self,

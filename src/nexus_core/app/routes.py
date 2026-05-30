@@ -124,11 +124,18 @@ def build_router(
                 status_code=503,
                 detail="Economic data unavailable: FRED_API_KEY is not configured",
             )
-        value = macro.get_series(series_id)
-        if value is None:
+        observation = macro.get_series_observation(series_id)
+        if observation is None:
             raise HTTPException(status_code=404, detail=f"No data for series '{series_id}'")
+        value, as_of = observation
         response.headers["Cache-Control"] = f"public, max-age={_ECONOMIC_TTL}"
-        return {"series_id": series_id, "value": value, "disclaimer": TERSE}
+        return {
+            "series_id": series_id,
+            "value": value,
+            "as_of": as_of,
+            "source": "FRED",
+            "disclaimer": TERSE,
+        }
 
     @router.get("/api/usage", tags=["meta"], summary="Market-data cache + provider usage stats")
     def usage(response: Response) -> dict[str, Any]:

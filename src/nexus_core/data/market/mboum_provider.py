@@ -86,7 +86,15 @@ class MboumMarketData:
         )
         if price is None or price <= 0:
             return None
-        return Quote(symbol=symbol, price=price, timestamp=datetime.now(UTC).isoformat())
+        mkt_time = _extract_number(record, ("regularMarketTime",))
+        as_of = datetime.fromtimestamp(mkt_time, UTC).isoformat() if mkt_time else None
+        return Quote(
+            symbol=symbol,
+            price=price,
+            timestamp=datetime.now(UTC).isoformat(),
+            as_of=as_of,
+            source="mboum",
+        )
 
     def get_price_history(
         self,

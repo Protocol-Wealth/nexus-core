@@ -53,15 +53,28 @@ class YFinanceMarketData:
         self._ticker_factory = ticker_factory
 
     def get_quote(self, symbol: str) -> Quote | None:
-        """Return the latest quote for ``symbol``, or ``None`` if unavailable."""
+        """Return the latest quote for ``symbol``, or ``None`` if unavailable.
+
+        ``as_of`` is taken from the most recent daily bar's date (the real
+        session the price belongs to) so an after-hours / weekend quote reads as
+        a prior close rather than a live price; ``price`` prefers the (live-ish)
+        fast_info quote and falls back to that bar's close.
+        """
         try:
             ticker = self._ticker_factory(symbol)
+            close, as_of = _recent_close_and_date(ticker)
             price = _price_from_fast_info(getattr(ticker, "fast_info", None))
             if price is None:
-                price = _price_from_recent_close(ticker)
+                price = close
             if price is None or price <= 0:
                 return None
-            return Quote(symbol=symbol, price=price, timestamp=datetime.now(UTC).isoformat())
+            return Quote(
+                symbol=symbol,
+                price=price,
+                timestamp=datetime.now(UTC).isoformat(),
+                as_of=as_of,
+                source="yfinance",
+            )
         except Exception as exc:  # pragma: no cover - defensive
             logger.debug("yfinance quote fetch for %s failed: %s", symbol, exc)
             return None
@@ -107,15 +120,26 @@ def _price_from_fast_info(fast: Any) -> float | None:
     return None
 
 
-def _price_from_recent_close(ticker: Any) -> float | None:
-    """Fall back to the most recent close from a one-day history fetch."""
-    frame = ticker.history(period="1d")
+def _recent_close_and_date(ticker: Any) -> tuple[float | None, str | None]:
+    """Most recent close and its bar date (ISO ``YYYY-MM-DD``) from a short fetch.
+
+    Returns ``(None, None)`` when no recent history is available.
+    """
+    frame = ticker.history(period="5d")
     if frame is None or getattr(frame, "empty", True):
-        return None
+        return None, None
+    close: float | None = None
     try:
-        return float(frame["Close"].iloc[-1])
+        close = float(frame["Close"].iloc[-1])
     except (KeyError, IndexError, TypeError, ValueError):
-        return None
+        close = None
+    as_of: str | None = None
+    try:
+        idx = frame.index[-1]
+        as_of = idx.date().isoformat() if hasattr(idx, "date") else str(idx)[:10]
+    except Exception:  # pragma: no cover - defensive
+        as_of = None
+    return close, as_of
 
 
 def _frame_to_bars(frame: Any) -> list[PriceBar]:

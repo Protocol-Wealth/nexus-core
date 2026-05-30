@@ -392,11 +392,15 @@ def _register_economic_tools(
                 filters,
                 disclaimer,
             )
-        value = macro.get_series(series_id)
-        if value is None:
+        observation = macro.get_series_observation(series_id)
+        if observation is None:
             return _err("get_economic_series", f"No data for '{series_id}'", filters, disclaimer)
+        value, as_of = observation
         return _ok(
-            "get_economic_series", {"series_id": series_id, "value": value}, filters, disclaimer
+            "get_economic_series",
+            {"series_id": series_id, "value": value, "as_of": as_of, "source": "FRED"},
+            filters,
+            disclaimer
         )
 
 

@@ -13,10 +13,11 @@ A provider that raises is treated as a miss; the next provider is tried.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from collections.abc import Sequence
 
-from ..providers import MarketDataProvider, PriceBar, Quote
+from ..providers import MarketDataProvider, PriceBar, Quote, market_status_from
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,12 @@ class CompositeMarketData:
                 logger.debug("composite: %s.get_quote failed: %s", type(provider).__name__, exc)
                 continue
             if quote is not None:
+                # Derive the coarse freshness label from as_of once, centrally,
+                # so every provider's quotes carry it consistently.
+                if quote.market_status is None:
+                    return dataclasses.replace(
+                        quote, market_status=market_status_from(quote.as_of)
+                    )
                 return quote
         return None
 

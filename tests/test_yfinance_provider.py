@@ -53,6 +53,9 @@ def test_get_quote_falls_back_to_recent_close() -> None:
     quote = provider.get_quote("SPY")
     assert quote is not None
     assert quote.price == 103.5
+    # Provenance: as_of is the latest bar's session date, not the fetch time.
+    assert quote.as_of == "2026-01-03"
+    assert quote.source == "yfinance"
 
 
 def test_get_quote_missing_returns_none() -> None:
