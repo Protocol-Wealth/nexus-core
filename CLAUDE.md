@@ -7,7 +7,7 @@
 
 Python 3.12 package — a regime-adaptive financial-analysis + DeFi/market-data engine. It serves a **public, read-only HTTP API** (FastAPI) with an **MCP-over-HTTP transport** mounted at `/mcp`, so any MCP-compatible AI client (Claude, GPT, Gemini) can call regime-aware analysis without re-implementing financial domain logic. No account, no API key, no auth.
 
-Built and tested in production by Protocol Wealth LLC (SEC-registered RIA, CRD #335298). The public deployment at [nexusmcp.site](https://nexusmcp.site) runs the `nexus_core.app` surface from **this** repository, on **Google Cloud Run** (Cloudflare → Cloud Run); see [`DEPLOY.md`](DEPLOY.md). Version `0.1.0`; 580-test suite; `mypy --strict` clean. The README's *Status* section is the source of truth on maturity — this is an alpha framework. Some subpackages are scaffold (`__init__.py` only); check the actual module contents before assuming an API exists.
+Built and tested in production by Protocol Wealth LLC (SEC-registered RIA, CRD #335298). The public deployment at [nexusmcp.site](https://nexusmcp.site) runs the `nexus_core.app` surface from **this** repository, on **Google Cloud Run** (Cloudflare → Cloud Run); see [`DEPLOY.md`](DEPLOY.md). Version `0.1.0`; ~594-test suite; `mypy --strict` clean. The README's *Status* section is the source of truth on maturity — this is an alpha framework. Some subpackages are scaffold (`__init__.py` only); check the actual module contents before assuming an API exists.
 
 Sibling: [`pwos-core`](https://github.com/Protocol-Wealth/pwos-core) — TypeScript compliance primitives. **Math + analytical engine lives here; data shapes + audit/compliance primitives live in pwos-core.** Do not port primitives across that boundary.
 
@@ -24,7 +24,8 @@ nexus-core/
 │   │   ├── wallet.py         # /api/wallet/{address} router (DeBank)
 │   │   ├── chain.py          # /api/chain/* router (Tatum multi-chain native balances)
 │   │   ├── vaults.py         # /api/vaults[/chains] router (vaults.fyi)
-│   │   ├── lp.py             # /api/lp/* router (Uniswap V3 analytics)
+│   │   ├── lp.py             # /api/lp/* router (multi-chain Uniswap V3 analytics + vs-benchmark)
+│   │   ├── solana.py         # /api/solana/price[s] router (Jupiter v3 SPL token USD prices)
 │   │   ├── benchmarks.py     # /api/benchmarks[/series] router (on-demand CoinGecko)
 │   │   ├── snapshots.py      # /api/benchmarks/history router (persisted snapshots)
 │   │   ├── landing.py        # / landing page
@@ -34,7 +35,7 @@ nexus-core/
 │   │   ├── regime/           # RegimeEngine: signals, signal_fetcher, classifier, hysteresis, thresholds, dampener, codes
 │   │   ├── scoring/          # 8-check EMF scoring (emf/ submodule) + tiers, attribution, enhancements, formatter
 │   │   ├── pricing/          # Black-Scholes + options overlays
-│   │   ├── lp/               # uniswap_v3.py — pure CLMM math (tick math, exact IL, fee APR)
+│   │   ├── lp/               # uniswap_v3.py — pure CLMM math (tick math, exact IL, fee APR); protocol-agnostic, reused across chains
 │   │   ├── benchmarks.py     # base-100 + buy-and-hold hold-strategy compositions
 │   │   ├── optimization/     # PyPortfolioOpt + Riskfolio-Lib + Black-Litterman wrappers (extra)
 │   │   └── risk/             # empyrical/pyfolio wrappers (scaffold; extra)
@@ -48,13 +49,13 @@ nexus-core/
 │   │   ├── macro/            # fred, bea, eia, treasury
 │   │   ├── edgar/            # edgartools wrapper + SEC fundamentals
 │   │   ├── derivatives/      # deribit (crypto options)
-│   │   └── onchain/          # debank, tatum, thegraph, merkl, vaultsfyi, defillama
+│   │   └── onchain/          # debank, tatum, thegraph, merkl, vaultsfyi, defillama, jupiter
 │   ├── jobs/
 │   │   └── daily_snapshot.py # run() — Cloud Run Job entrypoint (benchmark snapshot)
 │   ├── mcp/server/           # FastMCP server: build_server() + @mcp.tool() registry
 │   ├── ai/ compliance/ planning/ rebalancing/   # scaffold subpackages (FinBERT wrapper exists; rest __init__-only)
 │   └── cli.py                # nexus-core CLI — serve / mcp / snapshot
-├── tests/                    # pytest suites — match source files (test_<module>.py), 580 tests
+├── tests/                    # pytest suites — match source files (test_<module>.py), ~594 tests
 ├── examples/                 # Runnable examples (run without network credentials)
 ├── docs/
 │   ├── ARCHITECTURE.md       # Signal ensemble, regime states, scoring checks
@@ -90,7 +91,7 @@ pip install -e ".[dev]"           # Dev tooling only (pytest, pytest-asyncio, py
 pip install -e ".[all]"           # All capability extras (heavy: torch, transformers, QuantLib, zipline)
 pip install -e "."                # Core only (regime + scoring + market/macro/onchain HTTP clients)
 
-pytest                            # Full suite (580 tests)
+pytest                            # Full suite (~594 tests)
 pytest tests/test_regime_engine.py
 ruff check src/ tests/
 mypy src/nexus_core/              # strict
@@ -125,7 +126,8 @@ nexus-core --version
 | `/api/wallet/{address}` | Anonymous EVM wallet balance (DeBank) |
 | `/api/chain/chains`, `/api/chain/balance/{chain}/{address}`, `/api/chain/native/{address}` | Multi-chain native balances (Tatum: EVM `eth_getBalance` + Solana `getBalance`) |
 | `/api/vaults`, `/api/vaults/chains` | DeFi vault discovery (vaults.fyi v2) |
-| `/api/lp/chains`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics` | Uniswap V3 position analytics — value, in-range, **exact IL-vs-HODL**, fee-APR, uncollected fees (RPC `tokensOwed` via Tatum), Merkl reward APR → total APR. USD prices are **required query params**. (The Graph + RPC + Merkl) |
+| `/api/lp/chains`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics`, `/api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` | Uniswap V3 position analytics on **ethereum, base, optimism, polygon** — value, in-range, **exact IL-vs-HODL**, fee-APR, uncollected fees (RPC `tokensOwed` via Tatum), Merkl reward APR → total APR; `vs-benchmark` adds hold-strategy benchmark returns over a window. USD prices are **required query params**. (The Graph + RPC + Merkl) — Arbitrum NOT supported (its published subgraph ID uses an incompatible schema) |
+| `/api/solana/price/{mint}`, `/api/solana/prices?mints=` | Solana SPL token USD prices (Jupiter v3, keyless — no API key) |
 | `/api/benchmarks`, `/api/benchmarks/series?days=`, `/api/benchmarks/history?days=` | Base-100 hold-strategy returns (BTC/ETH/SOL + ETH-USDC 50/50,60/40,70/30 + ETH-BTC 50/50; USDC held at $1; buy-and-hold). `/series` on-demand from CoinGecko; `/history` from persisted daily snapshots |
 | `/api/usage` | Provider usage/quota report (non-sensitive; no keys, no client data) |
 | `/mcp` | MCP-over-HTTP transport (FastMCP) — exempt from the rate limiter |
@@ -200,7 +202,7 @@ Hard NOs. Each is enforced by review + tooling where possible:
 
 - **No client-specific values.** Thresholds, decay constants, regime cutoffs, narrative pipeline logic — see [README § What's Open vs Private](README.md#whats-open-vs-private).
 - **No PII / secrets / vendor API keys** in tests, fixtures, examples, commit messages, or issue templates. No client data lives in this repo or its database.
-- **No AGPL code copied.** OpenBB Platform (AGPL-3.0) and SEC EDGAR Toolkit (AGPL-3.0) are listed as architecture references — see [README § Reference Architecture](README.md#reference-architecture-patterns-only--agpl-code-not-copied) and [`docs/attribution.md`](docs/attribution.md). Patterns may be studied; bytes may not be copied. Clean-room re-derivation only.
+- **No AGPL code copied.** OpenBB Platform (AGPL-3.0) and SEC EDGAR Toolkit (AGPL-3.0) are listed as architecture references — see [`NOTICE`](NOTICE) and [`docs/attribution.md`](docs/attribution.md). Patterns may be studied; bytes may not be copied. Clean-room re-derivation only.
 - **No bypassing patent posture.** USPTO #64/034,229 is filed defensively under Apache 2.0. Do not remove the patent-pending notice from `README.md`, `src/nexus_core/__init__.py`, or shields/badges. Do not author claims of a different IP posture in this repo.
 - **No `--no-verify` on commits.** No skipped hooks. No `--no-gpg-sign`. If a hook fails, fix the root cause.
 - **No commits without SPDX header** on new `.py` files. The `examples/` + `src/` + `tests/` trees are fully covered; maintain coverage on additions.
@@ -215,4 +217,14 @@ Hard NOs. Each is enforced by review + tooling where possible:
 
 ## Roadmap
 
-Next surfaces (see `CHANGELOG.md` / `ROADMAP` for detail): position-PnL-vs-benchmark (pair LP IL with hold benchmarks — "was LPing worth it?"); Jupiter Solana price source (Solana AMM coverage); Uniswap V4 + Aerodrome/Balancer/Algebra LP adapters; persisted LP-position snapshots.
+Recently shipped (see `CHANGELOG.md`): multi-chain Uniswap V3 LP (base/optimism/polygon added to ethereum); position `vs-benchmark` (pair LP IL with hold benchmarks — "was LPing worth it?"); Jupiter Solana SPL prices (`/api/solana`, keyless).
+
+Next surfaces (see `CHANGELOG.md` / `ROADMAP` for detail):
+- **Aerodrome/Velodrome Slipstream LP** — RESEARCHED + BLOCKED on data source: no canonical Slipstream V3-schema subgraph exists on The Graph (name-matching ones are Revert-automation + ICHI-vault subgraphs); Aerodrome indexes via Envio. The engine + Slipstream NFPM (`0x827922686190790b37229fd06084350E74485b72`, decode-compatible) are ready; needs an Envio client (full, incl. IL), on-chain RPC (partial, no IL — deposited amounts are event-derived), or a self-hosted subgraph.
+- **Arbitrum Uniswap V3** — needs a correct V3-schema subgraph ID (the published one is incompatible).
+- **Base subgraph data quality** — the public Base V3 deployment has spam-token TVL contamination (pollutes discovery + pool-aggregate fee APR; per-position value/IL stays accurate) → consider self-hosting a cleaner indexer.
+- **Uniswap V4 via Envio (Unichain).**
+- **Solana CLMM (Raydium/Orca)** — Q64.64 sibling engine; Jupiter price layer already shipped.
+- **Subgraph health-gate** (`_meta` block-lag → degraded).
+- **Position-PnL persisted history.**
+- **Enrich Tatum Solana balance with Jupiter USD.**

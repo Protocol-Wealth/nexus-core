@@ -13,7 +13,7 @@ guarantees, no marketing.
 ## Done
 
 The current production surface. Python 3.12 · FastAPI · FastMCP · sync
-`httpx` · `asyncpg` · `mypy --strict` · `ruff`. 580-test suite. Public,
+`httpx` · `asyncpg` · `mypy --strict` · `ruff`. ~594-test suite. Public,
 read-only, no auth, no client data. Every external integration degrades
 gracefully to `None` / empty / `503` when its key is absent.
 
@@ -32,6 +32,8 @@ gracefully to `None` / empty / `503` when its key is absent.
 - **`GET /api/market/quote/{symbol}`, `/api/market/history/{symbol}`** —
   composite market data (yfinance / MBOUM / MarketStack / CoinGecko).
 - **`GET /api/economic/{series_id}`** — FRED economic series.
+- **`GET /api/solana/price/{mint}`, `/api/solana/prices?mints=`** — Solana SPL
+  token USD prices via Jupiter v3 (`data/onchain/jupiter.py`, keyless).
 
 ### Options (educational overlays)
 
@@ -50,13 +52,17 @@ gracefully to `None` / empty / `503` when its key is absent.
   (EVM `eth_getBalance` + Solana `getBalance`).
 - **`GET /api/vaults`, `/api/vaults/chains`** — DeFi vault discovery
   (vaults.fyi v2).
-- **`GET /api/lp/chains`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics`** —
-  Uniswap V3 position analytics: value, in-range status, **exact**
-  impermanent-loss-vs-HODL, fee-APR estimate, uncollected fees (RPC
-  `tokensOwed` via Tatum), and Merkl reward APR rolled into total APR. Pure
-  CLMM math in `engine/lp/uniswap_v3.py` (tick math,
-  `get_amounts_for_liquidity`, exact IL). USD prices are required query
-  params. (The Graph + RPC + Merkl.)
+- **`GET /api/lp/chains`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics`,
+  `/api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark`** — Uniswap V3 position
+  analytics across **ethereum, base, optimism, polygon**: value, in-range
+  status, **exact** impermanent-loss-vs-HODL, fee-APR estimate, uncollected
+  fees (RPC `tokensOwed` via Tatum), and Merkl reward APR rolled into total
+  APR. `vs-benchmark` adds hold-strategy benchmark returns over a window —
+  the "was LPing worth it?" comparison. Pure CLMM math in
+  `engine/lp/uniswap_v3.py` (tick math, `get_amounts_for_liquidity`, exact IL)
+  is protocol-agnostic and reused across chains. USD prices are required query
+  params. (The Graph + RPC + Merkl.) Arbitrum is **not** supported — its
+  published subgraph ID uses an incompatible schema.
 
 ### Benchmarks
 
@@ -86,26 +92,38 @@ gracefully to `None` / empty / `503` when its key is absent.
   Cloudflare methods rule blocks non-GET/POST/OPTIONS; edge rate-limit on cost
   endpoints. Secrets live only in Google Secret Manager.
 
-## In progress
-
-- **#64 — snapshot Cloud Run Job** and **#65 — spoofing-resistant rate
-  limiter** may still be open PRs at read time. Production already runs both,
-  so the capabilities above are described as present.
-
 ## Next
 
 Prioritized. Top item first.
 
-1. **Position-PnL-vs-benchmark surface** — pair LP impermanent-loss with the
-   hold benchmarks to answer "was LPing worth it?" The two halves (exact IL in
-   `engine/lp`, base-100 holds in `engine/benchmarks`) already exist; this
-   joins them into one comparison.
-2. **Jupiter Solana price source** — add a Solana price feed so Solana AMM /
-   LP coverage isn't gated on EVM-centric price inputs.
-3. **More LP adapters** — Uniswap V4, plus Aerodrome / Balancer / Algebra,
-   extending the Uniswap-V3-only analytics surface.
-4. **Persisted LP-position snapshots** — track LP positions over time the way
-   benchmarks are already snapshotted daily, enabling historical PnL/IL series.
+1. **Aerodrome / Velodrome Slipstream LP** — researched, **blocked on a data
+   source.** The engine is ready (Slipstream is a Uniswap-V3 CLMM sibling, so
+   `engine/lp/uniswap_v3.py` reuses cleanly) and the Slipstream NFPM
+   (`0x827922686190790b37229fd06084350E74485b72`) is decode-compatible. The
+   gap is indexing: no canonical Slipstream V3-schema subgraph exists on The
+   Graph — the name-matching ones are Revert-automation and ICHI-vault
+   subgraphs, and Aerodrome itself indexes via Envio. Paths: an **Envio**
+   client (full coverage incl. IL), **on-chain RPC** (partial — no IL, since
+   deposited amounts must be reconstructed from events), or a **self-hosted
+   subgraph**.
+2. **Arbitrum Uniswap V3** — needs a correct V3-schema subgraph ID. The
+   published one is incompatible, which is why Arbitrum is excluded from the
+   multi-chain LP surface today.
+3. **Base subgraph data quality** — the public Base V3 deployment carries
+   spam-token TVL contamination. It pollutes vault discovery and pool-aggregate
+   fee APR; per-position value/IL stays accurate. Fix is likely a self-hosted,
+   cleaner indexer.
+4. **Subgraph health-gate** — read each subgraph's `_meta` block-lag and mark
+   responses `degraded` when an indexer falls behind, so stale data is visible
+   rather than silent.
+5. **Uniswap V4 (Unichain) via Envio** — extend LP coverage to V4's
+   singleton-pool model; shares the Envio client work with item 1.
+6. **Solana CLMM (Raydium / Orca)** — a Q64.64 sibling of the existing tick
+   engine. The Jupiter price layer is already shipped, so this is the math +
+   indexing half.
+7. **Persisted LP-position PnL history** — snapshot LP positions over time the
+   way benchmarks are already snapshotted daily, enabling historical PnL/IL
+   series.
 
 ---
 
