@@ -61,6 +61,7 @@ from .lp import build_lp_router
 from .mcp_guide import render_mcp_guide
 from .mcp_mount import build_mcp_app
 from .options import build_options_router
+from .planning import build_planning_router
 from .ratelimit import RateLimitMiddleware
 from .routes import build_router
 from .scoring import build_score_router
@@ -212,6 +213,9 @@ def create_app(
     )
     app.include_router(build_benchmarks_router(coingecko=CoinGeckoMarketData()))
     app.include_router(build_snapshots_router())
+    # Planning tool gateway. Included before the FastMCP `/mcp` mount (below) so
+    # the explicit `/mcp/tools/...` routes take precedence over the transport.
+    app.include_router(build_planning_router())
 
     mcp_enabled = mcp_app is not None
 
