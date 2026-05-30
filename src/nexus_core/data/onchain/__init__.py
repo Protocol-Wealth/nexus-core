@@ -17,6 +17,9 @@ Concrete clients:
   positions/pools (feeds ``engine.lp``). Requires ``THEGRAPH_API_KEY``.
 - :class:`MerklClient` — keyless Merkl v4 reader for liquidity-incentive
   (reward) APR by pool/vault — the incentive layer on top of LP fee APR.
+- :class:`JupiterClient` — keyless Jupiter v3 price client for Solana SPL token
+  USD prices (by mint) — the practical price source for tokens outside
+  CoinGecko's coin-id catalogue.
 
 All need only the core ``httpx`` dependency. Reference libraries for richer
 chain pipelines (``pip install nexus-core[onchain]``):
@@ -27,6 +30,7 @@ chain pipelines (``pip install nexus-core[onchain]``):
 
 from .debank import DeBankClient, WalletToken, is_evm_address
 from .defillama import DefiLlamaClient, DefiProtocol
+from .jupiter import JupiterClient, JupiterPrice, is_solana_mint
 from .merkl import MerklClient, RewardOpportunity
 from .tatum import NativeBalance, TatumClient, is_solana_address
 from .thegraph import CHAIN_IDS, RawV3Position, TheGraphClient
@@ -37,6 +41,8 @@ __all__ = [
     "DeBankClient",
     "DefiLlamaClient",
     "DefiProtocol",
+    "JupiterClient",
+    "JupiterPrice",
     "MerklClient",
     "NativeBalance",
     "RawV3Position",
@@ -48,6 +54,7 @@ __all__ = [
     "WalletToken",
     "chain_alias",
     "is_evm_address",
+    "is_solana_mint",
     "is_solana_address",
     "is_supported_chain",
 ]
