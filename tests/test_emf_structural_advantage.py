@@ -36,7 +36,21 @@ def test_classify_financial_by_sector_field() -> None:
 
 
 def test_classify_unknown() -> None:
-    assert classify_sector("Utilities", "Regulated Electric") == "unknown"
+    # A sector/industry that matches no SaaS keyword, scoring map, or field map.
+    assert classify_sector("Nonexistent Sector", "Nonexistent Industry") == "unknown"
+
+
+def test_classify_technology_hardware() -> None:
+    # AAPL shape: technology sector, hardware industry (not SaaS, not semiconductor).
+    assert classify_sector("Technology", "Electronic Computers") == "technology_hardware"
+    assert classify_sector("Technology", "Consumer Electronics") == "technology_hardware"
+
+
+def test_classify_new_buckets_by_sector_field() -> None:
+    assert classify_sector("Utilities", "Regulated Electric") == "utilities"
+    assert classify_sector("Communication Services", "Telecom Services") == "communication"
+    assert classify_sector("Basic Materials", "Specialty Chemicals") == "materials"
+    assert classify_sector("Real Estate", "REIT - Residential") == "real_estate"
 
 
 # --- non-SaaS structural advantage: PASS -----------------------------------
@@ -128,17 +142,36 @@ def test_saas_defensible_ticker_passes() -> None:
     assert result.signal == "GREEN"
 
 
-# --- auto-pass for unclassified --------------------------------------------
+# --- D3: unclassifiable sectors are NOT evaluated (fail-safe, not auto-pass) --
 
 
-def test_unclassified_sector_auto_passes() -> None:
+def test_unclassifiable_sector_is_not_evaluated() -> None:
+    # A genuinely unmappable sector must NOT auto-pass (which would inflate the
+    # pass count); it is withheld as insufficient_data.
     check = ASANScreenCheck()
-    ctx = _ctx("WATERCO", sector="Utilities", industry="Utilities - Regulated Water")
+    ctx = _ctx("MYSTERYCO", sector="Nonexistent Sector", industry="Nonexistent Industry")
     result = check(ctx)
-    assert result.passed is True
-    assert result.value is None
+    assert result.passed is None
+    assert result.signal == "insufficient_data"
     assert result.details["applicable"] is False
     assert result.details["sector_type"] == "unknown"
+
+
+def test_technology_hardware_is_scored_not_autopassed() -> None:
+    # AAPL shape: strong factors → a real PASS (was previously auto-passed as "unknown").
+    check = ASANScreenCheck()
+    ctx = _ctx(
+        "AAPL",
+        sector="Technology",
+        industry="Electronic Computers",
+        gross_margin=0.45,
+        revenue_growth=0.08,
+        market_cap=3_000_000_000_000,
+    )
+    result = check(ctx)
+    assert result.details["sector_type"] == "technology_hardware"
+    assert result.details["applicable"] is True
+    assert result.passed is True  # 3/3 factors
 
 
 # --- missing data degrades to passed=None ----------------------------------
