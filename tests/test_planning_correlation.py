@@ -52,6 +52,24 @@ def test_shrinkage_pulls_offdiagonals_toward_average() -> None:
         assert abs(shrunk[i][j]) <= abs(sample[i][j]) + 1e-9
 
 
+def test_shrinkage_is_mild_when_correlations_are_clearly_distinct() -> None:
+    # Ample observations + widely-separated true correlations (a~+1 b, a~-1 c):
+    # Ledoit-Wolf should shrink only slightly, preserving the distinct structure
+    # (the inverse of the heavy shrinkage seen when correlations are within
+    # sampling error of each other).
+    n = 500
+    a = [math.sin(i * 0.3) for i in range(n)]
+    b = [math.sin(i * 0.3) + 0.02 * math.sin(i * 1.1) for i in range(n)]
+    c = [-math.sin(i * 0.3) + 0.02 * math.cos(i * 0.9) for i in range(n)]
+    series = {"a": a, "b": b, "c": c}
+    sample = correlation_matrix(series, shrinkage=False)
+    shrunk = correlation_matrix(series, shrinkage=True)
+    for i, j in (("a", "b"), ("a", "c"), ("b", "c")):
+        assert abs(shrunk[i][j] - sample[i][j]) < 0.05  # barely moved
+    assert shrunk["a"]["b"] > 0.5  # positive structure preserved
+    assert shrunk["a"]["c"] < 0.0  # negative structure preserved
+
+
 def test_single_asset_returns_unit_matrix() -> None:
     m = correlation_matrix({"only": [0.01, -0.02, 0.03, 0.0]}, shrinkage=True)
     assert m == {"only": {"only": 1.0}}
