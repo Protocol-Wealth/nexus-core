@@ -30,6 +30,14 @@ from .signals import RegimeSignals
 
 logger = logging.getLogger(__name__)
 
+#: SPDR sector ETFs — the breadth basket. The % of these trading above their
+#: 200-day MA is a free, no-extra-API breadth proxy (computed from OHLCV the
+#: existing providers already serve), in place of needing all 500 constituents.
+_SECTOR_ETFS = ("XLK", "XLF", "XLV", "XLY", "XLP", "XLE", "XLI", "XLB", "XLU", "XLRE", "XLC")
+
+#: Lookback (calendar days) to guarantee >=200 trading days for a 200-day MA.
+_DMA_LOOKBACK_DAYS = 400
+
 
 class SignalFetcher:
     """Fetches raw signals from configured data providers.
@@ -114,7 +122,8 @@ class SignalFetcher:
             vix=self._fetch_vix() or self.default_vix,
             credit_spreads=self._fetch_credit_spreads() or self.default_credit_spreads,
             hy_credit_spreads=self._fetch_hy_credit_spreads(),
-            breadth=None,
+            breadth=self._fetch_breadth(),
+            precious_metals_signal=self._fetch_precious_metals_signal(),
             bond_futures_30y=round(bond_futures, 2) if bond_futures else None,
             yield_curve_2s10s=(
                 round(yield_curve_spread, 2) if yield_curve_spread is not None else None
@@ -148,6 +157,53 @@ class SignalFetcher:
         except Exception as e:  # pragma: no cover
             logger.debug("spx fetch failed: %s", e)
         return None
+
+    def _closes(self, symbol: str, days: int) -> list[float]:
+        """Daily closes for ``symbol`` over ~``days`` (empty on any failure)."""
+        if self.market is None:
+            return []
+        try:
+            bars = self.market.get_price_history(symbol, days=days, interval="1d")
+        except Exception as e:  # pragma: no cover — provider best-effort
+            logger.debug("history fetch for %s failed: %s", symbol, e)
+            return []
+        return [float(b.close) for b in bars if getattr(b, "close", None) and b.close > 0]
+
+    def _above_200dma(self, symbol: str) -> bool | None:
+        """Whether ``symbol``'s latest close is above its 200-day SMA.
+
+        Returns ``None`` when fewer than 200 closes are available (so the caller
+        can exclude it from the breadth tally rather than count a guess).
+        """
+        closes = self._closes(symbol, _DMA_LOOKBACK_DAYS)
+        if len(closes) < 200:
+            return None
+        sma200 = sum(closes[-200:]) / 200.0
+        return closes[-1] > sma200
+
+    def _fetch_breadth(self) -> float | None:
+        """Breadth as the % of SPDR sector ETFs trading above their 200-day MA.
+
+        A free proxy for the classic "% of index members above their 200DMA".
+        Requires a quorum (>=6 of 11) of evaluable sectors, else ``None``.
+        """
+        evaluated = [r for r in (self._above_200dma(s) for s in _SECTOR_ETFS) if r is not None]
+        if len(evaluated) < 6:
+            return None
+        return round(100.0 * sum(1 for r in evaluated if r) / len(evaluated), 1)
+
+    def _fetch_precious_metals_signal(self) -> str | None:
+        """Gold (GLD) momentum vs its 200-day MA → bullish / neutral / bearish."""
+        closes = self._closes("GLD", _DMA_LOOKBACK_DAYS)
+        if len(closes) < 200:
+            return None
+        sma200 = sum(closes[-200:]) / 200.0
+        price = closes[-1]
+        if price > sma200 * 1.02:
+            return "bullish"
+        if price < sma200 * 0.98:
+            return "bearish"
+        return "neutral"
 
     def _fetch_real_rates(self) -> float | None:
         if self.macro is None or not self.macro.is_configured():
