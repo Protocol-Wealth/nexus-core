@@ -23,7 +23,13 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from ...data.providers import MarketDataProvider
-from ...engine.planning import GlidePathShape, compute_glide_path, correlation_matrix
+from ...engine.planning import (
+    GlidePathShape,
+    InfeasiblePlanError,
+    compute_glide_path,
+    correlation_matrix,
+    tax_aware_withdrawal,
+)
 from .contract import PlanningInfeasibleError, PlanningInputError
 from .universe import ASSET_UNIVERSE, proxy_tickers, universe_ids
 
@@ -128,6 +134,29 @@ def glide_path_tool(body: dict[str, Any]) -> dict[str, Any]:
     return {"equityWeightByAge": {str(age): round(weight, 4) for age, weight in path.items()}}
 
 
+def tax_aware_withdrawal_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``tax_aware_withdrawal`` — RMD-first, tax-efficient withdrawal sequencing."""
+    accounts = _require(body, "accounts")
+    if not isinstance(accounts, list) or not accounts:
+        raise PlanningInputError("accounts must be a non-empty list")
+    other = body.get("otherTaxableIncome", 0)
+    if isinstance(other, bool) or not isinstance(other, (int, float)):
+        raise PlanningInputError("otherTaxableIncome must be a number")
+    try:
+        return tax_aware_withdrawal(
+            year=_as_int(body, "year"),
+            filing_status=_as_str(body, "filingStatus"),
+            accounts=accounts,
+            gross_need=_as_number(body, "grossNeed"),
+            age=_as_int(body, "age"),
+            other_taxable_income=float(other),
+        )
+    except InfeasiblePlanError as exc:
+        raise PlanningInfeasibleError(str(exc)) from exc
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
 def _correlation_matrix_tool(body: dict[str, Any], market: MarketDataProvider) -> dict[str, Any]:
     """``correlation_matrix`` — real-data return correlation across asset classes."""
     ids = _as_str_list(body, "assetClassIds")
@@ -227,9 +256,15 @@ def build_tool_handlers(*, market: MarketDataProvider) -> dict[str, ToolHandler]
 
     return {
         "glide_path": glide_path_tool,
+        "tax_aware_withdrawal": tax_aware_withdrawal_tool,
         "correlation_matrix": correlation_matrix_tool,
         "capital_market_assumptions": capital_market_assumptions_tool,
     }
 
 
-__all__ = ["ToolHandler", "build_tool_handlers", "glide_path_tool"]
+__all__ = [
+    "ToolHandler",
+    "build_tool_handlers",
+    "glide_path_tool",
+    "tax_aware_withdrawal_tool",
+]
