@@ -76,6 +76,7 @@ def test_list_tools_version_handshake() -> None:
     assert body["contractVersion"] == CONTRACT_VERSION
     assert "glide_path" in body["tools"]
     assert "correlation_matrix" in body["tools"]
+    assert "capital_market_assumptions" in body["tools"]
 
 
 def test_correlation_matrix_happy_path() -> None:
