@@ -28,10 +28,16 @@ _GATEWAY = "https://gateway.thegraph.com/api/{key}/subgraphs/id/{subgraph_id}"
 _TIMEOUT = 20.0
 _USER_AGENT = "nexus-core/0.1 (+https://nexusmcp.site)"
 
-# Uniswap V3 subgraphs by chain. Mainnet (official, code at Uniswap/v3-subgraph)
-# is wired first; Base is pinned but disabled until its ID is provenance-verified.
+# Uniswap V3 subgraphs by chain (The Graph decentralized network, gateway-queried).
+# Each ID was verified live against the canonical Uniswap-V3 schema (positions{} +
+# _meta at chain head) before wiring — community-published IDs drift, so confirm on
+# Graph Explorer and re-pin if a chain goes stale. (Arbitrum's published ID uses an
+# incompatible schema — omitted until a V3-schema ID is verified.)
 _V3_SUBGRAPHS: dict[str, str] = {
     "ethereum": "5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV",
+    "base": "43Hwfi3dJSoGpyas9VwNoDAv55yjgGrPpNSmbQZArzMG",
+    "optimism": "Cghf4LfVqPiFw6fp6Y5X5Ubc8UpmUhSfJL82zwiBFLaj",
+    "polygon": "3hCPRGf4z88VC5rsBKU5AA9FBBq5nF3jbKJG7VZCbhjm",
 }
 
 # Chain → EVM chainId (for downstream reward-APR matching, etc.).
