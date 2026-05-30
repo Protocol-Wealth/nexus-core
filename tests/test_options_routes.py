@@ -81,7 +81,7 @@ def test_price_call() -> None:
     assert body["price"] > 0
     assert set(body["greeks"]) == {"delta", "gamma", "theta", "vega", "rho"}
     assert 0.0 <= body["greeks"]["delta"] <= 1.0
-    assert "not investment advice" in body["disclaimer"].lower()
+    assert "not investment, tax, legal, or financial advice" in body["disclaimer"].lower()
     assert r.headers["cache-control"] == "public, max-age=300"
 
 
@@ -124,7 +124,7 @@ def test_crypto_currencies() -> None:
     assert body["currencies"] == ["BTC", "ETH", "SOL", "XRP", "TRX", "AVAX"]
     assert body["settlement"]["BTC"] == "inverse"
     assert body["settlement"]["SOL"] == "linear_usdc"
-    assert "not investment advice" in body["disclaimer"].lower()
+    assert "not investment, tax, legal, or financial advice" in body["disclaimer"].lower()
 
 
 def test_crypto_instruments() -> None:

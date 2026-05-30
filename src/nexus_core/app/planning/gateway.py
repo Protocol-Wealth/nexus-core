@@ -29,6 +29,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from ...data.providers import MarketDataProvider
+from ...disclaimers import MC_DISCLAIMER
 from ...engine.regime import RegimeEngine
 from .contract import (
     CONTRACT_VERSION,
@@ -95,6 +96,7 @@ def build_planning_router(
             return _error(500, "internal planning engine error")
 
         payload.setdefault("contractVersion", CONTRACT_VERSION)
+        payload.setdefault("disclaimer", MC_DISCLAIMER)
         return JSONResponse(payload, headers={"Cache-Control": "no-store"})
 
     return router

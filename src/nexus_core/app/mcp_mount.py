@@ -16,6 +16,7 @@ from typing import Any
 from ..data.derivatives import DeribitClient
 from ..data.onchain import DefiLlamaClient
 from ..data.providers import MacroDataProvider, MarketDataProvider
+from ..disclaimers import MC_DISCLAIMER, TERSE
 from ..engine.regime import RegimeEngine
 from ..mcp.server import build_server
 from .planning.contract import (
@@ -88,6 +89,7 @@ def _build_planning_mcp_tools(
             except (PlanningInputError, PlanningInfeasibleError) as exc:
                 raise ToolError(str(exc)) from exc
             payload.setdefault("contractVersion", PLANNING_CONTRACT_VERSION)
+            payload.setdefault("disclaimer", MC_DISCLAIMER)
             return json.dumps(payload, indent=2)
 
         return _run
@@ -136,6 +138,7 @@ def build_configured_server(
         macro=macro,
         deribit=DeribitClient(),
         defillama=DefiLlamaClient(),
+        disclaimer=TERSE,
         extra_tools=_build_planning_mcp_tools(market, regime_engine),
     )
 

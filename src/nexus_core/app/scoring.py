@@ -27,6 +27,7 @@ from fastapi import APIRouter, Path, Response
 
 from ..data.edgar.fundamentals import build_fundamentals
 from ..data.providers import MarketDataProvider
+from ..disclaimers import TERSE
 from ..engine.regime import RegimeEngine
 from ..engine.scoring import ScoringFramework, format_structured
 from ..engine.scoring.checks import ScoringContext
@@ -37,7 +38,7 @@ from ..engine.scoring.emf.context_helpers import populate_context
 _SCORE_TTL = 1800
 #: Price-history window for the Hurst check (multi-window up to 90d).
 _HISTORY_DAYS = 400
-_DISCLAIMER = "Educational illustration only — not investment advice."
+_DISCLAIMER = TERSE
 
 
 def build_scoring_framework() -> ScoringFramework:

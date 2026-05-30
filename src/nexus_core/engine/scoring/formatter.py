@@ -101,6 +101,7 @@ def format_structured(
     return {
         "subject": result.subject,
         "tier": result.tier.value,
+        "tier_note": result.tier_note,
         "total_passed": result.total_passed,
         "total_evaluated": result.total_evaluated,
         "total_checks": result.total_checks,

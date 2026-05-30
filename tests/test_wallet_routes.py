@@ -44,7 +44,7 @@ def test_wallet_ok() -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["total_usd_value"] == 9000.0
-    assert "not investment advice" in body["disclaimer"].lower()
+    assert "not investment, tax, legal, or financial advice" in body["disclaimer"].lower()
     assert r.headers["cache-control"] == "public, max-age=300"
 
 

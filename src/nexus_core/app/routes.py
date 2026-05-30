@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Response
 
 from .. import __version__
 from ..data.providers import MacroDataProvider, MarketDataProvider
+from ..disclaimers import TERSE, with_disclaimer
 from ..engine.regime import RegimeEngine
 
 # Edge/browser cache lifetimes (seconds) per endpoint. The deployment fronts
@@ -58,13 +59,13 @@ def build_router(
         natural-language rationale. Signals are cached for 15 minutes.
         """
         response.headers["Cache-Control"] = f"public, max-age={_REGIME_TTL}"
-        return engine.classify().to_dict()
+        return with_disclaimer(engine.classify().to_dict())
 
     @router.get("/api/regime/signals", tags=["regime"], summary="Raw regime signal readings")
     def get_signals(response: Response) -> dict[str, Any]:
         """Return the raw signal readings feeding regime classification."""
         response.headers["Cache-Control"] = f"public, max-age={_REGIME_TTL}"
-        return engine.fetch_signals().to_dict()
+        return with_disclaimer(engine.fetch_signals().to_dict())
 
     @router.get(
         "/api/market/quote/{symbol}",
@@ -80,7 +81,7 @@ def build_router(
         if quote is None:
             raise HTTPException(status_code=404, detail=f"No quote available for '{symbol}'")
         response.headers["Cache-Control"] = f"public, max-age={_QUOTE_TTL}"
-        return asdict(quote)
+        return with_disclaimer(asdict(quote))
 
     @router.get(
         "/api/market/history/{symbol}",
@@ -105,6 +106,7 @@ def build_router(
             "interval": interval,
             "days": days,
             "bars": [asdict(bar) for bar in bars],
+            "disclaimer": TERSE,
         }
 
     @router.get(
@@ -126,7 +128,7 @@ def build_router(
         if value is None:
             raise HTTPException(status_code=404, detail=f"No data for series '{series_id}'")
         response.headers["Cache-Control"] = f"public, max-age={_ECONOMIC_TTL}"
-        return {"series_id": series_id, "value": value}
+        return {"series_id": series_id, "value": value, "disclaimer": TERSE}
 
     @router.get("/api/usage", tags=["meta"], summary="Market-data cache + provider usage stats")
     def usage(response: Response) -> dict[str, Any]:

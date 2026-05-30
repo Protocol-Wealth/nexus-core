@@ -11,6 +11,7 @@ process. Linked from the landing page.
 from __future__ import annotations
 
 from .. import __version__
+from ..disclaimers import FULL as _FULL_DISCLAIMER
 
 _REPO_URL = "https://github.com/Protocol-Wealth/nexus-core"
 _MCP_URL = "https://nexusmcp.site/mcp/"
@@ -202,16 +203,18 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     the portfolio accumulates untouched until that age, then decumulates. Omit it
     and the engine withdraws from <code>currentAge</code>; pwplan-core's UI defaults
     the field to <strong>65</strong>. Inputs are de-identified — the engine is
-    PII-free and works on age, never date of birth.
+    PII-free and works on age, never date of birth. Monte Carlo and scenario
+    outputs are illustrative model results from hypothetical assumptions — not
+    predictions or guarantees of any individual outcome.
   </div>
 
   <div class="grid"></div>
 
   <footer>
+    <p style="margin:0 0 1rem">{disclaimer}</p>
     Nexus Core v{version} · Apache-2.0 ·
     <a href="/docs">REST API docs</a> ·
-    <a href="{repo}">Source on GitHub</a><br>
-    For educational and research purposes only. Not investment advice.
+    <a href="{repo}">Source on GitHub</a>
   </footer>
 </main>
 </body>
@@ -221,7 +224,9 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
 
 def render_mcp_guide() -> str:
     """Return the MCP setup-guide HTML."""
-    return _PAGE.format(repo=_REPO_URL, mcp_url=_MCP_URL, version=__version__)
+    return _PAGE.format(
+        repo=_REPO_URL, mcp_url=_MCP_URL, version=__version__, disclaimer=_FULL_DISCLAIMER
+    )
 
 
 __all__ = ["render_mcp_guide"]

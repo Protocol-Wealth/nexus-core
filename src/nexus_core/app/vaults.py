@@ -19,9 +19,11 @@ from typing import Annotated, Any
 from fastapi import APIRouter, HTTPException, Query, Response
 
 from ..data.onchain import VaultsFyiClient, is_supported_chain
+from ..disclaimers import TERSE
 
 _VAULTS_TTL = 3600
-_DISCLAIMER = "Public DeFi market data — educational only, not investment advice."
+_METHODOLOGY = "Public DeFi market data."
+_DISCLAIMER = f"{TERSE} {_METHODOLOGY}"
 
 
 def build_vaults_router(*, vaultsfyi: VaultsFyiClient) -> APIRouter:

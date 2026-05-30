@@ -10,6 +10,7 @@ visitors at the interactive API docs and the source repository.
 from __future__ import annotations
 
 from .. import __version__
+from ..disclaimers import FULL as _FULL_DISCLAIMER
 
 _REPO_URL = "https://github.com/Protocol-Wealth/nexus-core"
 
@@ -106,10 +107,10 @@ _PAGE = """\
   </p>
 
   <footer>
+    <p style="margin:0 0 1rem">{disclaimer}</p>
     Nexus Core v{version} · Apache-2.0 · Patent Pending USPTO&nbsp;#64/034,229 ·
     Built by <a href="https://protocolwealthllc.com">Protocol Wealth, LLC</a>
-    (SEC-registered RIA, CRD&nbsp;#335298).<br>
-    For educational and research purposes only. Not investment advice.
+    (SEC-registered RIA, CRD&nbsp;#335298).
   </footer>
 </main>
 </body>
@@ -140,6 +141,7 @@ def render_landing(*, mcp_enabled: bool) -> str:
     return _PAGE.format(
         repo=_REPO_URL,
         version=__version__,
+        disclaimer=_FULL_DISCLAIMER,
         mcp_line=_MCP_LINE if mcp_enabled else "",
         mcp_guide_card=_MCP_GUIDE_CARD if mcp_enabled else "",
     )
