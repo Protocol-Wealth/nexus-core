@@ -96,16 +96,20 @@ gracefully to `None` / empty / `503` when its key is absent.
 
 Prioritized. Top item first.
 
-1. **Aerodrome / Velodrome Slipstream LP** — researched, **blocked on a data
-   source.** The engine is ready (Slipstream is a Uniswap-V3 CLMM sibling, so
-   `engine/lp/uniswap_v3.py` reuses cleanly) and the Slipstream NFPM
-   (`0x827922686190790b37229fd06084350E74485b72`) is decode-compatible. The
-   gap is indexing: no canonical Slipstream V3-schema subgraph exists on The
-   Graph — the name-matching ones are Revert-automation and ICHI-vault
-   subgraphs, and Aerodrome itself indexes via Envio. Paths: an **Envio**
-   client (full coverage incl. IL), **on-chain RPC** (partial — no IL, since
-   deposited amounts must be reconstructed from events), or a **self-hosted
-   subgraph**.
+1. **Aerodrome Slipstream — full coverage via Envio.** The on-chain RPC path
+   is **live** today: `GET /api/lp/aerodrome/{token_id}/analytics` reads Base
+   Slipstream positions directly on-chain via Tatum RPC
+   (`data/onchain/slipstream.py`: NFPM `positions` → CLFactory `getPool` →
+   CLPool `slot0` → token `decimals`/`symbol`) and feeds the same pure
+   `engine/lp/uniswap_v3.py`. It reports value, in-range, token amounts, and
+   uncollected fees (`data_mode: onchain_rpc`). What's missing is what the
+   on-chain-only path structurally cannot derive: impermanent loss (needs
+   deposit history), fee APR (needs pool volume), and AERO gauge reward APR.
+   No canonical Slipstream V3-schema subgraph exists on The Graph (the
+   name-matching ones are Revert-automation and ICHI-vault subgraphs), so the
+   full-coverage path is an **Envio** client (or a self-hosted subgraph); the
+   pure engine + decode-compatible NFPM
+   (`0x827922686190790b37229fd06084350E74485b72`) are already wired for it.
 2. **Arbitrum Uniswap V3** — needs a correct V3-schema subgraph ID. The
    published one is incompatible, which is why Arbitrum is excluded from the
    multi-chain LP surface today.

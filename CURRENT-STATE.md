@@ -66,6 +66,7 @@ endpoint returns `None` / empty / `503` rather than failing the service.
 | `GET /api/lp/chains` | — chains/versions with LP analytics | — |
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/analytics` | The Graph + RPC (Tatum) + Merkl | `THEGRAPH_API_KEY`, `TATUM_API_KEY` (uncollected fees); USD prices are required query params |
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` | same + hold-strategy benchmark returns over a window | `THEGRAPH_API_KEY`, `TATUM_API_KEY`; USD prices are required query params |
+| `GET /api/lp/aerodrome/{token_id}/analytics` | Aerodrome Slipstream on **Base**, read on-chain via Tatum RPC (no subgraph) | `TATUM_API_KEY`; USD prices required. `data_mode: onchain_rpc` — value/in-range/amounts/uncollected fees only; IL, fee APR, AERO gauge APR null/zero |
 
 Uniswap V3 analytics computes value, in-range status, **exact** impermanent-loss-vs-HODL,
 fee-APR estimate, uncollected fees (RPC `tokensOwed`), and Merkl reward APR → total APR.
@@ -73,6 +74,13 @@ LP coverage spans **ethereum, base, optimism, polygon** (Arbitrum's published su
 ID uses an incompatible schema → unsupported). `vs-benchmark` adds hold-strategy
 benchmark returns over the position window. The CLMM math in `engine/lp/uniswap_v3.py`
 is pure and protocol-agnostic — reused across all chains.
+
+Aerodrome Slipstream (a Uniswap-V3 CLMM sibling) is read directly on-chain on Base via
+Tatum RPC — no Slipstream subgraph exists on The Graph, so `data/onchain/slipstream.py`
+walks NFPM `positions` → CLFactory `getPool` → CLPool `slot0` → token `decimals`/`symbol`
+and feeds the same engine. It reports value, in-range, token amounts, and uncollected
+fees (`data_mode: onchain_rpc`); IL, fee APR, and AERO gauge reward APR need an indexer
+(Envio) and are reported null/zero.
 
 ### Solana prices
 
@@ -190,12 +198,13 @@ CoinGecko hold-strategy benchmarks (on-demand + persisted), private market-data 
 
 ## Next (roadmap)
 
-- **Aerodrome / Velodrome Slipstream LP** — researched, **blocked on data source**: no
-  canonical Slipstream V3-schema subgraph exists on The Graph (name-matching ones are
-  Revert-automation + ICHI-vault subgraphs); Aerodrome indexes via Envio. Engine +
-  Slipstream NFPM (`0x827922686190790b37229fd06084350E74485b72`, decode-compatible) are
-  ready; needs an Envio client (full, incl. IL), on-chain RPC (partial, no IL — deposited
-  amounts are event-derived), or a self-hosted subgraph.
+- **Aerodrome Slipstream — full coverage via Envio** — the on-chain RPC path is **live**
+  (`GET /api/lp/aerodrome/{token_id}/analytics`, partial: value, in-range, token amounts,
+  uncollected fees; `data_mode: onchain_rpc`). No canonical Slipstream V3-schema subgraph
+  exists on The Graph (name-matching ones are Revert-automation + ICHI-vault subgraphs),
+  and the on-chain-only path cannot derive IL (needs deposit history), fee APR (needs pool
+  volume), or AERO gauge reward APR. An **Envio** client would add those; the pure engine +
+  Slipstream NFPM (`0x827922686190790b37229fd06084350E74485b72`, decode-compatible) are wired.
 - **Arbitrum Uniswap V3** — needs a correct V3-schema subgraph ID (published one is incompatible).
 - **Base subgraph data quality** — public Base V3 deployment has spam-token TVL
   contamination (pollutes discovery + pool-aggregate fee APR; per-position value/IL stay

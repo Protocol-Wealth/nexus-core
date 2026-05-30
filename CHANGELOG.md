@@ -7,8 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added — Multi-chain LP, position vs-benchmark, and Solana SPL prices
+### Added — Multi-chain LP, Aerodrome Slipstream, position vs-benchmark, and Solana SPL prices
 
+- **Aerodrome Slipstream LP analytics (Base, on-chain RPC)** —
+  `GET /api/lp/aerodrome/{token_id}/analytics`. Slipstream is a Uniswap-V3 CLMM
+  sibling, so the pure `engine/lp/uniswap_v3.py` math drives it unchanged. No
+  canonical Slipstream subgraph exists on The Graph, so position state is read
+  directly on-chain via Tatum RPC (`data/onchain/slipstream.py`): NFPM
+  `positions` → CLFactory `getPool` → CLPool `slot0` → token `decimals`/`symbol`.
+  Reports position value, in-range status, token amounts, and uncollected fees
+  (decoded `tokensOwed`). Impermanent loss (needs deposit history), fee APR
+  (needs pool volume), and AERO gauge reward APR are **not** available in
+  on-chain-only mode and are reported as null/zero (`data_mode: onchain_rpc`).
+  Envio indexing for full coverage (IL + fee APR + gauge APR) is a documented
+  follow-on.
 - **Multi-chain Uniswap V3 LP analytics** — `GET /api/lp/uniswap-v3/{chain}/{token_id}/analytics`
   now spans **ethereum, base, optimism, polygon**. The CLMM math in
   `engine/lp/uniswap_v3.py` is pure and protocol-agnostic, so the same engine
