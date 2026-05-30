@@ -122,7 +122,7 @@ nexus-core --version
 | `/api/market/quote/{symbol}`, `/api/market/history/{symbol}` | Composite market data (yfinance → MBOUM → MarketStack → CoinGecko) |
 | `/api/economic/{series_id}` | FRED series (503 when `FRED_API_KEY` unset) |
 | `/api/options/price`, `/api/options/overlay/{covered-call,cash-secured-put,collar}` | Black-Scholes educational overlays |
-| `/api/options/crypto/{currency}/instruments`, `/api/options/crypto/instrument/{name}` | Deribit crypto options |
+| `/api/options/crypto/currencies`, `/api/options/crypto/{currency}/instruments`, `/api/options/crypto/instrument/{name}` | Deribit crypto options on **BTC, ETH** (coin-settled inverse) + **SOL, XRP, TRX, AVAX** (USDC-settled linear, read via Deribit's `USDC` umbrella + prefix filter). Keyless |
 | `/api/wallet/{address}` | Anonymous EVM wallet balance (DeBank) |
 | `/api/chain/chains`, `/api/chain/balance/{chain}/{address}`, `/api/chain/native/{address}` | Multi-chain native balances (Tatum: EVM `eth_getBalance` + Solana `getBalance`) |
 | `/api/vaults`, `/api/vaults/chains` | DeFi vault discovery (vaults.fyi v2) |

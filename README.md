@@ -63,7 +63,8 @@ The deployed surface is public, read-only, and carries no client data and no aut
 | `GET /api/options/overlay/covered-call` | Covered-call overlay illustration |
 | `GET /api/options/overlay/cash-secured-put` | Cash-secured-put overlay illustration |
 | `GET /api/options/overlay/collar` | Protective-collar overlay illustration |
-| `GET /api/options/crypto/{currency}/instruments` | Deribit crypto options instruments |
+| `GET /api/options/crypto/currencies` | Crypto option underliers + settlement model (Deribit) |
+| `GET /api/options/crypto/{currency}/instruments` | Deribit crypto options — BTC/ETH (inverse) + SOL/XRP/TRX/AVAX (USDC-linear) |
 | `GET /api/options/crypto/instrument/{instrument_name}` | Deribit crypto option detail |
 
 ### On-Chain & DeFi
