@@ -26,6 +26,13 @@ neither ran in CI). Deployed at `nexus-core-00040`.
   tools in plain language, and a worked `monte_carlo_decumulation` request
   showing the load-bearing response fields. The native planning tools take the
   request as a JSON `body` argument (now called out in the guide). +2 guide tests.
+- **`examples/planning_agent.py` — reference Claude Agent SDK agent.** A PII-free
+  example that wires the Claude Agent SDK to the *hosted* nexus-core MCP server
+  and lets Claude orchestrate the planning flow end to end (current regime → real
+  capital-market assumptions → Monte Carlo decumulation → tax-aware withdrawal).
+  Least-privilege `allowed_tools` (read-only regime + planning tools only),
+  headless `permission_mode`, de-identified inputs. The SDK is a demo-only dep
+  (lazy-imported), not a nexus-core dependency; the module is import-safe without it.
 - **`health` and `describe` MCP tools.** `health` reports per-upstream status
   (market quotes, FRED, Deribit, DefiLlama); `describe` returns the tool catalog
   by category, the symbology rules, and the planning contract version.
