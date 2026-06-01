@@ -20,6 +20,12 @@ neither ran in CI). Deployed at `nexus-core-00040`.
   `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`)
   register in `tools/list` over both the `/mcp` HTTP transport and stdio — not
   only via the REST gateway — reusing the same handlers (contractVersion `0.1.0`).
+- **MCP setup guide — Claude Code + worked examples.** `/mcp-guide` now documents
+  the Claude Code path (`claude mcp add --transport http` + a shareable
+  `.mcp.json`), an "example prompts" section that drives the regime and planning
+  tools in plain language, and a worked `monte_carlo_decumulation` request
+  showing the load-bearing response fields. The native planning tools take the
+  request as a JSON `body` argument (now called out in the guide). +2 guide tests.
 - **`health` and `describe` MCP tools.** `health` reports per-upstream status
   (market quotes, FRED, Deribit, DefiLlama); `describe` returns the tool catalog
   by category, the symbology rules, and the planning contract version.

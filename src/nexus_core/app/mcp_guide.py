@@ -93,6 +93,28 @@ _PAGE = """\
     there is no account or login (nexus-core is public); you may briefly see an authorize
     step that approves itself. No OAuth Client ID needs to be entered.
   </p>
+  <h3>Claude Code</h3>
+  <p>
+    Claude Code speaks remote MCP over HTTP. Add the hosted server with one
+    command:
+  </p>
+  <pre><code>claude mcp add --transport http nexus-core {mcp_url}</code></pre>
+  <p>
+    or commit a <code>.mcp.json</code> to your project root so the whole team
+    picks it up:
+  </p>
+  <pre><code>{{
+  "mcpServers": {{
+    "nexus-core": {{
+      "type": "http",
+      "url": "{mcp_url}"
+    }}
+  }}
+}}</code></pre>
+  <p>
+    Run <code>/mcp</code> inside Claude Code to confirm the connection and see the
+    tool list.
+  </p>
   <h3>Claude Desktop</h3>
   <p>
     Claude Desktop connects to local processes, so bridge to the hosted URL with
@@ -167,6 +189,30 @@ nexus-core mcp        # MCP server over stdio</code></pre>
     connecting (or call <code>tools/list</code>).
   </p>
 
+  <h2>Try it — example prompts</h2>
+  <p>
+    Once connected, just ask in plain language; the client picks the tool and
+    fills the arguments. A few prompts that exercise the regime engine and the
+    planning tools end to end:
+  </p>
+  <ul>
+    <li>&ldquo;What macro regime are we in right now, and which signals are driving it?&rdquo;</li>
+    <li>&ldquo;Score AAPL on the EMF durability framework and explain each of the eight checks.&rdquo;</li>
+    <li>&ldquo;Run a Monte Carlo decumulation: age 62, retiring at 65, $1.2M traditional + $300k Roth,
+      60/40 then 80/20, $120k annual spend at 2.5% COLA, Social Security $42k from 67. Use the
+      EMF-regime return model and report the probability of success.&rdquo;</li>
+    <li>&ldquo;Pull the current capital-market assumptions, then re-run that plan with those real
+      assumptions and compare the success probability.&rdquo;</li>
+    <li>&ldquo;Build a tax-aware, RMD-first withdrawal plan for a $120k need at age 73 across those
+      accounts.&rdquo;</li>
+  </ul>
+  <div class="note">
+    The six planning tools take the request as a single JSON object in a
+    <code>body</code> argument, matching the pwplan-core wire contract
+    (<code>contractVersion 0.1.0</code>). The client assembles it from your
+    prompt; inputs are de-identified — age, never date of birth.
+  </div>
+
   <h2>Verify the connection</h2>
   <p>Inspect the server interactively with the official MCP Inspector:</p>
   <pre><code># hosted
@@ -215,6 +261,36 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     outputs are illustrative model results from hypothetical assumptions — not
     predictions or guarantees of any individual outcome.
   </div>
+  <h3>A worked request — the primary tool</h3>
+  <p>
+    <code>monte_carlo_decumulation</code> over a de-identified portfolio. The
+    response echoes <code>contractVersion</code> and carries
+    <code>successProbability</code>, a <code>terminalValues</code> percentile map,
+    <code>medianBalanceByYear</code>, and a <code>regimePathSummary</code> for the
+    regime-aware models:
+  </p>
+  <pre><code>curl -s {mcp_url}tools/monte_carlo_decumulation \\
+  -H 'content-type: application/json' \\
+  -d '{{
+    "contractVersion": "0.1.0",
+    "currentAge": 62, "retirementAge": 65, "horizonAge": 95,
+    "accounts": [
+      {{"type": "traditional", "balance": 1200000,
+       "allocation": {{"us_equity": 0.6, "us_bonds": 0.4}}}}
+    ],
+    "assetClasses": [
+      {{"id": "us_equity", "label": "US Equity",
+       "expectedReturn": 0.07, "volatility": 0.16, "lambda": 0.35}},
+      {{"id": "us_bonds", "label": "US Bonds",
+       "expectedReturn": 0.03, "volatility": 0.05, "lambda": 0.1}}
+    ],
+    "annualSpend": 120000, "spendColaRate": 0.025,
+    "guaranteedIncome": [
+      {{"label": "Social Security", "annualAmount": 42000,
+       "startAge": 67, "colaRate": 0.02}}
+    ],
+    "filingStatus": "married_joint", "returnModel": "emf_regime", "paths": 10000
+  }}'</code></pre>
 
   <div class="grid"></div>
 

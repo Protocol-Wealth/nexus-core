@@ -148,6 +148,23 @@ def test_mcp_guide_has_troubleshooting() -> None:
     assert "Tools not showing up" in html
 
 
+def test_mcp_guide_documents_claude_code_setup() -> None:
+    html = render_mcp_guide()
+    # CLI one-liner + the shareable project-config form, both over HTTP.
+    assert "claude mcp add --transport http nexus-core" in html
+    assert '"type": "http"' in html
+
+
+def test_mcp_guide_has_example_prompts() -> None:
+    html = render_mcp_guide()
+    assert "Try it — example prompts" in html
+    # A prompt that drives the regime engine and one that drives the planning tools.
+    assert "What macro regime are we in right now" in html
+    assert "Monte Carlo decumulation" in html
+    # The native planning tools take the request as a JSON `body` argument.
+    assert "<code>body</code>" in html
+
+
 def test_quote_endpoint() -> None:
     with _rest_client() as client:
         response = client.get("/api/market/quote/SPY")
