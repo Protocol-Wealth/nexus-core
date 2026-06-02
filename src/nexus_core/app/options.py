@@ -43,7 +43,9 @@ from ..engine.pricing import (
     collar_overlay,
     covered_call_ladder,
     covered_call_overlay,
+    crypto_collar,
     crypto_covered_call,
+    crypto_protective_put,
     greeks,
     rank_covered_calls,
     roll_analysis,
@@ -475,6 +477,74 @@ def build_options_router(
             "selected_by_delta": selected,
             "disclaimer": _DISCLAIMER,
         }
+
+    @router.get(
+        "/crypto/{currency}/protective-put",
+        summary="Crypto protective-put illustration (inverse-aware)",
+    )
+    def crypto_protective_put_route(
+        response: Response,
+        currency: str = Path(description="BTC, ETH, SOL, XRP, TRX, or AVAX"),
+        strike: float = Query(gt=0, description="Put-floor strike (USD)"),
+        days: int = Query(ge=1, le=1095, description="Days to expiry"),
+        coins: float = Query(1.0, gt=0, description="Coins protected"),
+        premium: float | None = Query(
+            None, description="Premium (native unit); theoretical if omitted"
+        ),
+        iv: float | None = Query(
+            None, description="Implied vol (decimal) for the theoretical path"
+        ),
+    ) -> dict[str, Any]:
+        """Protective put against a crypto holding; live spot + settlement from Deribit."""
+        cur, spot, settlement = _crypto_spot_settlement(deribit, currency)
+        result = crypto_protective_put(
+            spot=spot,
+            strike=strike,
+            expiry_days=days,
+            settlement=settlement,
+            coins=coins,
+            premium=premium,
+            iv=iv,
+        )
+        response.headers["Cache-Control"] = f"public, max-age={_CRYPTO_TTL}"
+        return {"currency": cur, "settlement": settlement, "spot": spot, **asdict(result)}
+
+    @router.get(
+        "/crypto/{currency}/collar",
+        summary="Crypto protective-collar illustration (inverse-aware)",
+    )
+    def crypto_collar_route(
+        response: Response,
+        currency: str = Path(description="BTC, ETH, SOL, XRP, TRX, or AVAX"),
+        put_strike: float = Query(gt=0, description="Protective-put strike (USD)"),
+        call_strike: float = Query(gt=0, description="Financing short-call strike (USD)"),
+        days: int = Query(ge=1, le=1095, description="Days to expiry"),
+        coins: float = Query(1.0, gt=0, description="Coins collared"),
+        put_premium: float | None = Query(
+            None, description="Put premium (native); theoretical if omitted"
+        ),
+        call_premium: float | None = Query(
+            None, description="Call premium (native); theoretical if omitted"
+        ),
+        iv: float | None = Query(
+            None, description="Implied vol (decimal) for theoretical premiums"
+        ),
+    ) -> dict[str, Any]:
+        """Protective collar (put floor + financing short call) on a crypto holding."""
+        cur, spot, settlement = _crypto_spot_settlement(deribit, currency)
+        result = crypto_collar(
+            spot=spot,
+            put_strike=put_strike,
+            call_strike=call_strike,
+            expiry_days=days,
+            settlement=settlement,
+            coins=coins,
+            put_premium=put_premium,
+            call_premium=call_premium,
+            iv=iv,
+        )
+        response.headers["Cache-Control"] = f"public, max-age={_CRYPTO_TTL}"
+        return {"currency": cur, "settlement": settlement, "spot": spot, **asdict(result)}
 
     @router.post("/crypto/{currency}/ladder", summary="Calendar/strike covered-call ladder")
     def crypto_ladder(

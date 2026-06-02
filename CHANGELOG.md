@@ -15,6 +15,14 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 #### Added
 
+- **Coin-denominated protective put + collar (engine + REST + MCP).** Completes
+  the hedge side of the crypto overwriting toolkit:
+  `crypto_overlays.crypto_protective_put` (floor, cost-of-protection, P(protection
+  pays)) and `crypto_collar` (put floor + financing short call → net credit/debit,
+  upside cap + downside protection). Settlement-aware (inverse premiums in coin),
+  reusing the `premium_usd` bridge. REST `GET /api/options/crypto/{currency}/
+  {protective-put,collar}` + MCP `crypto_protective_put` / `crypto_collar`. 5
+  engine + 3 route + 1 MCP test.
 - **Crypto options covered-call *overwriting* suite (engine + REST + MCP).** A
   settlement-aware analytics layer for writing calls against a crypto treasury,
   built on the existing Black-Scholes engine + Deribit client (BTC/ETH inverse,

@@ -56,7 +56,9 @@ from ...engine.pricing import (
     rank_covered_calls,
 )
 from ...engine.pricing.crypto_overlays import Settlement
+from ...engine.pricing.crypto_overlays import crypto_collar as _crypto_collar
 from ...engine.pricing.crypto_overlays import crypto_covered_call as _crypto_covered_call
+from ...engine.pricing.crypto_overlays import crypto_protective_put as _crypto_protective_put
 from ...engine.regime import RegimeEngine, RegimeResult
 from ...engine.scoring import ScoringFramework, format_structured
 
@@ -264,6 +266,8 @@ def build_server(
                         "crypto_option_ticker",
                         "crypto_covered_call",
                         "crypto_covered_call_chain",
+                        "crypto_protective_put",
+                        "crypto_collar",
                     ],
                     "defi": ["defi_protocols", "defi_protocol", "defi_chains"],
                     "planning": [name for name, _d, _f in (extra_tools or ())],
@@ -614,6 +618,106 @@ def _register_crypto_options_tools(
         )
         return _ok(
             "crypto_covered_call",
+            {"currency": cur, "settlement": settlement, "spot": spot, **asdict(result)},
+            filters,
+            disclaimer,
+        )
+
+    @mcp.tool(annotations=_RO_OPEN)
+    def crypto_protective_put(
+        currency: str,
+        strike: float,
+        days: int,
+        coins: float = 1.0,
+        premium: float | None = None,
+        iv: float | None = None,
+    ) -> str:
+        """Protective put against a crypto holding (BTC/ETH/SOL…): floor, cost-of-protection, P(protection pays) — live spot from Deribit, inverse-settlement aware. Not advice."""
+        if days <= 0 or days > _MAX_OPTION_DAYS or strike <= 0 or coins <= 0:
+            return _err(
+                "crypto_protective_put",
+                "strike/coins must be > 0 and days in [1, 1095]",
+                filters,
+                disclaimer,
+            )
+        try:
+            resolved = _spot_settlement(currency)
+        except Exception:
+            logger.exception("crypto_protective_put spot lookup failed for %s", currency)
+            return _err(
+                "crypto_protective_put", "upstream options data unavailable", filters, disclaimer
+            )
+        if resolved is None:
+            return _err(
+                "crypto_protective_put",
+                f"Unsupported or unpriced '{currency}' ({'/'.join(deribit.supported_currencies())})",
+                filters,
+                disclaimer,
+            )
+        cur, spot, settlement = resolved
+        result = _crypto_protective_put(
+            spot=spot,
+            strike=strike,
+            expiry_days=days,
+            settlement=settlement,
+            coins=coins,
+            premium=premium,
+            iv=iv,
+        )
+        return _ok(
+            "crypto_protective_put",
+            {"currency": cur, "settlement": settlement, "spot": spot, **asdict(result)},
+            filters,
+            disclaimer,
+        )
+
+    @mcp.tool(annotations=_RO_OPEN)
+    def crypto_collar(
+        currency: str,
+        put_strike: float,
+        call_strike: float,
+        days: int,
+        coins: float = 1.0,
+        iv: float | None = None,
+    ) -> str:
+        """Protective collar (put floor + financing short call) on a crypto holding — net cost/credit, cap + floor, live spot from Deribit. Inverse-settlement aware. Not advice."""
+        if (
+            days <= 0
+            or days > _MAX_OPTION_DAYS
+            or put_strike <= 0
+            or call_strike <= 0
+            or coins <= 0
+        ):
+            return _err(
+                "crypto_collar",
+                "strikes/coins must be > 0 and days in [1, 1095]",
+                filters,
+                disclaimer,
+            )
+        try:
+            resolved = _spot_settlement(currency)
+        except Exception:
+            logger.exception("crypto_collar spot lookup failed for %s", currency)
+            return _err("crypto_collar", "upstream options data unavailable", filters, disclaimer)
+        if resolved is None:
+            return _err(
+                "crypto_collar",
+                f"Unsupported or unpriced '{currency}' ({'/'.join(deribit.supported_currencies())})",
+                filters,
+                disclaimer,
+            )
+        cur, spot, settlement = resolved
+        result = _crypto_collar(
+            spot=spot,
+            put_strike=put_strike,
+            call_strike=call_strike,
+            expiry_days=days,
+            settlement=settlement,
+            coins=coins,
+            iv=iv,
+        )
+        return _ok(
+            "crypto_collar",
             {"currency": cur, "settlement": settlement, "spot": spot, **asdict(result)},
             filters,
             disclaimer,
