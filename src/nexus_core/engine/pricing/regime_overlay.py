@@ -55,13 +55,19 @@ _RATIONALE: dict[str, str] = {
 }
 
 
+#: Bounds on the effective multiplier after the defensiveness scaling.
+_MULTIPLIER_FLOOR = 0.05
+_MULTIPLIER_CEIL = 3.0
+
+
 @dataclass
 class RegimeConditionedOverwrite:
     """A regime-tilted covered-call strike pick + its illustration."""
 
     regime: str
     base_target_delta: float
-    delta_multiplier: float
+    defensiveness: float  # the risk-preference scalar applied (1.0 = house default)
+    delta_multiplier: float  # the EFFECTIVE multiplier after defensiveness scaling
     adjusted_target_delta: float
     rationale: str
     selected: dict[str, Any] | None  # the chosen chain quote, or None if no match
@@ -70,15 +76,23 @@ class RegimeConditionedOverwrite:
     notes: list[str] = field(default_factory=list)
 
 
-def regime_adjusted_target_delta(regime: str, base_target_delta: float) -> tuple[float, float]:
-    """Return ``(adjusted_target_delta, multiplier)`` for ``regime``.
+def regime_adjusted_target_delta(
+    regime: str, base_target_delta: float, defensiveness: float = 1.0
+) -> tuple[float, float]:
+    """Return ``(adjusted_target_delta, effective_multiplier)`` for ``regime``.
 
-    Unknown regimes fall back to a neutral 1.0 multiplier. The result is clamped
-    to ``[_DELTA_FLOOR, _DELTA_CEIL]``.
+    ``defensiveness`` scales the *magnitude* of the regime tilt — the single
+    risk-preference knob. With house multiplier ``m`` for the regime, the
+    effective multiplier is ``1 + (m - 1) * defensiveness``: ``0`` flattens the
+    tilt to neutral (1.0), ``1`` is the house default, ``>1`` amplifies it (more
+    defensive in fragile regimes, more aggressive in benign ones). Unknown
+    regimes use a neutral 1.0. Effective multiplier and target delta are clamped.
     """
-    multiplier = _REGIME_DELTA_MULTIPLIER.get(regime, 1.0)
-    adjusted = max(_DELTA_FLOOR, min(_DELTA_CEIL, base_target_delta * multiplier))
-    return adjusted, multiplier
+    house = _REGIME_DELTA_MULTIPLIER.get(regime, 1.0)
+    effective = 1.0 + (house - 1.0) * defensiveness
+    effective = max(_MULTIPLIER_FLOOR, min(_MULTIPLIER_CEIL, effective))
+    adjusted = max(_DELTA_FLOOR, min(_DELTA_CEIL, base_target_delta * effective))
+    return adjusted, effective
 
 
 def regime_conditioned_overwrite(
@@ -88,6 +102,7 @@ def regime_conditioned_overwrite(
     settlement: Settlement,
     quotes: list[ChainQuote],
     base_target_delta: float = 0.25,
+    defensiveness: float = 1.0,
     coins: float = 1.0,
 ) -> RegimeConditionedOverwrite:
     """Pick a covered-call strike whose delta is tilted by the live regime.
@@ -99,6 +114,8 @@ def regime_conditioned_overwrite(
         settlement: ``"inverse"`` or ``"linear"``.
         quotes: The option chain (calls with deltas) to select from.
         base_target_delta: The neutral target delta (default 0.25 = 25Δ).
+        defensiveness: Risk-preference scalar scaling the regime tilt's magnitude
+            (>= 0; ``0`` = no tilt, ``1`` = house default, ``>1`` = amplified).
         coins: Covered quantity for the illustration.
 
     Returns:
@@ -110,8 +127,10 @@ def regime_conditioned_overwrite(
         raise ValueError("settlement must be 'inverse' or 'linear'")
     if not 0.0 < base_target_delta < 1.0:
         raise ValueError("base_target_delta must be in (0, 1)")
+    if defensiveness < 0.0:
+        raise ValueError("defensiveness must be >= 0")
 
-    adjusted, multiplier = regime_adjusted_target_delta(regime, base_target_delta)
+    adjusted, multiplier = regime_adjusted_target_delta(regime, base_target_delta, defensiveness)
     pick = select_by_delta(quotes=quotes, target_delta=adjusted, kind="call")
 
     selected: dict[str, Any] | None = None
@@ -148,7 +167,8 @@ def regime_conditioned_overwrite(
     return RegimeConditionedOverwrite(
         regime=regime,
         base_target_delta=base_target_delta,
-        delta_multiplier=multiplier,
+        defensiveness=defensiveness,
+        delta_multiplier=round(multiplier, 4),
         adjusted_target_delta=round(adjusted, 4),
         rationale=_RATIONALE.get(regime, "Neutral target."),
         selected=selected,

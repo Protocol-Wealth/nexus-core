@@ -15,6 +15,14 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 #### Added
 
+- **Tunable regime tilt — a `defensiveness` risk knob on `crypto_regime_overwrite`.**
+  A single scalar that scales the *magnitude* of the regime→delta tilt: `0` = no
+  tilt (neutral), `1` = house default, `>1` = amplified (more defensive in fragile
+  regimes, more aggressive in benign ones). `regime_adjusted_target_delta` now takes
+  `defensiveness`; the effective multiplier is `1 + (house - 1) × defensiveness`
+  (clamped). Surfaced on the REST route (`?defensiveness=`, [0,5]) + the MCP tool,
+  and echoed in the response so the applied policy is transparent. Lets an operator
+  dial their risk preference without a code change. +3 tests.
 - **MCP coverage for the structured crypto-options tools.** The ladder / roll /
   book-MTM / scenario operations (REST-only since the overwriting suite landed)
   are now also native MCP tools: `crypto_covered_call_ladder`, `crypto_option_roll`,
