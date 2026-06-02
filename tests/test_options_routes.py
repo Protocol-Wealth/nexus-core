@@ -8,6 +8,8 @@ client supplies crypto option data. No network.
 
 from __future__ import annotations
 
+import time
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -45,26 +47,35 @@ class _FakeDeribit:
             return None
         return "inverse" if cur in ("BTC", "ETH") else "linear_usdc"
 
+    def get_index_price(self, currency: str) -> float | None:
+        return 100000.0 if currency.upper() in self._SUPPORTED else None
+
     def list_option_instruments(self, currency: str) -> list[OptionInstrument]:
+        # Future-dated so (ts - now) lands inside a chain's day window; mix of
+        # ITM (90k) and OTM (110k/120k) calls so the OTM filter has work to do.
+        now = time.time()
+        cur = currency.upper()
+
+        def ts(days: int) -> int:
+            return int((now + days * 86_400) * 1000)
+
         return [
-            OptionInstrument(
-                instrument_name=f"{currency}-27JUN26-100000-C",
-                base_currency=currency,
-                option_type="call",
-                strike=100000.0,
-                is_active=True,
-            )
+            OptionInstrument(f"{cur}-A-90000-C", cur, "call", 90000.0, ts(30), True),
+            OptionInstrument(f"{cur}-A-110000-C", cur, "call", 110000.0, ts(30), True),
+            OptionInstrument(f"{cur}-B-120000-C", cur, "call", 120000.0, ts(45), True),
         ]
 
     def get_option_ticker(self, instrument_name: str) -> OptionTicker | None:
         if "UNKNOWN" in instrument_name:
             return None
+        # Delta thins out for higher strikes so select_by_delta has a gradient.
+        delta = 0.20 if "120000" in instrument_name else 0.35
         return OptionTicker(
             instrument_name=instrument_name,
             mark_price=0.05,
             mark_iv=62.5,
             underlying_price=101000.0,
-            delta=0.42,
+            delta=delta,
         )
 
 
@@ -75,7 +86,9 @@ def _client() -> TestClient:
 
 
 def test_price_call() -> None:
-    r = _client().get("/api/options/price", params={"spot": 100, "strike": 105, "days": 30, "vol": 0.25})
+    r = _client().get(
+        "/api/options/price", params={"spot": 100, "strike": 105, "days": 30, "vol": 0.25}
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["price"] > 0
@@ -86,7 +99,9 @@ def test_price_call() -> None:
 
 
 def test_covered_call_overlay() -> None:
-    r = _client().get("/api/options/overlay/covered-call", params={"symbol": "AAPL", "strike": 105, "days": 30})
+    r = _client().get(
+        "/api/options/overlay/covered-call", params={"symbol": "AAPL", "strike": 105, "days": 30}
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["symbol"] == "AAPL"
@@ -113,7 +128,9 @@ def test_collar_overlay() -> None:
 
 
 def test_unknown_symbol_404() -> None:
-    r = _client().get("/api/options/overlay/covered-call", params={"symbol": "UNKNOWN", "strike": 105, "days": 30})
+    r = _client().get(
+        "/api/options/overlay/covered-call", params={"symbol": "UNKNOWN", "strike": 105, "days": 30}
+    )
     assert r.status_code == 404
 
 
@@ -132,7 +149,7 @@ def test_crypto_instruments() -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["currency"] == "BTC"
-    assert body["count"] == 1
+    assert body["count"] == 3
     assert body["instruments"][0]["base_currency"] == "BTC"
 
 
@@ -141,7 +158,7 @@ def test_crypto_instruments_linear_currency() -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["currency"] == "SOL"
-    assert body["count"] == 1
+    assert body["count"] == 3
 
 
 def test_crypto_instruments_unsupported_404() -> None:
@@ -153,10 +170,160 @@ def test_crypto_ticker() -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["mark_iv"] == 62.5
-    assert body["delta"] == 0.42
+    assert body["delta"] == 0.35
 
 
 def test_crypto_ticker_unknown_404() -> None:
-    assert (
-        _client().get("/api/options/crypto/instrument/UNKNOWN-INSTRUMENT").status_code == 404
+    assert _client().get("/api/options/crypto/instrument/UNKNOWN-INSTRUMENT").status_code == 404
+
+
+# ── Crypto covered-call overwriting suite ──
+
+
+def test_crypto_covered_call_inverse_route() -> None:
+    r = _client().get(
+        "/api/options/crypto/btc/covered-call",
+        params={"strike": 120000, "days": 30, "coins": 2, "premium": 0.02},
     )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["settlement"] == "inverse"
+    assert body["spot"] == 100000.0  # live index from the fake
+    assert body["premium_usd"] == 2000.0  # 0.02 BTC × 100k
+    assert body["static_yield_pct"] == 2.0
+    assert body["coin_income"] == 0.04  # grows the stack
+    assert "not investment" in body["disclaimer"].lower()
+
+
+def test_crypto_covered_call_linear_route() -> None:
+    r = _client().get(
+        "/api/options/crypto/sol/covered-call",
+        params={"strike": 120000, "days": 30, "coins": 10, "premium": 5},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["settlement"] == "linear"
+    assert body["premium_coin"] is None  # USDC-settled
+
+
+def test_crypto_covered_call_unsupported_404() -> None:
+    assert (
+        _client()
+        .get(
+            "/api/options/crypto/doge/covered-call",
+            params={"strike": 1, "days": 30},
+        )
+        .status_code
+        == 404
+    )
+
+
+def test_crypto_covered_call_chain_ranks() -> None:
+    r = _client().get(
+        "/api/options/crypto/btc/covered-call-chain",
+        params={"max_days": 60, "top": 5, "target_delta": 0.2},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["settlement"] == "inverse"
+    assert body["spot"] == 100000.0
+    assert body["considered"] == 2  # 110k + 120k OTM; 90k ITM dropped
+    ranked = body["ranked"]
+    assert ranked and ranked[0]["annualized_yield_pct"] >= ranked[-1]["annualized_yield_pct"]
+    # target_delta 0.2 matches the 120k strike (delta 0.20 in the fake).
+    assert body["selected_by_delta"]["strike"] == 120000.0
+
+
+def test_crypto_ladder_route() -> None:
+    r = _client().post(
+        "/api/options/crypto/btc/ladder",
+        json={
+            "total_coins": 10,
+            "legs": [
+                {"expiry_days": 30, "strike": 120000, "coins": 4, "premium": 0.02},
+                {"expiry_days": 60, "strike": 130000, "coins": 3, "premium": 0.03},
+            ],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["settlement"] == "inverse"
+    assert body["coverage_pct"] == 70.0
+    assert body["total_premium_usd"] == 17000.0
+
+
+def test_crypto_ladder_bad_body_400() -> None:
+    r = _client().post("/api/options/crypto/btc/ladder", json={"legs": []})
+    assert r.status_code == 400
+
+
+def test_crypto_roll_route() -> None:
+    r = _client().post(
+        "/api/options/crypto/btc/roll",
+        json={
+            "coins": 2,
+            "current_strike": 110000,
+            "current_expiry_days": 5,
+            "current_entry_premium": 0.03,
+            "current_close_premium": 0.05,
+            "new_strike": 120000,
+            "new_expiry_days": 35,
+            "new_open_premium": 0.04,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["roll_type"] == "roll up and out"
+    assert body["net_credit_usd"] == -2000.0
+
+
+def test_crypto_book_mtm_route() -> None:
+    r = _client().post(
+        "/api/options/crypto/btc/book/mtm",
+        json={
+            "coins_held": 1,
+            "positions": [
+                {
+                    "kind": "call",
+                    "side": "short",
+                    "strike": 120000,
+                    "expiry_days": 30,
+                    "coins": 1,
+                    "entry_premium": 0.03,
+                    "iv": 0.6,
+                    "mark_premium": 0.02,
+                }
+            ],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total_pnl_usd"] == 1000.0
+    assert body["net_delta_with_underlying"] < 1.0
+
+
+def test_crypto_book_scenario_route() -> None:
+    r = _client().post(
+        "/api/options/crypto/btc/book/scenario",
+        json={
+            "coins_held": 1,
+            "positions": [
+                {
+                    "kind": "call",
+                    "side": "short",
+                    "strike": 120000,
+                    "expiry_days": 30,
+                    "coins": 1,
+                    "entry_premium": 0.03,
+                    "iv": 0.6,
+                }
+            ],
+            "spot_shocks": [-0.2, 0.0, 0.25],
+        },
+    )
+    assert r.status_code == 200
+    cells = r.json()["cells"]
+    assert len(cells) == 3
+    up = next(c for c in cells if c["spot_shock_pct"] == 25.0)
+    assert up["short_calls_itm"] == 1
+    assert up["underlying_pnl_usd"] == 25000.0

@@ -9,6 +9,7 @@ register when their providers are supplied. Skipped if ``fastmcp`` is absent.
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
 
@@ -51,11 +52,37 @@ class _FakeMacro:
 
 
 class _FakeDeribit:
+    _SUPPORTED = ("BTC", "ETH", "SOL", "XRP", "TRX", "AVAX")
+
+    def supported_currencies(self) -> list[str]:
+        return list(self._SUPPORTED)
+
+    def settlement_model(self, currency: str) -> str | None:
+        cur = currency.upper()
+        if cur not in self._SUPPORTED:
+            return None
+        return "inverse" if cur in ("BTC", "ETH") else "linear_usdc"
+
+    def get_index_price(self, currency: str) -> float | None:
+        return 100000.0 if currency.upper() in self._SUPPORTED else None
+
     def list_option_instruments(self, currency: str) -> list[OptionInstrument]:
-        return [OptionInstrument(instrument_name=f"{currency}-X", base_currency=currency)]
+        future_ms = int((time.time() + 30 * 86_400) * 1000)
+        return [
+            OptionInstrument(
+                instrument_name=f"{currency}-X-110000-C",
+                base_currency=currency,
+                option_type="call",
+                strike=110000.0,
+                expiration_timestamp=future_ms,
+                is_active=True,
+            )
+        ]
 
     def get_option_ticker(self, instrument_name: str) -> OptionTicker | None:
-        return OptionTicker(instrument_name=instrument_name, mark_iv=50.0)
+        return OptionTicker(
+            instrument_name=instrument_name, mark_price=0.05, mark_iv=50.0, delta=0.3
+        )
 
 
 class _FakeDefi:
@@ -94,6 +121,8 @@ def test_full_tool_set_registers() -> None:
         "collar",
         "crypto_option_instruments",
         "crypto_option_ticker",
+        "crypto_covered_call",
+        "crypto_covered_call_chain",
         "defi_protocols",
         "defi_protocol",
         "defi_chains",
@@ -220,6 +249,36 @@ def test_option_price_rejects_bad_inputs_preserves_bs_limits() -> None:
         body = json.loads(_call_text(server, "option_price", {**base, "days": 30, **ok}))
         assert "error" not in body, ok
         assert body["price"] >= 0.0
+
+
+def test_crypto_covered_call_tool_inverse_yield() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket(), deribit=_FakeDeribit())  # type: ignore[arg-type]
+    body = json.loads(
+        _call_text(
+            server,
+            "crypto_covered_call",
+            {"currency": "BTC", "strike": 120000, "days": 30, "coins": 2, "premium": 0.02},
+        )
+    )
+    assert "error" not in body
+    assert body["settlement"] == "inverse"
+    assert body["spot"] == 100000.0
+    assert body["premium_usd"] == 2000.0
+    assert body["coin_income"] == 0.04
+
+
+def test_crypto_covered_call_chain_tool_ranks() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket(), deribit=_FakeDeribit())  # type: ignore[arg-type]
+    body = json.loads(
+        _call_text(server, "crypto_covered_call_chain", {"currency": "BTC", "max_days": 60})
+    )
+    assert "error" not in body
+    assert body["considered"] == 1  # the single OTM 110k call
+    assert body["ranked"][0]["strike"] == 110000.0
 
 
 def test_enhancement_tools_register() -> None:

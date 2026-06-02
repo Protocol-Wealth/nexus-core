@@ -69,6 +69,12 @@ The deployed surface is public, read-only, and carries no client data and no aut
 | `GET /api/options/crypto/currencies` | Crypto option underliers + settlement model (Deribit) |
 | `GET /api/options/crypto/{currency}/instruments` | Deribit crypto options — BTC/ETH (inverse) + SOL/XRP/TRX/AVAX (USDC-linear) |
 | `GET /api/options/crypto/instrument/{instrument_name}` | Deribit crypto option detail |
+| `GET /api/options/crypto/{currency}/covered-call` | Settlement-aware covered-call overwrite illustration (coin yield) |
+| `GET /api/options/crypto/{currency}/covered-call-chain` | Rank live OTM calls by annualized covered-call yield |
+| `POST /api/options/crypto/{currency}/ladder` | Calendar/strike covered-call ladder (coverage, blended yield) |
+| `POST /api/options/crypto/{currency}/roll` | Roll a short call (up/out net-credit economics) |
+| `POST /api/options/crypto/{currency}/book/mtm` | Mark an options book + aggregate Greeks |
+| `POST /api/options/crypto/{currency}/book/scenario` | Spot×IV stress grid + assignment flags |
 
 ### On-Chain & DeFi
 

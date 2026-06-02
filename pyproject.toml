@@ -186,6 +186,12 @@ ignore = [
     "UP042",
 ]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI dependency markers are called in argument defaults by design. Ruff's
+# B008 default allowlist already covers Query/Path/Header/etc.; extend it to the
+# JSON-body marker used by the options POST endpoints.
+extend-immutable-calls = ["fastapi.Body"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

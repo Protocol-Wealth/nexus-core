@@ -29,6 +29,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from typing import Any, Protocol
@@ -45,13 +46,17 @@ from ...data.derivatives import DeribitClient
 from ...data.onchain import DefiLlamaClient
 from ...data.providers import MacroDataProvider, MarketDataProvider
 from ...engine.pricing import (
+    ChainQuote,
     OptionKind,
     bs_price,
     cash_secured_put_overlay,
     collar_overlay,
     covered_call_overlay,
     greeks,
+    rank_covered_calls,
 )
+from ...engine.pricing.crypto_overlays import Settlement
+from ...engine.pricing.crypto_overlays import crypto_covered_call as _crypto_covered_call
 from ...engine.regime import RegimeEngine, RegimeResult
 from ...engine.scoring import ScoringFramework, format_structured
 
@@ -232,8 +237,10 @@ def build_server(
         if defillama is not None:
             upstreams["defi"] = {"status": "configured"}
         return _ok(
-            "health", {"service": "nexus-core", "version": __version__, "upstreams": upstreams},
-            filters, disclaimer,
+            "health",
+            {"service": "nexus-core", "version": __version__, "upstreams": upstreams},
+            filters,
+            disclaimer,
         )
 
     @mcp.tool(annotations=_RO_CLOSED)
@@ -252,7 +259,12 @@ def build_server(
                     "market": ["get_quote", "get_quotes", "get_price_history"],
                     "economic": ["get_economic_series"],
                     "options": ["option_price", "covered_call", "cash_secured_put", "collar"],
-                    "crypto_options": ["crypto_option_instruments", "crypto_option_ticker"],
+                    "crypto_options": [
+                        "crypto_option_instruments",
+                        "crypto_option_ticker",
+                        "crypto_covered_call",
+                        "crypto_covered_call_chain",
+                    ],
                     "defi": ["defi_protocols", "defi_protocol", "defi_chains"],
                     "planning": [name for name, _d, _f in (extra_tools or ())],
                     "meta": ["health", "describe"],
@@ -400,7 +412,7 @@ def _register_economic_tools(
             "get_economic_series",
             {"series_id": series_id, "value": value, "as_of": as_of, "source": "FRED"},
             filters,
-            disclaimer
+            disclaimer,
         )
 
 
@@ -446,7 +458,10 @@ def _register_equity_options_tools(
             quote.price, strike, days, None, sigma=_annualized_vol(market, symbol)
         )
         return _ok(
-            "covered_call", {"symbol": symbol, "spot": quote.price, **asdict(result)}, filters, disclaimer
+            "covered_call",
+            {"symbol": symbol, "spot": quote.price, **asdict(result)},
+            filters,
+            disclaimer,
         )
 
     @mcp.tool(annotations=_RO_OPEN)
@@ -471,16 +486,22 @@ def _register_equity_options_tools(
     @mcp.tool(annotations=_RO_OPEN)
     def collar(symbol: str, put_strike: float, call_strike: float, days: int) -> str:
         """Educational protective-collar overlay illustration on a public ticker. Not advice."""
-        bad = _validate_option_inputs(strike=put_strike, days=days, min_days=1) or _validate_option_inputs(
-            strike=call_strike, days=days, min_days=1
-        )
+        bad = _validate_option_inputs(
+            strike=put_strike, days=days, min_days=1
+        ) or _validate_option_inputs(strike=call_strike, days=days, min_days=1)
         if bad is not None:
             return _err("collar", bad, filters, disclaimer)
         quote = market.get_quote(symbol)
         if quote is None:
             return _err("collar", f"No quote for '{symbol}'", filters, disclaimer)
         result = collar_overlay(
-            quote.price, put_strike, call_strike, days, None, None, sigma=_annualized_vol(market, symbol)
+            quote.price,
+            put_strike,
+            call_strike,
+            days,
+            None,
+            None,
+            sigma=_annualized_vol(market, symbol),
         )
         return _ok(
             "collar", {"symbol": symbol, "spot": quote.price, **asdict(result)}, filters, disclaimer
@@ -506,10 +527,19 @@ def _register_crypto_options_tools(
             instruments = deribit.list_option_instruments(cur)
         except Exception:
             logger.exception("crypto_option_instruments failed for %s", cur)
-            return _err("crypto_option_instruments", "upstream options data unavailable", filters, disclaimer)
+            return _err(
+                "crypto_option_instruments",
+                "upstream options data unavailable",
+                filters,
+                disclaimer,
+            )
         return _ok(
             "crypto_option_instruments",
-            {"currency": cur, "count": len(instruments), "instruments": [asdict(i) for i in instruments]},
+            {
+                "currency": cur,
+                "count": len(instruments),
+                "instruments": [asdict(i) for i in instruments],
+            },
             filters,
             disclaimer,
         )
@@ -521,10 +551,138 @@ def _register_crypto_options_tools(
             ticker = deribit.get_option_ticker(instrument_name)
         except Exception:
             logger.exception("crypto_option_ticker failed for %s", instrument_name)
-            return _err("crypto_option_ticker", "upstream options data unavailable", filters, disclaimer)
+            return _err(
+                "crypto_option_ticker", "upstream options data unavailable", filters, disclaimer
+            )
         if ticker is None:
-            return _err("crypto_option_ticker", f"No ticker for '{instrument_name}'", filters, disclaimer)
+            return _err(
+                "crypto_option_ticker", f"No ticker for '{instrument_name}'", filters, disclaimer
+            )
         return _ok("crypto_option_ticker", asdict(ticker), filters, disclaimer)
+
+    def _spot_settlement(currency: str) -> tuple[str, float, Settlement] | None:
+        cur = currency.upper()
+        model = deribit.settlement_model(cur)
+        if model is None:
+            return None
+        spot = deribit.get_index_price(cur)
+        if spot is None or spot <= 0:
+            return None
+        return cur, spot, ("inverse" if model == "inverse" else "linear")
+
+    @mcp.tool(annotations=_RO_OPEN)
+    def crypto_covered_call(
+        currency: str,
+        strike: float,
+        days: int,
+        coins: float = 1.0,
+        premium: float | None = None,
+        iv: float | None = None,
+    ) -> str:
+        """Covered-call overwrite on a crypto treasury (BTC/ETH/SOL…): coin yield, cushion, assignment level — live spot from Deribit, inverse-settlement aware. Not advice."""
+        cur = currency.upper()
+        if days <= 0 or days > _MAX_OPTION_DAYS or strike <= 0 or coins <= 0:
+            return _err(
+                "crypto_covered_call",
+                "strike/coins must be > 0 and days in [1, 1095]",
+                filters,
+                disclaimer,
+            )
+        try:
+            resolved = _spot_settlement(cur)
+        except Exception:
+            logger.exception("crypto_covered_call spot lookup failed for %s", cur)
+            return _err(
+                "crypto_covered_call", "upstream options data unavailable", filters, disclaimer
+            )
+        if resolved is None:
+            return _err(
+                "crypto_covered_call",
+                f"Unsupported or unpriced '{currency}' ({'/'.join(deribit.supported_currencies())})",
+                filters,
+                disclaimer,
+            )
+        _, spot, settlement = resolved
+        result = _crypto_covered_call(
+            spot=spot,
+            strike=strike,
+            expiry_days=days,
+            settlement=settlement,
+            coins=coins,
+            premium=premium,
+            iv=iv,
+        )
+        return _ok(
+            "crypto_covered_call",
+            {"currency": cur, "settlement": settlement, "spot": spot, **asdict(result)},
+            filters,
+            disclaimer,
+        )
+
+    @mcp.tool(annotations=_RO_OPEN)
+    def crypto_covered_call_chain(
+        currency: str, max_days: int = 60, coins: float = 1.0, top: int = 10
+    ) -> str:
+        """Rank a crypto's live OTM calls by annualized covered-call yield (Deribit) — which strike/expiry to overwrite. Not advice."""
+        cur = currency.upper()
+        try:
+            resolved = _spot_settlement(cur)
+            if resolved is None:
+                return _err(
+                    "crypto_covered_call_chain",
+                    f"Unsupported or unpriced '{currency}' ({'/'.join(deribit.supported_currencies())})",
+                    filters,
+                    disclaimer,
+                )
+            _, spot, settlement = resolved
+            now_ms = time.time() * 1000.0
+            candidates: list[tuple[Any, int]] = []
+            for ins in deribit.list_option_instruments(cur):
+                if (ins.option_type or "").lower() != "call":
+                    continue
+                if ins.strike is None or ins.expiration_timestamp is None or ins.strike <= spot:
+                    continue
+                d = (ins.expiration_timestamp - now_ms) / 86_400_000.0
+                if 0 < d <= max(max_days, 1):
+                    candidates.append((ins, int(round(d))))
+            candidates.sort(key=lambda c: abs(c[0].strike - spot))
+            quotes = []
+            for ins, d in candidates[:24]:
+                tk = deribit.get_option_ticker(ins.instrument_name)
+                quotes.append(
+                    ChainQuote(
+                        instrument_name=ins.instrument_name,
+                        kind="call",
+                        strike=float(ins.strike),
+                        expiry_days=d,
+                        premium=tk.mark_price if tk else None,
+                        delta=tk.delta if tk else None,
+                        mark_iv=tk.mark_iv if tk else None,
+                    )
+                )
+        except Exception:
+            logger.exception("crypto_covered_call_chain failed for %s", cur)
+            return _err(
+                "crypto_covered_call_chain",
+                "upstream options data unavailable",
+                filters,
+                disclaimer,
+            )
+        ranked = rank_covered_calls(
+            spot=spot, settlement=settlement, quotes=quotes, coins=coins, top=max(top, 1)
+        )
+        return _ok(
+            "crypto_covered_call_chain",
+            {
+                "currency": cur,
+                "settlement": settlement,
+                "spot": spot,
+                "considered": len(quotes),
+                "ranked": ranked,
+            },
+            filters,
+            disclaimer,
+        )
 
 
 def _register_defi_tools(
