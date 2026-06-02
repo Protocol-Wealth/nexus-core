@@ -126,6 +126,7 @@ def test_full_tool_set_registers() -> None:
         "crypto_covered_call",
         "crypto_covered_call_chain",
         "crypto_iv_term_structure",
+        "crypto_vol_skew",
         "crypto_protective_put",
         "crypto_collar",
         "crypto_regime_overwrite",
@@ -313,6 +314,17 @@ def test_crypto_regime_overwrite_without_regime_engine_errors() -> None:
     server = build_server(market=_FakeMarket(), deribit=_FakeDeribit())  # type: ignore[arg-type]
     body = json.loads(_call_text(server, "crypto_regime_overwrite", {"currency": "BTC"}))
     assert "error" in body  # tool registers but reports the missing regime engine
+
+
+def test_crypto_vol_skew_tool() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket(), deribit=_FakeDeribit())  # type: ignore[arg-type]
+    body = json.loads(_call_text(server, "crypto_vol_skew", {"currency": "BTC", "target_days": 30}))
+    assert "error" not in body
+    assert body["expiry_days"] == 30
+    assert body["points"][0]["strike"] == 110000.0  # the fake's single call
+    assert body["atm_iv"] == 50.0
 
 
 def test_crypto_iv_term_structure_tool() -> None:

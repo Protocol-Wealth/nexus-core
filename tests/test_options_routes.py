@@ -257,6 +257,18 @@ def test_crypto_iv_term_structure_route() -> None:
     assert body["shape"] == "flat"
 
 
+def test_crypto_vol_skew_route() -> None:
+    r = _client().get("/api/options/crypto/btc/vol-skew", params={"target_days": 30})
+    assert r.status_code == 200
+    body = r.json()
+    # Fake chain at 30d (90k + 110k in the [0.9, 2.0]×spot band); 120k is 45d.
+    assert body["expiry_days"] == 30
+    assert len(body["points"]) == 2
+    assert body["skew_25d_pts"] == 0.0  # both IV 62.5 in the fake
+    assert body["richest_strike"] == 110000.0  # the OTM call
+    assert all(p["vega"] is not None for p in body["points"])
+
+
 def test_crypto_regime_overwrite_route() -> None:
     r = _client().get("/api/options/crypto/btc/regime-overwrite", params={"max_days": 60})
     assert r.status_code == 200

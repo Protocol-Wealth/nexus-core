@@ -15,6 +15,16 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 #### Added
 
+- **Call-side vol skew — `crypto_vol_skew` (which strike is richest to write).**
+  `engine/pricing/skew.vol_skew` gives IV + Black-Scholes **vega by strike** at one
+  expiry (nearest a target tenor), framed for a covered-call writer: the **25Δ call
+  skew** (`IV(25Δ call) − IV(ATM)` — positive ⇒ OTM calls richer, favorable for OTM
+  overwriting), the **richest OTM strike** (highest IV), and per-strike vega (the
+  vol exposure shorted). Completes the strike-selection trio with the term structure
+  (which tenor) and the regime tilt (how far OTM). REST
+  `GET /api/options/crypto/{ccy}/vol-skew?target_days=` + MCP `crypto_vol_skew`.
+  Inverse vega is a USD-space BS approximation (noted). 4 engine + 1 route + 1 MCP
+  test.
 - **Crypto-options agent quickstart + worked prompts.** `examples/crypto_options_agent.py`
   — a Claude Agent SDK agent over the hosted MCP server (`nexusmcp.site/mcp`) that
   drives the overwriting suite conversationally (live regime → regime-tilted strike
