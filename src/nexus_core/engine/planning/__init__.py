@@ -13,6 +13,7 @@ any specific person's outcome.
 from .correlation import correlation_matrix
 from .glide_path import GlidePathShape, compute_glide_path
 from .monte_carlo import monte_carlo_decumulation
+from .sequence_risk import sequence_of_returns_stress
 from .tax import InfeasiblePlanError, tax_aware_withdrawal
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "compute_glide_path",
     "correlation_matrix",
     "monte_carlo_decumulation",
+    "sequence_of_returns_stress",
     "tax_aware_withdrawal",
 ]
