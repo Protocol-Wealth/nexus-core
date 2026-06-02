@@ -205,6 +205,12 @@ nexus-core mcp        # MCP server over stdio</code></pre>
       assumptions and compare the success probability.&rdquo;</li>
     <li>&ldquo;Build a tax-aware, RMD-first withdrawal plan for a $120k need at age 73 across those
       accounts.&rdquo;</li>
+    <li>&ldquo;Given the current macro regime, which covered-call strike should I write on 5 BTC
+      over the next 45 days? Show the regime tilt and the coin yield.&rdquo;</li>
+    <li>&ldquo;Rank the live BTC OTM calls by annualized covered-call yield, and show the IV term
+      structure so I can see which expiry pays richest.&rdquo;</li>
+    <li>&ldquo;Illustrate a protective collar on 5 ETH with a 20%-OTM put floor and a 25%-OTM call
+      cap, and stress the book for a &plusmn;30% spot move.&rdquo;</li>
   </ul>
   <div class="note">
     The planning tools take the request as a single JSON object in a

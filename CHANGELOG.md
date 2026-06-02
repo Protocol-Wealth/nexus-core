@@ -15,6 +15,12 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 #### Added
 
+- **Crypto-options agent quickstart + worked prompts.** `examples/crypto_options_agent.py`
+  — a Claude Agent SDK agent over the hosted MCP server (`nexusmcp.site/mcp`) that
+  drives the overwriting suite conversationally (live regime → regime-tilted strike
+  → IV term structure → coin-yield → put/collar/stress), least-privilege allowlist,
+  public/illustrative inputs only. Plus three crypto-options worked prompts added to
+  the `/mcp` connect guide. Lets the suite be driven from Claude end to end.
 - **IV term structure — `crypto_iv_term_structure` (which tenor pays richest to
   write).** `engine/pricing/option_chain.iv_term_structure` builds the near-ATM
   implied-vol curve across expiries from the live Deribit chain: per-tenor near-ATM
