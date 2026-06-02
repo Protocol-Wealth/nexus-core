@@ -63,6 +63,7 @@ from ...engine.pricing import (
     regime_conditioned_overwrite,
     roll_analysis,
     scenario_stress,
+    vol_skew,
 )
 from ...engine.pricing.crypto_overlays import Settlement
 from ...engine.pricing.crypto_overlays import crypto_collar as _crypto_collar
@@ -276,6 +277,7 @@ def build_server(
                         "crypto_covered_call",
                         "crypto_covered_call_chain",
                         "crypto_iv_term_structure",
+                        "crypto_vol_skew",
                         "crypto_protective_put",
                         "crypto_collar",
                         "crypto_regime_overwrite",
@@ -621,6 +623,72 @@ def _register_crypto_options_tools(
                 )
             )
         return quotes
+
+    def _skew_chain(
+        cur: str, spot: float, target_days: int, limit: int = 40
+    ) -> tuple[list[ChainQuote], int | None]:
+        """Single-expiry near-ATM→OTM call chain for the vol skew (nearest tenor)."""
+        now_ms = time.time() * 1000.0
+        by_expiry: list[tuple[Any, int]] = []
+        for ins in deribit.list_option_instruments(cur):
+            if (ins.option_type or "").lower() != "call" or ins.strike is None:
+                continue
+            if ins.expiration_timestamp is None or not (0.9 * spot <= ins.strike <= 2.0 * spot):
+                continue
+            d = (ins.expiration_timestamp - now_ms) / 86_400_000.0
+            if d > 0:
+                by_expiry.append((ins, int(round(d))))
+        if not by_expiry:
+            return [], None
+        expiry = min({d for _, d in by_expiry}, key=lambda d: abs(d - target_days))
+        at_expiry = sorted(
+            (ins for ins, d in by_expiry if d == expiry), key=lambda i: abs(i.strike - spot)
+        )
+        quotes: list[ChainQuote] = []
+        for ins in at_expiry[:limit]:
+            tk = deribit.get_option_ticker(ins.instrument_name)
+            quotes.append(
+                ChainQuote(
+                    instrument_name=ins.instrument_name,
+                    kind="call",
+                    strike=float(ins.strike),
+                    expiry_days=expiry,
+                    premium=tk.mark_price if tk else None,
+                    delta=tk.delta if tk else None,
+                    mark_iv=tk.mark_iv if tk else None,
+                )
+            )
+        return quotes, expiry
+
+    @mcp.tool(annotations=_RO_OPEN)
+    def crypto_vol_skew(currency: str, target_days: int = 30) -> str:
+        """Call-side vol skew (IV + vega by strike) for a crypto at the nearest expiry to target_days — which strike is richest to write + the 25Δ call skew. Live chain from Deribit. Not advice."""
+        cur = currency.upper()
+        try:
+            resolved = _spot_settlement(cur)
+            if resolved is None:
+                return _err(
+                    "crypto_vol_skew",
+                    f"Unsupported or unpriced '{currency}' ({'/'.join(deribit.supported_currencies())})",
+                    filters,
+                    disclaimer,
+                )
+            _, spot, settlement = resolved
+            quotes, expiry = _skew_chain(cur, spot, target_days)
+        except Exception:
+            logger.exception("crypto_vol_skew failed for %s", cur)
+            return _err("crypto_vol_skew", "upstream options data unavailable", filters, disclaimer)
+        if not quotes or expiry is None:
+            return _err(
+                "crypto_vol_skew", f"no call chain available for '{cur}'", filters, disclaimer
+            )
+        result = vol_skew(spot=spot, expiry_days=expiry, settlement=settlement, quotes=quotes)
+        return _ok(
+            "crypto_vol_skew",
+            {"currency": cur, **asdict(result)},
+            filters,
+            disclaimer,
+        )
 
     @mcp.tool(annotations=_RO_OPEN)
     def crypto_covered_call(

@@ -66,6 +66,7 @@ from .regime_overlay import (
     regime_adjusted_target_delta,
     regime_conditioned_overwrite,
 )
+from .skew import SkewPoint, VolSkew, vol_skew
 
 __all__ = [
     "BookMtm",
@@ -87,7 +88,9 @@ __all__ = [
     "ScenarioCell",
     "ScenarioResult",
     "Settlement",
+    "SkewPoint",
     "TermStructurePoint",
+    "VolSkew",
     "book_mtm",
     "bs_price",
     "cash_secured_put_overlay",
@@ -106,4 +109,5 @@ __all__ = [
     "roll_analysis",
     "scenario_stress",
     "select_by_delta",
+    "vol_skew",
 ]

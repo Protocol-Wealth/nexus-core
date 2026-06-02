@@ -54,6 +54,7 @@ from ..engine.pricing import (
     roll_analysis,
     scenario_stress,
     select_by_delta,
+    vol_skew,
 )
 from ..engine.pricing.black_scholes import OptionKind
 from ..engine.pricing.crypto_overlays import Settlement
@@ -260,6 +261,56 @@ def _chain_quotes(
             )
         )
     return quotes
+
+
+def _skew_chain(
+    deribit: DeribitClient,
+    currency: str,
+    spot: float,
+    *,
+    target_days: int,
+    limit: int,
+) -> tuple[list[ChainQuote], int | None]:
+    """Single-expiry call chain (near-ATM through OTM) for the vol skew.
+
+    Unlike the yield chain (OTM-only, multi-expiry), the skew needs a smile at
+    *one* tenor: pick the expiry nearest ``target_days``, keep its calls in a
+    [0.9, 2.0]×spot band (so the ATM reference is captured), take the ``limit``
+    nearest-the-money, and fetch each ticker. Returns ``(quotes, expiry_days)``.
+    """
+    now_ms = time.time() * 1000.0
+    by_expiry: list[tuple[Any, int]] = []
+    for ins in deribit.list_option_instruments(currency):
+        if (ins.option_type or "").lower() != "call":
+            continue
+        if ins.strike is None or ins.expiration_timestamp is None:
+            continue
+        if not (0.9 * spot <= ins.strike <= 2.0 * spot):
+            continue
+        days = (ins.expiration_timestamp - now_ms) / _MS_PER_DAY
+        if days > 0:
+            by_expiry.append((ins, int(round(days))))
+    if not by_expiry:
+        return [], None
+    expiry = min({d for _, d in by_expiry}, key=lambda d: abs(d - target_days))
+    at_expiry = sorted(
+        (ins for ins, d in by_expiry if d == expiry), key=lambda i: abs(i.strike - spot)
+    )
+    quotes: list[ChainQuote] = []
+    for ins in at_expiry[:limit]:
+        ticker = deribit.get_option_ticker(ins.instrument_name)
+        quotes.append(
+            ChainQuote(
+                instrument_name=ins.instrument_name,
+                kind="call",
+                strike=float(ins.strike),
+                expiry_days=expiry,
+                premium=ticker.mark_price if ticker else None,
+                delta=ticker.delta if ticker else None,
+                mark_iv=ticker.mark_iv if ticker else None,
+            )
+        )
+    return quotes, expiry
 
 
 def build_options_router(
@@ -508,6 +559,26 @@ def build_options_router(
             **asdict(result),
             "disclaimer": _DISCLAIMER,
         }
+
+    @router.get(
+        "/crypto/{currency}/vol-skew",
+        summary="Call-side vol skew (IV + vega by strike) for writing",
+    )
+    def crypto_vol_skew(
+        response: Response,
+        currency: str = Path(description="BTC, ETH, SOL, XRP, TRX, or AVAX"),
+        target_days: int = Query(
+            30, ge=1, le=1095, description="Target tenor (nearest expiry used)"
+        ),
+    ) -> dict[str, Any]:
+        """Call-side IV + vega across strikes at the expiry nearest ``target_days``."""
+        cur, spot, settlement = _crypto_spot_settlement(deribit, currency)
+        quotes, expiry = _skew_chain(deribit, cur, spot, target_days=target_days, limit=40)
+        if not quotes or expiry is None:
+            raise HTTPException(status_code=502, detail=f"No call chain available for '{cur}'")
+        result = vol_skew(spot=spot, expiry_days=expiry, settlement=settlement, quotes=quotes)
+        response.headers["Cache-Control"] = f"public, max-age={_CRYPTO_TTL}"
+        return {"currency": cur, **asdict(result), "disclaimer": _DISCLAIMER}
 
     @router.get(
         "/crypto/{currency}/regime-overwrite",
