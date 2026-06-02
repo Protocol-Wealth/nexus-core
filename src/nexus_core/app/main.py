@@ -29,7 +29,7 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from .. import __version__
 from ..data import db
@@ -57,6 +57,7 @@ from ..disclaimers import FULL as _FULL_DISCLAIMER
 from ..engine.regime import RegimeEngine
 from .benchmarks import build_benchmarks_router
 from .chain import build_chain_router
+from .disclosure import render_disclosure_card
 from .landing import render_landing
 from .llms_txt import render_llms_txt
 from .lp import build_lp_router
@@ -286,6 +287,14 @@ def create_app(
         return PlainTextResponse(
             render_security_txt(),
             media_type="text/plain; charset=utf-8",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @app.get("/.well-known/ai-disclosure.json", include_in_schema=False)
+    def ai_disclosure() -> JSONResponse:
+        """Machine-readable AI-system disclosure (pwos-core disclosure-card schema)."""
+        return JSONResponse(
+            render_disclosure_card(),
             headers={"Cache-Control": "public, max-age=86400"},
         )
 
