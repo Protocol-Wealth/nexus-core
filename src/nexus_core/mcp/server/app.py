@@ -45,6 +45,7 @@ from ... import __version__
 from ...data.derivatives import DeribitClient
 from ...data.onchain import DefiLlamaClient
 from ...data.providers import MacroDataProvider, MarketDataProvider
+from ...engine.planning.regime import to_generic_regime
 from ...engine.pricing import (
     ChainQuote,
     OptionKind,
@@ -54,6 +55,7 @@ from ...engine.pricing import (
     covered_call_overlay,
     greeks,
     rank_covered_calls,
+    regime_conditioned_overwrite,
 )
 from ...engine.pricing.crypto_overlays import Settlement
 from ...engine.pricing.crypto_overlays import crypto_collar as _crypto_collar
@@ -201,7 +203,7 @@ def build_server(
     if macro is not None:
         _register_economic_tools(mcp, macro, disclaimer, filters)
     if deribit is not None:
-        _register_crypto_options_tools(mcp, deribit, disclaimer, filters)
+        _register_crypto_options_tools(mcp, deribit, disclaimer, filters, regime_engine)
     if defillama is not None:
         _register_defi_tools(mcp, defillama, disclaimer, filters)
 
@@ -268,6 +270,7 @@ def build_server(
                         "crypto_covered_call_chain",
                         "crypto_protective_put",
                         "crypto_collar",
+                        "crypto_regime_overwrite",
                     ],
                     "defi": ["defi_protocols", "defi_protocol", "defi_chains"],
                     "planning": [name for name, _d, _f in (extra_tools or ())],
@@ -513,7 +516,11 @@ def _register_equity_options_tools(
 
 
 def _register_crypto_options_tools(
-    mcp: FastMCP, deribit: DeribitClient, disclaimer: str, filters: list[ResponseFilter]
+    mcp: FastMCP,
+    deribit: DeribitClient,
+    disclaimer: str,
+    filters: list[ResponseFilter],
+    regime_engine: RegimeEngine | None = None,
 ) -> None:
     @mcp.tool(annotations=_RO_OPEN)
     def crypto_option_instruments(currency: str) -> str:
@@ -573,6 +580,35 @@ def _register_crypto_options_tools(
         if spot is None or spot <= 0:
             return None
         return cur, spot, ("inverse" if model == "inverse" else "linear")
+
+    def _call_chain(cur: str, spot: float, max_days: int) -> list[ChainQuote]:
+        """Bounded OTM-call chain for a currency (≤24 nearest-the-money tickers)."""
+        now_ms = time.time() * 1000.0
+        candidates: list[tuple[Any, int]] = []
+        for ins in deribit.list_option_instruments(cur):
+            if (ins.option_type or "").lower() != "call":
+                continue
+            if ins.strike is None or ins.expiration_timestamp is None or ins.strike <= spot:
+                continue
+            d = (ins.expiration_timestamp - now_ms) / 86_400_000.0
+            if 0 < d <= max(max_days, 1):
+                candidates.append((ins, int(round(d))))
+        candidates.sort(key=lambda c: abs(c[0].strike - spot))
+        quotes: list[ChainQuote] = []
+        for ins, d in candidates[:24]:
+            tk = deribit.get_option_ticker(ins.instrument_name)
+            quotes.append(
+                ChainQuote(
+                    instrument_name=ins.instrument_name,
+                    kind="call",
+                    strike=float(ins.strike),
+                    expiry_days=d,
+                    premium=tk.mark_price if tk else None,
+                    delta=tk.delta if tk else None,
+                    mark_iv=tk.mark_iv if tk else None,
+                )
+            )
+        return quotes
 
     @mcp.tool(annotations=_RO_OPEN)
     def crypto_covered_call(
@@ -739,31 +775,7 @@ def _register_crypto_options_tools(
                     disclaimer,
                 )
             _, spot, settlement = resolved
-            now_ms = time.time() * 1000.0
-            candidates: list[tuple[Any, int]] = []
-            for ins in deribit.list_option_instruments(cur):
-                if (ins.option_type or "").lower() != "call":
-                    continue
-                if ins.strike is None or ins.expiration_timestamp is None or ins.strike <= spot:
-                    continue
-                d = (ins.expiration_timestamp - now_ms) / 86_400_000.0
-                if 0 < d <= max(max_days, 1):
-                    candidates.append((ins, int(round(d))))
-            candidates.sort(key=lambda c: abs(c[0].strike - spot))
-            quotes = []
-            for ins, d in candidates[:24]:
-                tk = deribit.get_option_ticker(ins.instrument_name)
-                quotes.append(
-                    ChainQuote(
-                        instrument_name=ins.instrument_name,
-                        kind="call",
-                        strike=float(ins.strike),
-                        expiry_days=d,
-                        premium=tk.mark_price if tk else None,
-                        delta=tk.delta if tk else None,
-                        mark_iv=tk.mark_iv if tk else None,
-                    )
-                )
+            quotes = _call_chain(cur, spot, max_days)
         except Exception:
             logger.exception("crypto_covered_call_chain failed for %s", cur)
             return _err(
@@ -784,6 +796,55 @@ def _register_crypto_options_tools(
                 "considered": len(quotes),
                 "ranked": ranked,
             },
+            filters,
+            disclaimer,
+        )
+
+    @mcp.tool(annotations=_RO_OPEN)
+    def crypto_regime_overwrite(
+        currency: str, max_days: int = 60, base_target_delta: float = 0.25, coins: float = 1.0
+    ) -> str:
+        """Pick a covered-call strike tilted by the LIVE EMF macro regime — defensive (further OTM) in fragile regimes, richer premium in benign ones. Live spot + chain from Deribit. Not advice."""
+        if regime_engine is None:
+            return _err(
+                "crypto_regime_overwrite", "regime engine not configured", filters, disclaimer
+            )
+        if not 0.0 < base_target_delta < 1.0:
+            return _err(
+                "crypto_regime_overwrite",
+                "base_target_delta must be in (0, 1)",
+                filters,
+                disclaimer,
+            )
+        cur = currency.upper()
+        try:
+            resolved = _spot_settlement(cur)
+            if resolved is None:
+                return _err(
+                    "crypto_regime_overwrite",
+                    f"Unsupported or unpriced '{currency}' ({'/'.join(deribit.supported_currencies())})",
+                    filters,
+                    disclaimer,
+                )
+            _, spot, settlement = resolved
+            regime = to_generic_regime(regime_engine.classify().regime)
+            quotes = _call_chain(cur, spot, max_days)
+        except Exception:
+            logger.exception("crypto_regime_overwrite failed for %s", cur)
+            return _err(
+                "crypto_regime_overwrite", "upstream options data unavailable", filters, disclaimer
+            )
+        result = regime_conditioned_overwrite(
+            regime=regime,
+            spot=spot,
+            settlement=settlement,
+            quotes=quotes,
+            base_target_delta=base_target_delta,
+            coins=coins,
+        )
+        return _ok(
+            "crypto_regime_overwrite",
+            {"currency": cur, "settlement": settlement, "spot": spot, **asdict(result)},
             filters,
             disclaimer,
         )

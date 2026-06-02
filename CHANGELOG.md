@@ -15,6 +15,15 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 #### Added
 
+- **Regime-conditioned covered-call strike selection (the EMF differentiator).**
+  `engine/pricing/regime_overlay.py` tilts the written call's *target delta* by the
+  LIVE EMF macro regime: defensive (further OTM, lower delta) in fragile regimes
+  (crisis/stagflation/deflationary), richer-premium (closer strike) in expansion.
+  The per-regime delta multipliers are the single documented tuning point; it then
+  selects the matching strike from the live Deribit chain and illustrates it. REST
+  `GET /api/options/crypto/{currency}/regime-overwrite` (the route 503s without a
+  regime engine) + MCP `crypto_regime_overwrite`; the regime engine is now threaded
+  into the options router + crypto MCP tools. 5 engine + 1 route + 2 MCP tests.
 - **Coin-denominated protective put + collar (engine + REST + MCP).** Completes
   the hedge side of the crypto overwriting toolkit:
   `crypto_overlays.crypto_protective_put` (floor, cost-of-protection, P(protection

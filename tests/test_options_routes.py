@@ -79,9 +79,22 @@ class _FakeDeribit:
         )
 
 
+class _RegimeResult:
+    regime = "GROWTH"  # -> generic "expansion"
+
+
+class _FakeRegime:
+    def classify(self) -> _RegimeResult:
+        return _RegimeResult()
+
+
 def _client() -> TestClient:
     app = FastAPI()
-    app.include_router(build_options_router(market=_FakeMarket(), deribit=_FakeDeribit()))
+    app.include_router(
+        build_options_router(
+            market=_FakeMarket(), deribit=_FakeDeribit(), regime_engine=_FakeRegime()
+        )
+    )
     return TestClient(app)
 
 
@@ -232,6 +245,18 @@ def test_crypto_covered_call_chain_ranks() -> None:
     assert ranked and ranked[0]["annualized_yield_pct"] >= ranked[-1]["annualized_yield_pct"]
     # target_delta 0.2 matches the 120k strike (delta 0.20 in the fake).
     assert body["selected_by_delta"]["strike"] == 120000.0
+
+
+def test_crypto_regime_overwrite_route() -> None:
+    r = _client().get("/api/options/crypto/btc/regime-overwrite", params={"max_days": 60})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["regime"] == "expansion"  # fake regime GROWTH -> expansion
+    assert body["delta_multiplier"] == 1.20
+    assert body["adjusted_target_delta"] == 0.30  # 0.25 × 1.2
+    # Expansion target 0.30 -> the 0.35-delta 110k call (closest in the fake chain).
+    assert body["selected"]["strike"] == 110000.0
+    assert body["covered_call"]["annualized_yield_pct"] > 0
 
 
 def test_crypto_protective_put_route() -> None:
