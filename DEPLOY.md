@@ -147,6 +147,7 @@ gcloud run deploy nexus-core \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
+  --min-instances 1 \
   --service-account nexus-core-run@pwllc-prod.iam.gserviceaccount.com \
   --network pwllc-prod-vpc \
   --subnet pwllc-prod-cloud-run-us-central1 \
@@ -164,6 +165,13 @@ VAULTSFYI_API_KEY=nexus-vaultsfyi-api-key:latest,\
 THEGRAPH_API_KEY=nexus-thegraph-api-key:latest,\
 DATABASE_URL=nexus-marketdata-database-url:latest"
 ```
+
+`--min-instances 1` keeps one instance always warm — it eliminates Cloud Run cold
+starts (the regime endpoint dropped from ~8.6s cold to ~0.1s warm). Cost is the
+idle instance running 24/7: ~$10–13/month at 1 vCPU + 1 GiB on the default
+(CPU-throttled) billing. **Keep this flag on every deploy** — `gcloud run deploy`
+preserves an existing min-instances when the flag is omitted, but include it so a
+clean redeploy never silently drops back to scale-to-zero. Set to `0` to disable.
 
 Direct VPC egress (`--network` / `--subnet` / `--vpc-egress`) plus
 `--add-cloudsql-instances` is how the service reaches the private-only Cloud SQL
