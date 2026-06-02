@@ -101,6 +101,10 @@ def test_list_tools_version_handshake() -> None:
     assert "monte_carlo_decumulation" in body["tools"]
     assert "roth_conversion" in body["tools"]
     assert "sequence_of_returns_stress" in body["tools"]
+    assert "rmd" in body["tools"]
+    assert "tax_bracket_headroom" in body["tools"]
+    assert "social_security_claiming" in body["tools"]
+    assert "regime_conditioned_swr" in body["tools"]
 
 
 _MC_PAYLOAD: dict[str, Any] = {
@@ -417,3 +421,91 @@ def test_cors_preflight_allows_custom_pw_headers() -> None:
     assert r.status_code in (200, 204)
     allow = r.headers.get("access-control-allow-headers", "").lower()
     assert "x-pw-contract-version" in allow or allow == "*"
+
+
+def test_rmd_happy_path() -> None:
+    r = _client().post(
+        "/mcp/tools/rmd", json={"contractVersion": "0.1.0", "age": 73, "balance": 500_000}
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert body["applies"] is True
+    assert body["distributionPeriod"] == 26.5
+    assert body["rmdAmount"] == round(500_000 / 26.5, 2)
+
+
+def test_rmd_negative_balance_400() -> None:
+    r = _client().post(
+        "/mcp/tools/rmd", json={"contractVersion": "0.1.0", "age": 73, "balance": -1}
+    )
+    assert r.status_code == 400
+    assert "balance" in r.text
+
+
+def test_tax_bracket_headroom_happy_path() -> None:
+    r = _client().post(
+        "/mcp/tools/tax_bracket_headroom",
+        json={
+            "contractVersion": "0.1.0",
+            "taxableIncome": 100_000,
+            "filingStatus": "single",
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["marginalRate"] == 0.22
+    assert body["roomToNextBracket"] == 18_350.0
+    assert body["nextRate"] == 0.24
+
+
+def test_tax_bracket_headroom_bad_filing_400() -> None:
+    r = _client().post(
+        "/mcp/tools/tax_bracket_headroom",
+        json={"contractVersion": "0.1.0", "taxableIncome": 100_000, "filingStatus": "x"},
+    )
+    assert r.status_code == 400
+    assert "filingStatus" in r.text
+
+
+def test_social_security_claiming_happy_path() -> None:
+    r = _client().post(
+        "/mcp/tools/social_security_claiming",
+        json={"contractVersion": "0.1.0", "piaMonthly": 2_000, "fraAge": 67},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    by_age = {row["claimAge"]: row for row in body["byClaimAge"]}
+    assert by_age[62]["monthlyBenefit"] == 1_400.0
+    assert by_age[70]["monthlyBenefit"] == 2_480.0
+    assert len(body["breakevens"]) == 3
+
+
+def test_social_security_bad_pia_400() -> None:
+    r = _client().post(
+        "/mcp/tools/social_security_claiming",
+        json={"contractVersion": "0.1.0", "piaMonthly": 0},
+    )
+    assert r.status_code == 400
+    assert "positive" in r.text
+
+
+def test_regime_conditioned_swr_uses_live_regime() -> None:
+    r = _client().post(
+        "/mcp/tools/regime_conditioned_swr",
+        json={"contractVersion": "0.1.0", "baseSwr": 0.04, "portfolioBalance": 1_000_000},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["regime"]  # a generic regime label from the live engine
+    assert 0 < body["adjustedSwr"] < 1
+    assert body["firstYearWithdrawal"] == round(1_000_000 * body["adjustedSwr"], 2)
+
+
+def test_regime_conditioned_swr_bad_base_400() -> None:
+    r = _client().post(
+        "/mcp/tools/regime_conditioned_swr",
+        json={"contractVersion": "0.1.0", "baseSwr": 1.5},
+    )
+    assert r.status_code == 400
+    assert "base_swr" in r.text

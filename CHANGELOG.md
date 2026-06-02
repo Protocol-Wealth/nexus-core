@@ -15,6 +15,20 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 #### Added
 
+- **Four new planning calculators (engine + REST/MCP tools), planning tools 8 → 12.**
+  All pure + deterministic in `engine/planning/`, reusing existing tables, with
+  matching gateway tools (a JSON `body`, `contractVersion` echo):
+  - **`rmd`** — IRS Uniform Lifetime Table required minimum distribution (reuses
+    `tax.rmd_factor`).
+  - **`tax_bracket_headroom`** — marginal bracket + ordinary-income room before the
+    next federal rate, or up to a target rate ("Roth-fill"); reuses
+    `tax.ordinary_brackets` + `standard_deduction` (now public).
+  - **`social_security_claiming`** — benefit at each claim age 62–70 from the PIA
+    (SSA early-reduction / delayed-credit factors) + breakeven ages.
+  - **`regime_conditioned_swr`** — a base safe withdrawal rate adjusted by an
+    illustrative per-regime multiplier; the gateway tool injects the LIVE regime.
+  - +25 engine tests + 8 gateway tests; `llms.txt` / MCP guide / README updated to
+    12 planning tools. No contract-version bump (additive tool ids, `0.1.0`).
 - **`roth_conversion` + `sequence_of_returns_stress` are now planning tools.**
   Both engine primitives are exposed as REST tools (`POST /mcp/tools/{id}`) and
   native MCP tools (`/mcp` HTTP + stdio) via the same generic handler registry —

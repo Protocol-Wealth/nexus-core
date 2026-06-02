@@ -27,11 +27,15 @@ from ...data.providers import MarketDataProvider
 from ...engine.planning import (
     GlidePathShape,
     InfeasiblePlanError,
+    bracket_headroom,
     compute_glide_path,
     correlation_matrix,
     monte_carlo_decumulation,
+    regime_conditioned_swr,
+    rmd,
     roth_conversion,
     sequence_of_returns_stress,
+    social_security_claiming,
     tax_aware_withdrawal,
 )
 from ...engine.planning.regime import (
@@ -229,6 +233,72 @@ def sequence_of_returns_stress_tool(body: dict[str, Any]) -> dict[str, Any]:
             initial_balance=_as_number(body, "initialBalance"),
             net_spend_by_year=_as_num_list(body, "netSpendByYear"),
             annual_returns=_as_num_list(body, "annualReturns"),
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def rmd_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``rmd`` — required minimum distribution for a traditional account."""
+    try:
+        return rmd(age=_as_int(body, "age"), balance=_as_number(body, "balance"))
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def tax_bracket_headroom_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``tax_bracket_headroom`` — marginal bracket + room before the next rate."""
+    filing = _as_str(body, "filingStatus")
+    if filing not in _FILING_STATUSES:
+        raise PlanningInputError(
+            f"filingStatus must be one of {', '.join(_FILING_STATUSES)}"
+        )
+    target = body.get("targetRate")
+    if target is not None and (
+        isinstance(target, bool) or not isinstance(target, (int, float))
+    ):
+        raise PlanningInputError("targetRate must be a number or omitted")
+    try:
+        return bracket_headroom(
+            taxable_income=_as_number(body, "taxableIncome"),
+            filing_status=filing,
+            target_rate=float(target) if target is not None else None,
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def social_security_claiming_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``social_security_claiming`` — benefit by claim age + breakeven ages."""
+    fra = body.get("fraAge", 67)
+    if isinstance(fra, bool) or not isinstance(fra, int):
+        raise PlanningInputError("fraAge must be an integer or omitted")
+    try:
+        return social_security_claiming(
+            pia_monthly=_as_number(body, "piaMonthly"), fra_age=fra
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def _regime_conditioned_swr_tool(
+    body: dict[str, Any], regime_engine: RegimeEngine
+) -> dict[str, Any]:
+    """``regime_conditioned_swr`` — base SWR adjusted for the LIVE macro regime."""
+    base = body.get("baseSwr", 0.04)
+    if isinstance(base, bool) or not isinstance(base, (int, float)):
+        raise PlanningInputError("baseSwr must be a number or omitted")
+    balance = body.get("portfolioBalance")
+    if balance is not None and (
+        isinstance(balance, bool) or not isinstance(balance, (int, float))
+    ):
+        raise PlanningInputError("portfolioBalance must be a number or omitted")
+    regime = to_generic_regime(regime_engine.classify().regime)
+    try:
+        return regime_conditioned_swr(
+            regime=regime,
+            base_swr=float(base),
+            portfolio_balance=float(balance) if balance is not None else None,
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
@@ -579,6 +649,9 @@ def build_tool_handlers(
     def monte_carlo_decumulation_tool(body: dict[str, Any]) -> dict[str, Any]:
         return _monte_carlo_decumulation_tool(body, market, regime_engine)
 
+    def regime_conditioned_swr_tool(body: dict[str, Any]) -> dict[str, Any]:
+        return _regime_conditioned_swr_tool(body, regime_engine)
+
     return {
         "monte_carlo_decumulation": monte_carlo_decumulation_tool,
         "glide_path": glide_path_tool,
@@ -588,6 +661,10 @@ def build_tool_handlers(
         "regime_return_generator": regime_return_generator_tool,
         "roth_conversion": roth_conversion_tool,
         "sequence_of_returns_stress": sequence_of_returns_stress_tool,
+        "rmd": rmd_tool,
+        "tax_bracket_headroom": tax_bracket_headroom_tool,
+        "social_security_claiming": social_security_claiming_tool,
+        "regime_conditioned_swr": regime_conditioned_swr_tool,
     }
 
 
@@ -595,7 +672,10 @@ __all__ = [
     "ToolHandler",
     "build_tool_handlers",
     "glide_path_tool",
+    "rmd_tool",
     "roth_conversion_tool",
     "sequence_of_returns_stress_tool",
+    "social_security_claiming_tool",
     "tax_aware_withdrawal_tool",
+    "tax_bracket_headroom_tool",
 ]

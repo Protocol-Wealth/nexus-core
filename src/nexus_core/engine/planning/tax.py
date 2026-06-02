@@ -91,6 +91,25 @@ def _rmd_factor(age: int) -> float:
     return _RMD_FACTORS.get(age, _RMD_FACTORS[100])
 
 
+#: Public alias — the SECURE 2.0 age at which RMDs begin.
+RMD_START_AGE = _RMD_START_AGE
+
+
+def rmd_factor(age: int) -> float:
+    """IRS Uniform Lifetime Table distribution period for ``age`` (clamped to 73+)."""
+    return _rmd_factor(age)
+
+
+def ordinary_brackets(filing_status: FilingStatus) -> list[tuple[float, float]]:
+    """Progressive ordinary brackets ``(upper_bound, rate)`` in taxable-income space."""
+    return list(_ORDINARY_BRACKETS[filing_status])
+
+
+def standard_deduction(filing_status: FilingStatus) -> float:
+    """Standard deduction for ``filing_status`` (illustrative current basis)."""
+    return _STD_DEDUCTION[filing_status]
+
+
 def ordinary_tax(income: float, filing_status: FilingStatus) -> float:
     """Progressive federal ordinary tax after the standard deduction."""
     taxable = max(0.0, income - _STD_DEDUCTION[filing_status])
@@ -200,4 +219,13 @@ def tax_aware_withdrawal(
     }
 
 
-__all__ = ["FilingStatus", "InfeasiblePlanError", "ordinary_tax", "tax_aware_withdrawal"]
+__all__ = [
+    "RMD_START_AGE",
+    "FilingStatus",
+    "InfeasiblePlanError",
+    "ordinary_brackets",
+    "ordinary_tax",
+    "rmd_factor",
+    "standard_deduction",
+    "tax_aware_withdrawal",
+]
