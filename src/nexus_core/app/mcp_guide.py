@@ -257,6 +257,7 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     <li><code>tax_bracket_headroom</code> — marginal bracket + room before the next rate (Roth-fill)</li>
     <li><code>social_security_claiming</code> — benefit by claim age 62–70 + breakeven ages</li>
     <li><code>regime_conditioned_swr</code> — base safe withdrawal rate adjusted for the live regime</li>
+    <li><code>portfolio_xray</code> — regime-aware structural diagnostics (concentration, tax-location, regime sensitivity)</li>
   </ul>
   <div class="note">
     <code>monte_carlo_decumulation</code> takes an optional <code>retirementAge</code>:

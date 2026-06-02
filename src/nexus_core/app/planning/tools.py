@@ -31,6 +31,7 @@ from ...engine.planning import (
     compute_glide_path,
     correlation_matrix,
     monte_carlo_decumulation,
+    portfolio_xray,
     regime_conditioned_swr,
     rmd,
     roth_conversion,
@@ -299,6 +300,40 @@ def _regime_conditioned_swr_tool(
             regime=regime,
             base_swr=float(base),
             portfolio_balance=float(balance) if balance is not None else None,
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def _portfolio_xray_tool(
+    body: dict[str, Any], regime_engine: RegimeEngine
+) -> dict[str, Any]:
+    """``portfolio_xray`` — regime-aware structural diagnostics for a portfolio."""
+    asset_classes = _validate_asset_classes(body, require_lambda=False)
+    asset_ids = [str(a["id"]) for a in asset_classes]
+    if len(set(asset_ids)) != len(asset_ids):
+        raise PlanningInputError("asset class ids must be unique")
+    means = [_num_field(a, "expectedReturn") for a in asset_classes]
+    vols = [_num_field(a, "volatility") for a in asset_classes]
+    lambdas = [
+        float(a["lambda"]) if isinstance(a.get("lambda"), (int, float)) else 0.0
+        for a in asset_classes
+    ]
+    weights, _total = _blended_weights(body.get("accounts"), asset_ids)
+    accounts = body["accounts"]  # validated by _blended_weights above
+    balances: dict[str, float] = {}
+    for acct in accounts:
+        balances[acct["type"]] = balances.get(acct["type"], 0.0) + float(acct["balance"])
+    regime = to_generic_regime(regime_engine.classify().regime)
+    try:
+        return portfolio_xray(
+            asset_ids=asset_ids,
+            weights=weights,
+            means=means,
+            vols=vols,
+            lambdas=lambdas,
+            account_balances=balances,
+            regime=regime,
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
@@ -652,6 +687,9 @@ def build_tool_handlers(
     def regime_conditioned_swr_tool(body: dict[str, Any]) -> dict[str, Any]:
         return _regime_conditioned_swr_tool(body, regime_engine)
 
+    def portfolio_xray_tool(body: dict[str, Any]) -> dict[str, Any]:
+        return _portfolio_xray_tool(body, regime_engine)
+
     return {
         "monte_carlo_decumulation": monte_carlo_decumulation_tool,
         "glide_path": glide_path_tool,
@@ -665,6 +703,7 @@ def build_tool_handlers(
         "tax_bracket_headroom": tax_bracket_headroom_tool,
         "social_security_claiming": social_security_claiming_tool,
         "regime_conditioned_swr": regime_conditioned_swr_tool,
+        "portfolio_xray": portfolio_xray_tool,
     }
 
 

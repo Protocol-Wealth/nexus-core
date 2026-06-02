@@ -131,7 +131,7 @@ nexus-core --version
 | `/api/solana/price/{mint}`, `/api/solana/prices?mints=` | Solana SPL token USD prices (Jupiter v3, keyless — no API key) |
 | `/api/benchmarks`, `/api/benchmarks/series?days=`, `/api/benchmarks/history?days=` | Base-100 hold-strategy returns (BTC/ETH/SOL + ETH-USDC 50/50,60/40,70/30 + ETH-BTC 50/50; USDC held at $1; buy-and-hold). `/series` on-demand from CoinGecko; `/history` from persisted daily snapshots |
 | `/api/usage` | Provider usage/quota report (non-sensitive; no keys, no client data) |
-| `/mcp` | MCP-over-HTTP transport (FastMCP) — exempt from the rate limiter. `tools/list` includes the research tools + `health`/`describe`/`get_quotes` + the 12 planning tools; every tool is `readOnlyHint` + carries the disclaimer |
+| `/mcp` | MCP-over-HTTP transport (FastMCP) — exempt from the rate limiter. `tools/list` includes the research tools + `health`/`describe`/`get_quotes` + the 13 planning tools; every tool is `readOnlyHint` + carries the disclaimer |
 | `/mcp/tools`, `POST /mcp/tools/{id}` | Planning REST gateway (pwplan-core, contractVersion `0.1.0`, PII-free) |
 | `/docs`, `/openapi.json`, `/mcp-guide`, `/llms.txt`, `/.well-known/security.txt` | OpenAPI (servers + tags), MCP setup guide, agent site map, RFC 9116 disclosure |
 

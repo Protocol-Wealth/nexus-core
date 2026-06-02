@@ -105,6 +105,7 @@ def test_list_tools_version_handshake() -> None:
     assert "tax_bracket_headroom" in body["tools"]
     assert "social_security_claiming" in body["tools"]
     assert "regime_conditioned_swr" in body["tools"]
+    assert "portfolio_xray" in body["tools"]
 
 
 _MC_PAYLOAD: dict[str, Any] = {
@@ -509,3 +510,38 @@ def test_regime_conditioned_swr_bad_base_400() -> None:
     )
     assert r.status_code == 400
     assert "base_swr" in r.text
+
+
+_XRAY: dict[str, Any] = {
+    "contractVersion": "0.1.0",
+    "assetClasses": [
+        {"id": "us_equity", "label": "US Equity", "expectedReturn": 0.07, "volatility": 0.16, "lambda": 0.35},
+        {"id": "us_bonds", "label": "US Bonds", "expectedReturn": 0.03, "volatility": 0.05, "lambda": 0.10},
+    ],
+    "accounts": [
+        {"type": "traditional", "balance": 700000, "allocation": {"us_equity": 0.65, "us_bonds": 0.35}},
+        {"type": "roth", "balance": 300000, "allocation": {"us_equity": 0.65, "us_bonds": 0.35}},
+    ],
+}
+
+
+def test_portfolio_xray_happy_path() -> None:
+    r = _client().post("/mcp/tools/portfolio_xray", json=_XRAY)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert body["regime"]  # live regime injected by the tool
+    assert body["concentration"]["maxWeightAsset"] == "us_equity"
+    assert body["accountMix"] == {"taxable": 0.0, "traditional": 0.7, "roth": 0.3}
+    ids = {f["id"] for f in body["findings"]}
+    assert {"concentration", "regime_sensitivity", "tax_location", "growth_posture"} <= ids
+
+
+def test_portfolio_xray_bad_allocation_400() -> None:
+    bad = {
+        **_XRAY,
+        "accounts": [{"type": "roth", "balance": 1000, "allocation": {"us_equity": 0.5, "us_bonds": 0.4}}],
+    }
+    r = _client().post("/mcp/tools/portfolio_xray", json=bad)
+    assert r.status_code == 400
+    assert "sums to" in r.text
