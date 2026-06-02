@@ -15,6 +15,14 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 #### Added
 
+- **IV term structure — `crypto_iv_term_structure` (which tenor pays richest to
+  write).** `engine/pricing/option_chain.iv_term_structure` builds the near-ATM
+  implied-vol curve across expiries from the live Deribit chain: per-tenor near-ATM
+  IV + mean IV, the richest tenor (highest near-ATM IV), and the curve shape
+  (backwardation = near-term richer, contango = rising). REST
+  `GET /api/options/crypto/{ccy}/iv-term-structure` + MCP `crypto_iv_term_structure`.
+  A near-ATM illustration over listed calls, not a fitted surface. 3 engine + 1
+  route + 1 MCP test.
 - **Tunable regime tilt — a `defensiveness` risk knob on `crypto_regime_overwrite`.**
   A single scalar that scales the *magnitude* of the regime→delta tilt: `0` = no
   tilt (neutral), `1` = house default, `>1` = amplified (more defensive in fragile

@@ -58,6 +58,7 @@ from ...engine.pricing import (
     covered_call_ladder,
     covered_call_overlay,
     greeks,
+    iv_term_structure,
     rank_covered_calls,
     regime_conditioned_overwrite,
     roll_analysis,
@@ -274,6 +275,7 @@ def build_server(
                         "crypto_option_ticker",
                         "crypto_covered_call",
                         "crypto_covered_call_chain",
+                        "crypto_iv_term_structure",
                         "crypto_protective_put",
                         "crypto_collar",
                         "crypto_regime_overwrite",
@@ -591,8 +593,8 @@ def _register_crypto_options_tools(
             return None
         return cur, spot, ("inverse" if model == "inverse" else "linear")
 
-    def _call_chain(cur: str, spot: float, max_days: int) -> list[ChainQuote]:
-        """Bounded OTM-call chain for a currency (≤24 nearest-the-money tickers)."""
+    def _call_chain(cur: str, spot: float, max_days: int, limit: int = 24) -> list[ChainQuote]:
+        """Bounded OTM-call chain for a currency (≤``limit`` nearest-the-money tickers)."""
         now_ms = time.time() * 1000.0
         candidates: list[tuple[Any, int]] = []
         for ins in deribit.list_option_instruments(cur):
@@ -605,7 +607,7 @@ def _register_crypto_options_tools(
                 candidates.append((ins, int(round(d))))
         candidates.sort(key=lambda c: abs(c[0].strike - spot))
         quotes: list[ChainQuote] = []
-        for ins, d in candidates[:24]:
+        for ins, d in candidates[:limit]:
             tk = deribit.get_option_ticker(ins.instrument_name)
             quotes.append(
                 ChainQuote(
@@ -806,6 +808,34 @@ def _register_crypto_options_tools(
                 "considered": len(quotes),
                 "ranked": ranked,
             },
+            filters,
+            disclaimer,
+        )
+
+    @mcp.tool(annotations=_RO_OPEN)
+    def crypto_iv_term_structure(currency: str, max_days: int = 120) -> str:
+        """Near-ATM implied-vol term structure for a crypto (Deribit) — which expiry pays richest to write + the curve shape (backwardation/contango). Not advice."""
+        cur = currency.upper()
+        try:
+            resolved = _spot_settlement(cur)
+            if resolved is None:
+                return _err(
+                    "crypto_iv_term_structure",
+                    f"Unsupported or unpriced '{currency}' ({'/'.join(deribit.supported_currencies())})",
+                    filters,
+                    disclaimer,
+                )
+            _, spot, settlement = resolved
+            quotes = _call_chain(cur, spot, max_days, limit=60)
+        except Exception:
+            logger.exception("crypto_iv_term_structure failed for %s", cur)
+            return _err(
+                "crypto_iv_term_structure", "upstream options data unavailable", filters, disclaimer
+            )
+        result = iv_term_structure(spot=spot, quotes=quotes)
+        return _ok(
+            "crypto_iv_term_structure",
+            {"currency": cur, "settlement": settlement, **asdict(result)},
             filters,
             disclaimer,
         )
