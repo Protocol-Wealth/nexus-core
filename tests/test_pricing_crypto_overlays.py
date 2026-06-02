@@ -6,7 +6,11 @@ from __future__ import annotations
 
 import pytest
 
-from nexus_core.engine.pricing.crypto_overlays import crypto_covered_call
+from nexus_core.engine.pricing.crypto_overlays import (
+    crypto_collar,
+    crypto_covered_call,
+    crypto_protective_put,
+)
 
 
 def test_inverse_covered_call_hand_values() -> None:
@@ -84,3 +88,58 @@ def test_degenerate_inputs_zeroed() -> None:
     assert out.static_yield_pct == 0.0
     assert out.max_loss_usd == 0.0
     assert "zeroed" in " ".join(out.notes)
+
+
+def test_inverse_protective_put_hand_values() -> None:
+    # BTC at 100k, buy the 80k put floor, 30d, 0.015 BTC premium, 2 BTC.
+    out = crypto_protective_put(
+        spot=100_000,
+        strike=80_000,
+        expiry_days=30,
+        settlement="inverse",
+        coins=2.0,
+        premium=0.015,
+        delta=-0.20,
+    )
+    assert out.premium_usd == 1_500.0  # 0.015 × 100k
+    assert out.cost_coin == pytest.approx(0.03)  # 0.015 × 2
+    assert out.cost_usd == 3_000.0
+    assert out.floor_usd == 80_000.0
+    assert out.protection_level_pct == 20.0  # 20k below spot
+    assert out.cost_pct == 1.5
+    assert out.annualized_cost_pct == pytest.approx(18.25, rel=1e-4)
+    assert out.breakeven_usd == 101_500.0  # spot + premium
+    assert out.max_loss_usd == 43_000.0  # (100k − 80k + 1500) × 2
+    assert out.prob_itm_approx == 20.0  # |−0.20| × 100
+
+
+def test_inverse_collar_hand_values() -> None:
+    # 80k put floor + 120k call cap on BTC at 100k, 30d, 2 BTC.
+    out = crypto_collar(
+        spot=100_000,
+        put_strike=80_000,
+        call_strike=120_000,
+        expiry_days=30,
+        settlement="inverse",
+        coins=2.0,
+        put_premium=0.015,
+        call_premium=0.02,
+    )
+    assert out.put_premium_usd == 1_500.0
+    assert out.call_premium_usd == 2_000.0
+    assert out.net_premium_usd == 500.0  # call credit − put debit
+    assert out.net_premium_coin == pytest.approx(0.005)
+    assert out.breakeven_usd == 99_500.0
+    assert out.max_profit_usd == 41_000.0  # (20k + 500) × 2
+    assert out.max_loss_usd == 39_000.0  # (20k − 500) × 2
+    assert out.upside_cap_pct == 20.0
+    assert out.downside_protection_pct == 20.0
+    assert out.net_yield_pct == 0.5
+    assert out.annualized_net_yield_pct == pytest.approx(6.0833, rel=1e-4)
+
+
+def test_put_and_collar_bad_settlement_raise() -> None:
+    with pytest.raises(ValueError, match="settlement"):
+        crypto_protective_put(spot=1, strike=1, expiry_days=30, settlement="x")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="settlement"):
+        crypto_collar(spot=1, put_strike=1, call_strike=2, expiry_days=30, settlement="x")  # type: ignore[arg-type]

@@ -246,9 +246,281 @@ def crypto_covered_call(
     )
 
 
+@dataclass
+class CryptoProtectivePutIllustration:
+    """Settlement-aware illustration of a protective put on a crypto holding.
+
+    Buying a put against coins held caps the downside at the put strike for the
+    cost of the premium. Percentage fields are on the coin's USD value; the
+    coin-native cost is surfaced for inverse (coin-settled) books.
+    """
+
+    settlement: Settlement
+    spot: float
+    strike: float
+    expiry_days: int
+    coins: float
+    theoretical: bool
+    premium_coin: float | None  # coin premium per coin (inverse only)
+    premium_usd: float  # USD premium per coin (the cost of protection)
+    cost_coin: float | None  # coins paid across the position (inverse only)
+    cost_usd: float  # USD premium paid across the position
+    floor_usd: float  # protected value per coin (≈ the put strike)
+    protection_level_pct: float  # (spot - strike) / spot — drop before protection
+    cost_pct: float  # premium_usd / spot — the drag of protection
+    annualized_cost_pct: float
+    breakeven_usd: float  # spot + premium_usd (recover the premium)
+    max_loss_usd: float  # (spot - strike + premium_usd) × coins, floored at strike
+    delta: float | None  # put delta (negative; observed or Black-Scholes)
+    prob_itm_approx: float | None  # ≈ |delta| × 100 — P(protection pays)
+    disclaimer: str = DISCLAIMER
+    notes: list[str] = field(default_factory=list)
+
+
+def crypto_protective_put(
+    *,
+    spot: float,
+    strike: float,
+    expiry_days: int,
+    settlement: Settlement,
+    coins: float = 1.0,
+    premium: float | None = None,
+    iv: float | None = None,
+    rate: float = 0.0,
+    delta: float | None = None,
+) -> CryptoProtectivePutIllustration:
+    """Illustrate a protective put bought against a crypto holding.
+
+    Args mirror :func:`crypto_covered_call`; ``strike`` is the (typically OTM)
+    put floor. ``premium`` is in the settlement's native unit. Returns a
+    :class:`CryptoProtectivePutIllustration`; degenerate inputs zero the metrics.
+    """
+    if settlement not in ("inverse", "linear"):
+        raise ValueError("settlement must be 'inverse' or 'linear'")
+
+    inverse = settlement == "inverse"
+    used_sigma = iv if iv is not None and iv > 0 else _DEFAULT_SIGMA
+    theoretical = premium is None
+    if theoretical:
+        premium_usd = max(
+            bs_price(spot, strike, _t_years(expiry_days), rate, used_sigma, "put"), 0.0
+        )
+    else:
+        prem = max(float(premium), 0.0)  # type: ignore[arg-type]
+        premium_usd = prem * spot if inverse else prem
+    premium_coin = (premium_usd / spot if spot > 0 else 0.0) if inverse else None
+
+    if spot <= 0.0 or strike <= 0.0 or coins <= 0.0:
+        return CryptoProtectivePutIllustration(
+            settlement=settlement,
+            spot=spot,
+            strike=strike,
+            expiry_days=expiry_days,
+            coins=coins,
+            theoretical=theoretical,
+            premium_coin=premium_coin,
+            premium_usd=premium_usd,
+            cost_coin=None,
+            cost_usd=0.0,
+            floor_usd=0.0,
+            protection_level_pct=0.0,
+            cost_pct=0.0,
+            annualized_cost_pct=0.0,
+            breakeven_usd=0.0,
+            max_loss_usd=0.0,
+            delta=delta,
+            prob_itm_approx=(round(abs(delta) * 100.0, 1) if delta is not None else None),
+            notes=["Non-positive parameter supplied — metrics zeroed."],
+        )
+
+    cost_pct = _safe_pct(premium_usd, spot)
+    cost_coin = premium_coin * coins if (inverse and premium_coin is not None) else None
+    if delta is None and expiry_days > 0:
+        delta = greeks(spot, strike, _t_years(expiry_days), rate, used_sigma, "put").delta
+
+    notes: list[str] = []
+    if inverse:
+        notes.append("Inverse (coin-settled): the put premium is paid in coin.")
+    else:
+        notes.append("Linear (USDC-settled): the put premium is paid in USDC.")
+    if theoretical:
+        notes.append(f"Premium is theoretical (Black-Scholes, IV={used_sigma:.0%}).")
+    if strike >= spot:
+        notes.append("Strike is at or above spot — illustrates an in/at-the-money put.")
+
+    return CryptoProtectivePutIllustration(
+        settlement=settlement,
+        spot=spot,
+        strike=strike,
+        expiry_days=expiry_days,
+        coins=coins,
+        theoretical=theoretical,
+        premium_coin=premium_coin,
+        premium_usd=premium_usd,
+        cost_coin=cost_coin,
+        cost_usd=premium_usd * coins,
+        floor_usd=strike,
+        protection_level_pct=_safe_pct(spot - strike, spot),
+        cost_pct=cost_pct,
+        annualized_cost_pct=_annualize_pct(cost_pct, expiry_days),
+        breakeven_usd=spot + premium_usd,
+        max_loss_usd=(spot - strike + premium_usd) * coins,
+        delta=delta,
+        prob_itm_approx=(round(abs(delta) * 100.0, 1) if delta is not None else None),
+        notes=notes,
+    )
+
+
+@dataclass
+class CryptoCollarIllustration:
+    """Settlement-aware collar: long coins + protective put + financing short call.
+
+    ``net_premium_usd`` is the call credit minus the put debit (>0 net credit,
+    <0 net debit). Percentage fields are on the coin's USD value.
+    """
+
+    settlement: Settlement
+    spot: float
+    put_strike: float
+    call_strike: float
+    expiry_days: int
+    coins: float
+    theoretical: bool
+    put_premium_usd: float
+    call_premium_usd: float
+    net_premium_coin: float | None  # (call - put) in coin (inverse only)
+    net_premium_usd: float  # call credit minus put debit, per coin
+    breakeven_usd: float  # spot - net per coin (a debit raises it)
+    max_profit_usd: float  # capped at the call strike, across the position
+    max_loss_usd: float  # floored at the put strike, across the position
+    upside_cap_pct: float  # (call_strike - spot) / spot
+    downside_protection_pct: float  # (spot - put_strike) / spot
+    net_yield_pct: float  # net_premium_usd / spot (can be negative)
+    annualized_net_yield_pct: float
+    call_delta: float | None
+    prob_call_otm_approx: float | None
+    disclaimer: str = DISCLAIMER
+    notes: list[str] = field(default_factory=list)
+
+
+def crypto_collar(
+    *,
+    spot: float,
+    put_strike: float,
+    call_strike: float,
+    expiry_days: int,
+    settlement: Settlement,
+    coins: float = 1.0,
+    put_premium: float | None = None,
+    call_premium: float | None = None,
+    iv: float | None = None,
+    rate: float = 0.0,
+    call_delta: float | None = None,
+) -> CryptoCollarIllustration:
+    """Illustrate a protective collar on a crypto holding (put floor + call cap).
+
+    Premiums are in the settlement's native unit; either may be theoretical
+    (priced from ``iv``). Returns a :class:`CryptoCollarIllustration`.
+    """
+    if settlement not in ("inverse", "linear"):
+        raise ValueError("settlement must be 'inverse' or 'linear'")
+
+    inverse = settlement == "inverse"
+    used_sigma = iv if iv is not None and iv > 0 else _DEFAULT_SIGMA
+    put_theo = put_premium is None
+    call_theo = call_premium is None
+    theoretical = put_theo or call_theo
+
+    def _usd(prem: float) -> float:
+        return prem * spot if inverse else prem
+
+    put_usd = (
+        max(bs_price(spot, put_strike, _t_years(expiry_days), rate, used_sigma, "put"), 0.0)
+        if put_theo
+        else _usd(max(float(put_premium), 0.0))  # type: ignore[arg-type]
+    )
+    call_usd = (
+        max(bs_price(spot, call_strike, _t_years(expiry_days), rate, used_sigma, "call"), 0.0)
+        if call_theo
+        else _usd(max(float(call_premium), 0.0))  # type: ignore[arg-type]
+    )
+
+    if spot <= 0.0 or put_strike <= 0.0 or call_strike <= 0.0 or coins <= 0.0:
+        return CryptoCollarIllustration(
+            settlement=settlement,
+            spot=spot,
+            put_strike=put_strike,
+            call_strike=call_strike,
+            expiry_days=expiry_days,
+            coins=coins,
+            theoretical=theoretical,
+            put_premium_usd=put_usd,
+            call_premium_usd=call_usd,
+            net_premium_coin=None,
+            net_premium_usd=0.0,
+            breakeven_usd=0.0,
+            max_profit_usd=0.0,
+            max_loss_usd=0.0,
+            upside_cap_pct=0.0,
+            downside_protection_pct=0.0,
+            net_yield_pct=0.0,
+            annualized_net_yield_pct=0.0,
+            call_delta=call_delta,
+            prob_call_otm_approx=None,
+            notes=["Non-positive parameter supplied — metrics zeroed."],
+        )
+
+    net_per_coin = call_usd - put_usd  # >0 credit, <0 debit
+    net_premium_coin = (net_per_coin / spot if spot > 0 else 0.0) if inverse else None
+    upside_per_coin = max(call_strike - spot, 0.0)
+    downside_per_coin = max(spot - put_strike, 0.0)
+    net_yield_pct = _safe_pct(net_per_coin, spot)
+
+    if call_delta is None and expiry_days > 0:
+        call_delta = greeks(
+            spot, call_strike, _t_years(expiry_days), rate, used_sigma, "call"
+        ).delta
+
+    notes: list[str] = []
+    if inverse:
+        notes.append("Inverse (coin-settled): premiums are coin amounts; net shown in USD at spot.")
+    if theoretical:
+        notes.append(f"Theoretical premium(s) (Black-Scholes, IV={used_sigma:.0%}).")
+    if put_strike >= call_strike:
+        notes.append("Put strike is at or above the call strike — atypical collar geometry.")
+
+    return CryptoCollarIllustration(
+        settlement=settlement,
+        spot=spot,
+        put_strike=put_strike,
+        call_strike=call_strike,
+        expiry_days=expiry_days,
+        coins=coins,
+        theoretical=theoretical,
+        put_premium_usd=put_usd,
+        call_premium_usd=call_usd,
+        net_premium_coin=net_premium_coin,
+        net_premium_usd=net_per_coin,
+        breakeven_usd=spot - net_per_coin,
+        max_profit_usd=(upside_per_coin + net_per_coin) * coins,
+        max_loss_usd=(downside_per_coin - net_per_coin) * coins,
+        upside_cap_pct=_safe_pct(call_strike - spot, spot),
+        downside_protection_pct=_safe_pct(spot - put_strike, spot),
+        net_yield_pct=net_yield_pct,
+        annualized_net_yield_pct=_annualize_pct(net_yield_pct, expiry_days),
+        call_delta=call_delta,
+        prob_call_otm_approx=_prob_otm_from_delta(call_delta),
+        notes=notes,
+    )
+
+
 __all__ = [
     "DISCLAIMER",
+    "CryptoCollarIllustration",
     "CryptoCoveredCallIllustration",
+    "CryptoProtectivePutIllustration",
     "Settlement",
+    "crypto_collar",
     "crypto_covered_call",
+    "crypto_protective_put",
 ]

@@ -69,6 +69,8 @@ The deployed surface is public, read-only, and carries no client data and no aut
 | `GET /api/options/crypto/currencies` | Crypto option underliers + settlement model (Deribit) |
 | `GET /api/options/crypto/{currency}/instruments` | Deribit crypto options — BTC/ETH (inverse) + SOL/XRP/TRX/AVAX (USDC-linear) |
 | `GET /api/options/crypto/instrument/{instrument_name}` | Deribit crypto option detail |
+| `GET /api/options/crypto/{currency}/protective-put` | Settlement-aware protective-put floor (cost of protection) |
+| `GET /api/options/crypto/{currency}/collar` | Settlement-aware protective collar (put floor + financing call) |
 | `GET /api/options/crypto/{currency}/covered-call` | Settlement-aware covered-call overwrite illustration (coin yield) |
 | `GET /api/options/crypto/{currency}/covered-call-chain` | Rank live OTM calls by annualized covered-call yield |
 | `POST /api/options/crypto/{currency}/ladder` | Calendar/strike covered-call ladder (coverage, blended yield) |

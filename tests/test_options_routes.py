@@ -234,6 +234,49 @@ def test_crypto_covered_call_chain_ranks() -> None:
     assert body["selected_by_delta"]["strike"] == 120000.0
 
 
+def test_crypto_protective_put_route() -> None:
+    r = _client().get(
+        "/api/options/crypto/btc/protective-put",
+        params={"strike": 80000, "days": 30, "coins": 2, "premium": 0.015},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["settlement"] == "inverse"
+    assert body["premium_usd"] == 1500.0
+    assert body["protection_level_pct"] == 20.0
+    assert body["cost_pct"] == 1.5
+    assert body["floor_usd"] == 80000.0
+
+
+def test_crypto_collar_route() -> None:
+    r = _client().get(
+        "/api/options/crypto/btc/collar",
+        params={
+            "put_strike": 80000,
+            "call_strike": 120000,
+            "days": 30,
+            "coins": 2,
+            "put_premium": 0.015,
+            "call_premium": 0.02,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["settlement"] == "inverse"
+    assert body["net_premium_usd"] == 500.0
+    assert body["upside_cap_pct"] == 20.0
+    assert body["downside_protection_pct"] == 20.0
+
+
+def test_crypto_collar_linear_route() -> None:
+    r = _client().get(
+        "/api/options/crypto/sol/collar",
+        params={"put_strike": 80000, "call_strike": 120000, "days": 30},
+    )
+    assert r.status_code == 200
+    assert r.json()["settlement"] == "linear"
+
+
 def test_crypto_ladder_route() -> None:
     r = _client().post(
         "/api/options/crypto/btc/ladder",

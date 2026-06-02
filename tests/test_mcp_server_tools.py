@@ -123,6 +123,8 @@ def test_full_tool_set_registers() -> None:
         "crypto_option_ticker",
         "crypto_covered_call",
         "crypto_covered_call_chain",
+        "crypto_protective_put",
+        "crypto_collar",
         "defi_protocols",
         "defi_protocol",
         "defi_chains",
@@ -279,6 +281,30 @@ def test_crypto_covered_call_chain_tool_ranks() -> None:
     assert "error" not in body
     assert body["considered"] == 1  # the single OTM 110k call
     assert body["ranked"][0]["strike"] == 110000.0
+
+
+def test_crypto_protective_put_and_collar_tools() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket(), deribit=_FakeDeribit())  # type: ignore[arg-type]
+    put = json.loads(
+        _call_text(
+            server,
+            "crypto_protective_put",
+            {"currency": "BTC", "strike": 80000, "days": 30, "coins": 2, "premium": 0.015},
+        )
+    )
+    assert put["settlement"] == "inverse"
+    assert put["premium_usd"] == 1500.0
+    collar = json.loads(
+        _call_text(
+            server,
+            "crypto_collar",
+            {"currency": "BTC", "put_strike": 80000, "call_strike": 120000, "days": 30},
+        )
+    )
+    assert collar["settlement"] == "inverse"
+    assert "net_premium_usd" in collar
 
 
 def test_enhancement_tools_register() -> None:
