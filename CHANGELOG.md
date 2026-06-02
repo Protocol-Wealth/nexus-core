@@ -15,6 +15,12 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 #### Added
 
+- **`roth_conversion` + `sequence_of_returns_stress` are now planning tools.**
+  Both engine primitives are exposed as REST tools (`POST /mcp/tools/{id}`) and
+  native MCP tools (`/mcp` HTTP + stdio) via the same generic handler registry —
+  taking a JSON `body` and echoing `contractVersion`. The two planning-tool count
+  goes 6 → 8 (`tools/list`, `/mcp/tools`, the MCP guide, and `llms.txt` updated).
+  Gateway tests cover happy-path + a validation case for each.
 - **Roth conversion calculator (`engine.planning.roth_conversion`).** Should you
   convert pre-tax dollars to Roth this year? Computes the conversion's *true
   incremental* federal tax by reusing the engine's progressive bracket model
