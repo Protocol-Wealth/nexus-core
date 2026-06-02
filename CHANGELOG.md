@@ -15,6 +15,23 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 #### Added
 
+- **Three more planning calculators (engine + REST/MCP tools), planning tools
+  13 → 16.** All pure + deterministic in `engine/planning/`, with matching gateway
+  tools (JSON `body`, `contractVersion` echo); no contract-version bump (additive
+  tool ids, 0.1.0):
+  - `fire` — FIRE / Coast-FIRE: the FIRE number (`annualSpend ÷ swr`), the coast
+    number needed today (no further contributions compound to the FIRE number by
+    the retirement age), projected balance at retirement, and years/age to
+    financial independence with level contributions.
+  - `risk_metrics` — return-series risk statistics: annualized return / volatility,
+    Sharpe, Sortino, maximum drawdown, and historical VaR / CVaR (95%); pure Python,
+    no numpy/empyrical dependency.
+  - `rebalance` — rebalance-to-target: per-asset drift from target weights and the
+    self-financing trade list (with one-way turnover), over the same blended
+    portfolio the other portfolio tools use.
+
+  10 engine tests + 6 gateway tests; the native-MCP registration test now asserts
+  every planning tool id.
 - **Portfolio X-ray — regime-aware structural diagnostics (engine + REST/MCP tool),
   planning tools 12 → 13.** `engine.planning.portfolio_xray` reads a de-identified
   portfolio (blended weights + per-asset return/vol/λ + account-type mix) and

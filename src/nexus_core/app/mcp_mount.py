@@ -87,6 +87,21 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "diversification, tax-location mix, and EMF regime sensitivity vs the live "
         "regime) for a de-identified portfolio. JSON request object in `body`."
     ),
+    "fire": (
+        "FIRE / Coast-FIRE: the FIRE number (spend ÷ safe withdrawal rate), the "
+        "coast number needed today, and years/age to financial independence with "
+        "level contributions. JSON request object in `body`."
+    ),
+    "risk_metrics": (
+        "Return-series risk metrics: annualized return/volatility, Sharpe, Sortino, "
+        "max drawdown, and historical VaR/CVaR for a supplied periodic return "
+        "series. JSON request object in `body`."
+    ),
+    "rebalance": (
+        "Rebalance-to-target: per-asset drift from target weights and the "
+        "self-financing trade list (with one-way turnover) for the blended "
+        "portfolio. JSON request object in `body`."
+    ),
 }
 
 
@@ -106,7 +121,9 @@ def _build_planning_mcp_tools(
     handlers = build_tool_handlers(market=market, regime_engine=regime_engine)
     specs: list[tuple[str, str, Callable[[dict[str, Any]], str]]] = []
 
-    def _adapt(handler: Callable[[dict[str, Any]], dict[str, Any]]) -> Callable[[dict[str, Any]], str]:
+    def _adapt(
+        handler: Callable[[dict[str, Any]], dict[str, Any]],
+    ) -> Callable[[dict[str, Any]], str]:
         def _run(body: dict[str, Any]) -> str:
             if not isinstance(body, dict):
                 raise ToolError("request body must be a JSON object")
@@ -143,12 +160,13 @@ def build_configured_server(
     the EMF ``score_asset`` (sharing the REST ``/api/score`` context builder +
     framework, so MCP and REST return identical scores), market quotes/history,
     FRED economic series, DefiLlama TVL, the options pricing/overlay + Deribit
-    crypto-option tools, and the 13 planning tools (monte_carlo_decumulation,
+    crypto-option tools, and the 16 planning tools (monte_carlo_decumulation,
     glide_path, tax_aware_withdrawal, correlation_matrix, regime_return_generator,
     capital_market_assumptions, roth_conversion, sequence_of_returns_stress, rmd,
     tax_bracket_headroom, social_security_claiming, regime_conditioned_swr,
-    portfolio_xray) — the same handlers the REST planning gateway serves, so the
-    MCP transport and ``POST /mcp/tools/{id}`` stay in lock-step.
+    portfolio_xray, fire, risk_metrics, rebalance) — the same handlers the REST
+    planning gateway serves, so the MCP transport and ``POST /mcp/tools/{id}``
+    stay in lock-step.
 
     Both transports build from here so the stdio server (``nexus-core mcp``,
     for Claude Desktop) and the HTTP server (``/mcp``) expose an identical set

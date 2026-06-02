@@ -132,11 +132,21 @@ _PLANNING_TOOL_IDS = {
     "correlation_matrix",
     "capital_market_assumptions",
     "regime_return_generator",
+    "roth_conversion",
+    "sequence_of_returns_stress",
+    "rmd",
+    "tax_bracket_headroom",
+    "social_security_claiming",
+    "regime_conditioned_swr",
+    "portfolio_xray",
+    "fire",
+    "risk_metrics",
+    "rebalance",
 }
 
 
 def _configured_server() -> object:
-    # build_configured_server wires the 6 planning tools via extra_tools.
+    # build_configured_server wires the planning tools via extra_tools.
     from nexus_core.app.mcp_mount import build_configured_server
 
     return build_configured_server(
@@ -147,7 +157,7 @@ def _configured_server() -> object:
 
 
 def test_planning_tools_register_natively() -> None:
-    # The 6 planning tools must appear in tools/list over the MCP transport,
+    # Every planning tool must appear in tools/list over the MCP transport,
     # alongside the research tools — not only on the REST gateway.
     names = _tool_names(_configured_server())
     assert names >= _PLANNING_TOOL_IDS

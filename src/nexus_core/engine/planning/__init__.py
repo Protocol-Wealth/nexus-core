@@ -12,9 +12,12 @@ any specific person's outcome.
 
 from .bracket_headroom import bracket_headroom
 from .correlation import correlation_matrix
+from .fire import fire
 from .glide_path import GlidePathShape, compute_glide_path
 from .monte_carlo import monte_carlo_decumulation
+from .rebalance import rebalance
 from .regime_swr import regime_conditioned_swr
+from .risk_metrics import risk_metrics
 from .rmd import rmd
 from .roth_conversion import roth_conversion
 from .sequence_risk import sequence_of_returns_stress
@@ -28,9 +31,12 @@ __all__ = [
     "bracket_headroom",
     "compute_glide_path",
     "correlation_matrix",
+    "fire",
     "monte_carlo_decumulation",
     "portfolio_xray",
+    "rebalance",
     "regime_conditioned_swr",
+    "risk_metrics",
     "rmd",
     "roth_conversion",
     "sequence_of_returns_stress",
