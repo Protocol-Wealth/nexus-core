@@ -54,7 +54,9 @@ def _client(*, cors: bool = False) -> TestClient:
             allow_headers=["*"],
             allow_credentials=False,
         )
-    app.include_router(build_planning_router(market=_FakeMarket(), regime_engine=_FakeRegimeEngine()))
+    app.include_router(
+        build_planning_router(market=_FakeMarket(), regime_engine=_FakeRegimeEngine())
+    )
     return TestClient(app)
 
 
@@ -106,6 +108,9 @@ def test_list_tools_version_handshake() -> None:
     assert "social_security_claiming" in body["tools"]
     assert "regime_conditioned_swr" in body["tools"]
     assert "portfolio_xray" in body["tools"]
+    assert "fire" in body["tools"]
+    assert "risk_metrics" in body["tools"]
+    assert "rebalance" in body["tools"]
 
 
 _MC_PAYLOAD: dict[str, Any] = {
@@ -114,17 +119,35 @@ _MC_PAYLOAD: dict[str, Any] = {
     "retirementAge": 65,
     "horizonAge": 95,
     "accounts": [
-        {"type": "traditional", "balance": 1200000, "allocation": {"us_equity": 0.6, "us_bonds": 0.4}},
+        {
+            "type": "traditional",
+            "balance": 1200000,
+            "allocation": {"us_equity": 0.6, "us_bonds": 0.4},
+        },
         {"type": "roth", "balance": 300000, "allocation": {"us_equity": 0.8, "us_bonds": 0.2}},
     ],
     "assetClasses": [
-        {"id": "us_equity", "label": "US Equity", "expectedReturn": 0.07, "volatility": 0.16, "lambda": 0.35},
-        {"id": "us_bonds", "label": "US Bonds", "expectedReturn": 0.03, "volatility": 0.05, "lambda": 0.10},
+        {
+            "id": "us_equity",
+            "label": "US Equity",
+            "expectedReturn": 0.07,
+            "volatility": 0.16,
+            "lambda": 0.35,
+        },
+        {
+            "id": "us_bonds",
+            "label": "US Bonds",
+            "expectedReturn": 0.03,
+            "volatility": 0.05,
+            "lambda": 0.10,
+        },
     ],
     "correlations": None,
     "annualSpend": 120000,
     "spendColaRate": 0.025,
-    "guaranteedIncome": [{"label": "Social Security", "annualAmount": 42000, "startAge": 67, "colaRate": 0.02}],
+    "guaranteedIncome": [
+        {"label": "Social Security", "annualAmount": 42000, "startAge": 67, "colaRate": 0.02}
+    ],
     "filingStatus": "married_joint",
     "returnModel": "emf_regime",
     "paths": 3000,
@@ -151,10 +174,14 @@ def test_monte_carlo_default_scenario_non_degenerate() -> None:
 def test_monte_carlo_retirement_age_lifts_success() -> None:
     # Accumulating until 65 must beat withdrawing from 45 (the no-retirementAge case).
     with_ret = _client().post("/mcp/tools/monte_carlo_decumulation", json=_MC_PAYLOAD).json()
-    no_ret = _client().post(
-        "/mcp/tools/monte_carlo_decumulation",
-        json={k: v for k, v in _MC_PAYLOAD.items() if k != "retirementAge"},
-    ).json()
+    no_ret = (
+        _client()
+        .post(
+            "/mcp/tools/monte_carlo_decumulation",
+            json={k: v for k, v in _MC_PAYLOAD.items() if k != "retirementAge"},
+        )
+        .json()
+    )
     assert with_ret["successProbability"] > no_ret["successProbability"]
 
 
@@ -174,7 +201,13 @@ def test_monte_carlo_pathcachekey_reuse_not_an_error() -> None:
 def test_monte_carlo_bad_allocation_returns_400() -> None:
     bad = {
         **_MC_PAYLOAD,
-        "accounts": [{"type": "traditional", "balance": 1000, "allocation": {"us_equity": 0.5, "us_bonds": 0.4}}],
+        "accounts": [
+            {
+                "type": "traditional",
+                "balance": 1000,
+                "allocation": {"us_equity": 0.5, "us_bonds": 0.4},
+            }
+        ],
     }
     r = _client().post("/mcp/tools/monte_carlo_decumulation", json=bad)
     assert r.status_code == 400
@@ -194,7 +227,13 @@ def test_regime_return_generator_live_regime_and_matrix() -> None:
         json={
             "contractVersion": "0.1.0",
             "assetClasses": [
-                {"id": "us_equity", "label": "US Equity", "expectedReturn": 0.07, "volatility": 0.16, "lambda": 0.35}
+                {
+                    "id": "us_equity",
+                    "label": "US Equity",
+                    "expectedReturn": 0.07,
+                    "volatility": 0.16,
+                    "lambda": 0.35,
+                }
             ],
             "horizonYears": 50,
             "paths": 1000,
@@ -219,7 +258,14 @@ def test_regime_return_generator_requires_lambda() -> None:
     r = _client().post(
         "/mcp/tools/regime_return_generator",
         json={
-            "assetClasses": [{"id": "us_equity", "label": "US Equity", "expectedReturn": 0.07, "volatility": 0.16}],
+            "assetClasses": [
+                {
+                    "id": "us_equity",
+                    "label": "US Equity",
+                    "expectedReturn": 0.07,
+                    "volatility": 0.16,
+                }
+            ],
             "horizonYears": 50,
         },
     )
@@ -341,9 +387,7 @@ def test_roth_conversion_happy_path() -> None:
 
 
 def test_roth_conversion_bad_filing_status_400() -> None:
-    r = _client().post(
-        "/mcp/tools/roth_conversion", json={**_ROTH, "filingStatus": "martian"}
-    )
+    r = _client().post("/mcp/tools/roth_conversion", json={**_ROTH, "filingStatus": "martian"})
     assert r.status_code == 400
     assert "filingStatus" in r.text
 
@@ -515,11 +559,27 @@ def test_regime_conditioned_swr_bad_base_400() -> None:
 _XRAY: dict[str, Any] = {
     "contractVersion": "0.1.0",
     "assetClasses": [
-        {"id": "us_equity", "label": "US Equity", "expectedReturn": 0.07, "volatility": 0.16, "lambda": 0.35},
-        {"id": "us_bonds", "label": "US Bonds", "expectedReturn": 0.03, "volatility": 0.05, "lambda": 0.10},
+        {
+            "id": "us_equity",
+            "label": "US Equity",
+            "expectedReturn": 0.07,
+            "volatility": 0.16,
+            "lambda": 0.35,
+        },
+        {
+            "id": "us_bonds",
+            "label": "US Bonds",
+            "expectedReturn": 0.03,
+            "volatility": 0.05,
+            "lambda": 0.10,
+        },
     ],
     "accounts": [
-        {"type": "traditional", "balance": 700000, "allocation": {"us_equity": 0.65, "us_bonds": 0.35}},
+        {
+            "type": "traditional",
+            "balance": 700000,
+            "allocation": {"us_equity": 0.65, "us_bonds": 0.35},
+        },
         {"type": "roth", "balance": 300000, "allocation": {"us_equity": 0.65, "us_bonds": 0.35}},
     ],
 }
@@ -540,8 +600,110 @@ def test_portfolio_xray_happy_path() -> None:
 def test_portfolio_xray_bad_allocation_400() -> None:
     bad = {
         **_XRAY,
-        "accounts": [{"type": "roth", "balance": 1000, "allocation": {"us_equity": 0.5, "us_bonds": 0.4}}],
+        "accounts": [
+            {"type": "roth", "balance": 1000, "allocation": {"us_equity": 0.5, "us_bonds": 0.4}}
+        ],
     }
     r = _client().post("/mcp/tools/portfolio_xray", json=bad)
     assert r.status_code == 400
     assert "sums to" in r.text
+
+
+def test_fire_happy_path() -> None:
+    r = _client().post(
+        "/mcp/tools/fire",
+        json={
+            "contractVersion": "0.1.0",
+            "currentAge": 40,
+            "retirementAge": 65,
+            "currentBalance": 300000,
+            "annualContribution": 30000,
+            "growthRate": 0.05,
+            "annualSpend": 80000,
+            "swr": 0.04,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert body["fireNumber"] == 2_000_000.0  # 80k / 0.04
+    assert isinstance(body["coastReached"], bool)
+    assert body["fireAge"] is None or body["fireAge"] >= 40
+
+
+def test_fire_bad_swr_400() -> None:
+    r = _client().post(
+        "/mcp/tools/fire",
+        json={
+            "contractVersion": "0.1.0",
+            "currentAge": 40,
+            "retirementAge": 65,
+            "currentBalance": 300000,
+            "annualContribution": 30000,
+            "growthRate": 0.05,
+            "annualSpend": 80000,
+            "swr": 1.5,
+        },
+    )
+    assert r.status_code == 400
+    assert "swr" in r.text
+
+
+def test_risk_metrics_happy_path() -> None:
+    r = _client().post(
+        "/mcp/tools/risk_metrics",
+        json={
+            "contractVersion": "0.1.0",
+            "returns": [0.12, -0.08, 0.15, -0.03, 0.06],
+            "riskFreeRate": 0.02,
+            "periodsPerYear": 1,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert body["periods"] == 5
+    assert body["maxDrawdown"] <= 0.0
+    assert body["valueAtRisk95"] >= 0.0
+
+
+def test_risk_metrics_too_few_returns_400() -> None:
+    r = _client().post(
+        "/mcp/tools/risk_metrics",
+        json={"contractVersion": "0.1.0", "returns": [0.1]},
+    )
+    assert r.status_code == 400
+    assert "at least 2" in r.text
+
+
+_REBALANCE: dict[str, Any] = {
+    "contractVersion": "0.1.0",
+    "assetClasses": [
+        {"id": "us_equity", "label": "US Equity", "expectedReturn": 0.07, "volatility": 0.16},
+        {"id": "us_bonds", "label": "US Bonds", "expectedReturn": 0.03, "volatility": 0.05},
+    ],
+    "accounts": [
+        {"type": "taxable", "balance": 100000, "allocation": {"us_equity": 0.7, "us_bonds": 0.3}},
+    ],
+    "targetWeights": {"us_equity": 0.6, "us_bonds": 0.4},
+}
+
+
+def test_rebalance_happy_path() -> None:
+    r = _client().post("/mcp/tools/rebalance", json=_REBALANCE)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert body["totalValue"] == 100000.0
+    rows = {row["id"]: row for row in body["perAsset"]}
+    # 70% equity drifting to a 60% target -> sell 10k equity, buy 10k bonds.
+    assert rows["us_equity"]["tradeAmount"] == -10000.0
+    assert rows["us_bonds"]["tradeAmount"] == 10000.0
+    assert body["turnover"] == 10000.0
+
+
+def test_rebalance_targets_must_sum_to_one_400() -> None:
+    bad = {**_REBALANCE, "targetWeights": {"us_equity": 0.6, "us_bonds": 0.3}}
+    r = _client().post("/mcp/tools/rebalance", json=bad)
+    assert r.status_code == 400
+    assert "sum to 1" in r.text

@@ -127,10 +127,10 @@ read-only with `readOnlyHint` + the educational disclaimer):
 - **Options** — `option_price`, `covered_call`, `cash_secured_put`, `collar`
 - **Crypto options** — `crypto_option_instruments`, `crypto_option_ticker`
 - **DeFi** — `defi_protocols`, `defi_protocol`, `defi_chains`
-- **Planning** (13) — `monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`
+- **Planning** (16) — `monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `fire`, `risk_metrics`, `rebalance`
 - **Meta** — `health` (per-upstream status), `describe` (catalog + symbology + contract version)
 
-The 13 planning tools are served *both* natively (above) and via the REST gateway
+The 16 planning tools are served *both* natively (above) and via the REST gateway
 (`POST /mcp/tools/{id}`) for the browser-based pwplan-core shell — same handlers,
 contractVersion `0.1.0`.
 

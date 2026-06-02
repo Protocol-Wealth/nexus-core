@@ -175,4 +175,4 @@ if BaseModel is not None:
 
 else:  # pragma: no cover
     # Pydantic not installed — surface the absence loudly when used.
-    IncomeStatement = BalanceSheet = CashFlowStatement = StatisticsStatement = StatementBundle = None  # type: ignore[assignment,misc]
+    IncomeStatement = BalanceSheet = CashFlowStatement = StatisticsStatement = StatementBundle = None  # type: ignore[misc]

@@ -30,9 +30,12 @@ from ...engine.planning import (
     bracket_headroom,
     compute_glide_path,
     correlation_matrix,
+    fire,
     monte_carlo_decumulation,
     portfolio_xray,
+    rebalance,
     regime_conditioned_swr,
+    risk_metrics,
     rmd,
     roth_conversion,
     sequence_of_returns_stress,
@@ -207,16 +210,14 @@ def roth_conversion_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``roth_conversion`` — convert-now vs. leave-pre-tax after-tax comparison."""
     filing = _as_str(body, "filingStatus")
     if filing not in _FILING_STATUSES:
-        raise PlanningInputError(
-            f"filingStatus must be one of {', '.join(_FILING_STATUSES)}"
-        )
+        raise PlanningInputError(f"filingStatus must be one of {', '.join(_FILING_STATUSES)}")
     taxes_from = body.get("taxesPaidFromConversion", False)
     if not isinstance(taxes_from, bool):
         raise PlanningInputError("taxesPaidFromConversion must be a boolean")
     try:
         return roth_conversion(
             current_taxable_income=_as_number(body, "currentTaxableIncome"),
-            filing_status=filing,
+            filing_status=cast(FilingStatus, filing),
             conversion_amount=_as_number(body, "conversionAmount"),
             growth_rate=_as_number(body, "growthRate"),
             years=_as_int(body, "years"),
@@ -251,18 +252,14 @@ def tax_bracket_headroom_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``tax_bracket_headroom`` — marginal bracket + room before the next rate."""
     filing = _as_str(body, "filingStatus")
     if filing not in _FILING_STATUSES:
-        raise PlanningInputError(
-            f"filingStatus must be one of {', '.join(_FILING_STATUSES)}"
-        )
+        raise PlanningInputError(f"filingStatus must be one of {', '.join(_FILING_STATUSES)}")
     target = body.get("targetRate")
-    if target is not None and (
-        isinstance(target, bool) or not isinstance(target, (int, float))
-    ):
+    if target is not None and (isinstance(target, bool) or not isinstance(target, (int, float))):
         raise PlanningInputError("targetRate must be a number or omitted")
     try:
         return bracket_headroom(
             taxable_income=_as_number(body, "taxableIncome"),
-            filing_status=filing,
+            filing_status=cast(FilingStatus, filing),
             target_rate=float(target) if target is not None else None,
         )
     except ValueError as exc:
@@ -275,9 +272,77 @@ def social_security_claiming_tool(body: dict[str, Any]) -> dict[str, Any]:
     if isinstance(fra, bool) or not isinstance(fra, int):
         raise PlanningInputError("fraAge must be an integer or omitted")
     try:
-        return social_security_claiming(
-            pia_monthly=_as_number(body, "piaMonthly"), fra_age=fra
+        return social_security_claiming(pia_monthly=_as_number(body, "piaMonthly"), fra_age=fra)
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def fire_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``fire`` — FIRE / Coast-FIRE numbers + years/age to financial independence."""
+    swr = body.get("swr", 0.04)
+    if isinstance(swr, bool) or not isinstance(swr, (int, float)):
+        raise PlanningInputError("swr must be a number or omitted")
+    try:
+        return fire(
+            current_age=_as_int(body, "currentAge"),
+            retirement_age=_as_int(body, "retirementAge"),
+            current_balance=_as_number(body, "currentBalance"),
+            annual_contribution=_as_number(body, "annualContribution"),
+            growth_rate=_as_number(body, "growthRate"),
+            annual_spend=_as_number(body, "annualSpend"),
+            swr=float(swr),
         )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def risk_metrics_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``risk_metrics`` — annualized risk statistics for a periodic return series."""
+    rf = body.get("riskFreeRate", 0.0)
+    if isinstance(rf, bool) or not isinstance(rf, (int, float)):
+        raise PlanningInputError("riskFreeRate must be a number or omitted")
+    ppy = body.get("periodsPerYear", 1)
+    if isinstance(ppy, bool) or not isinstance(ppy, int):
+        raise PlanningInputError("periodsPerYear must be an integer or omitted")
+    try:
+        return risk_metrics(
+            returns=_as_num_list(body, "returns"),
+            risk_free_rate=float(rf),
+            periods_per_year=ppy,
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def rebalance_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``rebalance`` — drift + self-financing trades to reach target weights.
+
+    Current holdings come from the same blended portfolio as the other
+    portfolio tools (accounts × allocations); ``targetWeights`` is the desired
+    allocation (ids must be declared asset classes, weights sum to 1).
+    """
+    asset_classes = _validate_asset_classes(body, require_lambda=False)
+    asset_ids = [str(a["id"]) for a in asset_classes]
+    if len(set(asset_ids)) != len(asset_ids):
+        raise PlanningInputError("asset class ids must be unique")
+    weights, total = _blended_weights(body.get("accounts"), asset_ids)
+    holdings = {aid: w * total for aid, w in zip(asset_ids, weights, strict=True)}
+
+    raw_targets = _require(body, "targetWeights")
+    if not isinstance(raw_targets, dict) or not raw_targets:
+        raise PlanningInputError("targetWeights must be a non-empty object")
+    id_set = set(asset_ids)
+    targets: dict[str, float] = {}
+    for asset_id, weight in raw_targets.items():
+        if asset_id not in id_set:
+            raise PlanningInputError(
+                f"targetWeights references undeclared asset class '{asset_id}'"
+            )
+        if isinstance(weight, bool) or not isinstance(weight, (int, float)):
+            raise PlanningInputError("target weights must be numbers")
+        targets[asset_id] = float(weight)
+    try:
+        return rebalance(holdings=holdings, target_weights=targets)
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
 
@@ -290,9 +355,7 @@ def _regime_conditioned_swr_tool(
     if isinstance(base, bool) or not isinstance(base, (int, float)):
         raise PlanningInputError("baseSwr must be a number or omitted")
     balance = body.get("portfolioBalance")
-    if balance is not None and (
-        isinstance(balance, bool) or not isinstance(balance, (int, float))
-    ):
+    if balance is not None and (isinstance(balance, bool) or not isinstance(balance, (int, float))):
         raise PlanningInputError("portfolioBalance must be a number or omitted")
     regime = to_generic_regime(regime_engine.classify().regime)
     try:
@@ -305,9 +368,7 @@ def _regime_conditioned_swr_tool(
         raise PlanningInputError(str(exc)) from exc
 
 
-def _portfolio_xray_tool(
-    body: dict[str, Any], regime_engine: RegimeEngine
-) -> dict[str, Any]:
+def _portfolio_xray_tool(body: dict[str, Any], regime_engine: RegimeEngine) -> dict[str, Any]:
     """``portfolio_xray`` — regime-aware structural diagnostics for a portfolio."""
     asset_classes = _validate_asset_classes(body, require_lambda=False)
     asset_ids = [str(a["id"]) for a in asset_classes]
@@ -409,7 +470,9 @@ def _capital_market_assumptions_tool(
     for asset_id in ids:
         assumption = ASSET_UNIVERSE[asset_id]
         returns = returns_by_id[asset_id]
-        volatility = statistics.pstdev(returns) * math.sqrt(_TRADING_DAYS) if len(returns) > 1 else 0.0
+        volatility = (
+            statistics.pstdev(returns) * math.sqrt(_TRADING_DAYS) if len(returns) > 1 else 0.0
+        )
         asset_classes.append(
             {
                 "id": asset_id,
@@ -431,7 +494,7 @@ def _resolve_seed(body: dict[str, Any]) -> int:
         return secrets.randbelow(_MAX_SEED)
     if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= _MAX_SEED:
         raise PlanningInputError(f"seed must be an integer in [0, {_MAX_SEED}] or null")
-    return seed
+    return int(seed)
 
 
 def _validate_asset_classes(body: dict[str, Any], *, require_lambda: bool) -> list[dict[str, Any]]:
@@ -476,9 +539,7 @@ def _num_field(asset: dict[str, Any], key: str) -> float:
     return float(value)
 
 
-def _blended_weights(
-    accounts: Any, asset_ids: list[str]
-) -> tuple[list[float], float]:
+def _blended_weights(accounts: Any, asset_ids: list[str]) -> tuple[list[float], float]:
     """Validate accounts and return (blended portfolio weights, total balance)."""
     if not isinstance(accounts, list) or not accounts:
         raise PlanningInputError("accounts must be a non-empty list")
@@ -536,11 +597,16 @@ def _net_spend_schedule(
         start = income.get("startAge")
         cola = income.get("colaRate", 0.0)
         if (
-            isinstance(amount, bool) or not isinstance(amount, (int, float))
-            or isinstance(start, bool) or not isinstance(start, int)
-            or isinstance(cola, bool) or not isinstance(cola, (int, float))
+            isinstance(amount, bool)
+            or not isinstance(amount, (int, float))
+            or isinstance(start, bool)
+            or not isinstance(start, int)
+            or isinstance(cola, bool)
+            or not isinstance(cola, (int, float))
         ):
-            raise PlanningInputError("guaranteedIncome needs numeric annualAmount, integer startAge, numeric colaRate")
+            raise PlanningInputError(
+                "guaranteedIncome needs numeric annualAmount, integer startAge, numeric colaRate"
+            )
         parsed.append((float(amount), start, float(cola)))
 
     schedule: list[float] = []
@@ -584,12 +650,7 @@ def _build_correlation(
         except PlanningInfeasibleError:
             estimated = {}
     return [
-        [
-            1.0
-            if a == b
-            else float(estimated.get(a, {}).get(b, 0.0))
-            for b in asset_ids
-        ]
+        [1.0 if a == b else float(estimated.get(a, {}).get(b, 0.0)) for b in asset_ids]
         for a in asset_ids
     ]
 
@@ -616,7 +677,10 @@ def _monte_carlo_decumulation_tool(
     vols = [_num_field(a, "volatility") for a in asset_classes]
     if any(v < 0 for v in vols):
         raise PlanningInputError("asset volatility must be non-negative")
-    lambdas = [float(a.get("lambda", 0.0)) if isinstance(a.get("lambda"), (int, float)) else 0.0 for a in asset_classes]
+    lambdas = [
+        float(a.get("lambda", 0.0)) if isinstance(a.get("lambda"), (int, float)) else 0.0
+        for a in asset_classes
+    ]
 
     # Optional retirementAge: the portfolio accumulates untouched until then,
     # then decumulates. Omitted ⇒ currentAge (withdraw from the start).
@@ -640,8 +704,12 @@ def _monte_carlo_decumulation_tool(
     if isinstance(spend_cola, bool) or not isinstance(spend_cola, (int, float)):
         raise PlanningInputError("spendColaRate must be a number")
     net_spend = _net_spend_schedule(
-        current_age=current_age, retirement_age=retirement_age, years=years,
-        annual_spend=annual_spend, spend_cola=float(spend_cola), body=body,
+        current_age=current_age,
+        retirement_age=retirement_age,
+        years=years,
+        annual_spend=annual_spend,
+        spend_cola=float(spend_cola),
+        body=body,
     )
 
     paths = body.get("paths", 10000)
@@ -657,9 +725,18 @@ def _monte_carlo_decumulation_tool(
         current_regime = to_generic_regime(regime_engine.classify().regime)
 
     return monte_carlo_decumulation(
-        years=years, weights=weights, means=means, vols=vols, lambdas=lambdas,
-        correlation=correlation, initial_balance=initial_balance, net_spend_by_year=net_spend,
-        return_model=return_model, paths=paths, seed=seed_used, regime_seed=regime_seed,
+        years=years,
+        weights=weights,
+        means=means,
+        vols=vols,
+        lambdas=lambdas,
+        correlation=correlation,
+        initial_balance=initial_balance,
+        net_spend_by_year=net_spend,
+        return_model=return_model,
+        paths=paths,
+        seed=seed_used,
+        regime_seed=regime_seed,
         current_regime=current_regime,
     )
 
@@ -704,13 +781,19 @@ def build_tool_handlers(
         "social_security_claiming": social_security_claiming_tool,
         "regime_conditioned_swr": regime_conditioned_swr_tool,
         "portfolio_xray": portfolio_xray_tool,
+        "fire": fire_tool,
+        "risk_metrics": risk_metrics_tool,
+        "rebalance": rebalance_tool,
     }
 
 
 __all__ = [
     "ToolHandler",
     "build_tool_handlers",
+    "fire_tool",
     "glide_path_tool",
+    "rebalance_tool",
+    "risk_metrics_tool",
     "rmd_tool",
     "roth_conversion_tool",
     "sequence_of_returns_stress_tool",
