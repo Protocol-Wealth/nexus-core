@@ -75,6 +75,10 @@ pair (`BTC-USD`); crypto *options* use a Deribit code (`BTC`, `ETH`, `SOL`).
 ## Security
 - Policy: https://nexusmcp.site/.well-known/security.txt — report to security@protocolwealthllc.com
 
+## Disclosure
+- AI & Technology Disclosure (canonical, human-readable): https://protocolwealthllc.com/disclosures/
+- Machine-readable AI disclosure card: https://nexusmcp.site/.well-known/ai-disclosure.json — mirrors the disclosure above (pwos-core disclosure-card schema: model, data handling, oversight, PII, audit posture).
+
 ---
 Nexus Core v{version} · Apache-2.0 · https://github.com/Protocol-Wealth/nexus-core
 """

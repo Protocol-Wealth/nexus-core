@@ -24,6 +24,18 @@ neither ran in CI). Deployed at `nexus-core-00040`.
   balance + depletion year. Within-year mechanic (withdraw at start, grow, floor
   at zero) matches `monte_carlo_decumulation`. 11 tests, 100% module coverage; no
   wire-contract change (engine primitive — tool/contract exposure is a follow-up).
+- **Machine-readable AI-disclosure card** (`GET /.well-known/ai-disclosure.json`
+  + an `llms.txt` pointer). Conforms to the sibling
+  `@protocolwealthos/disclosure-card` open-standard schema (dogfooding pwos-core's
+  flagship adoptable standard) and **mirrors Protocol Wealth's published "AI and
+  Technology Disclosure"** at <https://protocolwealthllc.com/disclosures/>, which
+  the card links to as the authoritative human-readable source: human adviser +
+  compliance oversight before any client-facing recommendation, AI never the sole
+  basis for advisory decisions / no final investment decisions / no trade
+  execution, data minimization, and supervisory records of AI-assisted workflows.
+  Values stay accurate to this read-only, model-less, no-client-data service
+  (`model.provider: "none"`, zero retention, PII `block`). A test validates the
+  card against a vendored copy of the published JSON Schema.
 - **Planning tools are now native MCP tools.** The six pwplan-core planning
   tools (`monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`,
   `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`)
