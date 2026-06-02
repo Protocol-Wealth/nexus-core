@@ -20,6 +20,7 @@ from .roth_conversion import roth_conversion
 from .sequence_risk import sequence_of_returns_stress
 from .social_security import social_security_claiming
 from .tax import InfeasiblePlanError, tax_aware_withdrawal
+from .xray import portfolio_xray
 
 __all__ = [
     "GlidePathShape",
@@ -28,6 +29,7 @@ __all__ = [
     "compute_glide_path",
     "correlation_matrix",
     "monte_carlo_decumulation",
+    "portfolio_xray",
     "regime_conditioned_swr",
     "rmd",
     "roth_conversion",

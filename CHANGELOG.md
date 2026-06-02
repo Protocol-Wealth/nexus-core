@@ -15,6 +15,16 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 #### Added
 
+- **Portfolio X-ray — regime-aware structural diagnostics (engine + REST/MCP tool),
+  planning tools 12 → 13.** `engine.planning.portfolio_xray` reads a de-identified
+  portfolio (blended weights + per-asset return/vol/λ + account-type mix) and
+  returns portfolio metrics (weighted return, weighted-avg vol, concentration via
+  Herfindahl + effective holdings, portfolio λ, growth sleeve, account mix) and a
+  list of structured findings — concentration, tax-location spread, growth posture,
+  and the differentiator: **regime sensitivity conditioned on the LIVE macro
+  regime** (a high portfolio λ in an adverse regime is flagged). The
+  `portfolio_xray` tool injects the live regime. Pure + deterministic; 5 engine
+  tests + 2 gateway tests; no contract-version bump (additive tool id, 0.1.0).
 - **Four new planning calculators (engine + REST/MCP tools), planning tools 8 → 12.**
   All pure + deterministic in `engine/planning/`, reusing existing tables, with
   matching gateway tools (a JSON `body`, `contractVersion` echo):
