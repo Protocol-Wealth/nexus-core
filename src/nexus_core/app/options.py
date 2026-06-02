@@ -495,6 +495,12 @@ def build_options_router(
         currency: str = Path(description="BTC, ETH, SOL, XRP, TRX, or AVAX"),
         max_days: int = Query(60, ge=1, le=1095, description="Chain window"),
         base_target_delta: float = Query(0.25, gt=0, lt=1, description="Neutral target delta"),
+        defensiveness: float = Query(
+            1.0,
+            ge=0,
+            le=5,
+            description="Risk knob: scales the regime tilt (0=neutral, 1=default, >1=amplified)",
+        ),
         coins: float = Query(1.0, gt=0, description="Coins overwritten"),
     ) -> dict[str, Any]:
         """Pick a covered-call strike whose delta is tilted by the LIVE EMF regime."""
@@ -509,6 +515,7 @@ def build_options_router(
             settlement=settlement,
             quotes=quotes,
             base_target_delta=base_target_delta,
+            defensiveness=defensiveness,
             coins=coins,
         )
         response.headers["Cache-Control"] = f"public, max-age={_CRYPTO_TTL}"

@@ -812,9 +812,13 @@ def _register_crypto_options_tools(
 
     @mcp.tool(annotations=_RO_OPEN)
     def crypto_regime_overwrite(
-        currency: str, max_days: int = 60, base_target_delta: float = 0.25, coins: float = 1.0
+        currency: str,
+        max_days: int = 60,
+        base_target_delta: float = 0.25,
+        defensiveness: float = 1.0,
+        coins: float = 1.0,
     ) -> str:
-        """Pick a covered-call strike tilted by the LIVE EMF macro regime — defensive (further OTM) in fragile regimes, richer premium in benign ones. Live spot + chain from Deribit. Not advice."""
+        """Pick a covered-call strike tilted by the LIVE EMF macro regime — defensive (further OTM) in fragile regimes, richer premium in benign ones. defensiveness scales the tilt (0=neutral, 1=default, >1=amplified). Live spot + chain from Deribit. Not advice."""
         if regime_engine is None:
             return _err(
                 "crypto_regime_overwrite", "regime engine not configured", filters, disclaimer
@@ -825,6 +829,10 @@ def _register_crypto_options_tools(
                 "base_target_delta must be in (0, 1)",
                 filters,
                 disclaimer,
+            )
+        if defensiveness < 0.0:
+            return _err(
+                "crypto_regime_overwrite", "defensiveness must be >= 0", filters, disclaimer
             )
         cur = currency.upper()
         try:
@@ -850,6 +858,7 @@ def _register_crypto_options_tools(
             settlement=settlement,
             quotes=quotes,
             base_target_delta=base_target_delta,
+            defensiveness=defensiveness,
             coins=coins,
         )
         return _ok(
