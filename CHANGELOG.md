@@ -32,10 +32,6 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
   10 engine tests + 6 gateway tests; the native-MCP registration test now asserts
   every planning tool id.
-- **Fixed 5 pre-existing `mypy --strict` errors surfaced by the mypy bump in the
-  dependency batch** (`tax.py` / `tools.py` `FilingStatus` narrowing via `cast`,
-  a seed `int(...)` coercion, and a stale `type: ignore` code in `statements.py`),
-  restoring a green `mypy --strict` on `main`.
 - **Portfolio X-ray — regime-aware structural diagnostics (engine + REST/MCP tool),
   planning tools 12 → 13.** `engine.planning.portfolio_xray` reads a de-identified
   portfolio (blended weights + per-asset return/vol/λ + account-type mix) and

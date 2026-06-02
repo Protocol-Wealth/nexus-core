@@ -217,7 +217,7 @@ def roth_conversion_tool(body: dict[str, Any]) -> dict[str, Any]:
     try:
         return roth_conversion(
             current_taxable_income=_as_number(body, "currentTaxableIncome"),
-            filing_status=cast(FilingStatus, filing),
+            filing_status=filing,
             conversion_amount=_as_number(body, "conversionAmount"),
             growth_rate=_as_number(body, "growthRate"),
             years=_as_int(body, "years"),
@@ -259,7 +259,7 @@ def tax_bracket_headroom_tool(body: dict[str, Any]) -> dict[str, Any]:
     try:
         return bracket_headroom(
             taxable_income=_as_number(body, "taxableIncome"),
-            filing_status=cast(FilingStatus, filing),
+            filing_status=filing,
             target_rate=float(target) if target is not None else None,
         )
     except ValueError as exc:
@@ -494,7 +494,7 @@ def _resolve_seed(body: dict[str, Any]) -> int:
         return secrets.randbelow(_MAX_SEED)
     if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= _MAX_SEED:
         raise PlanningInputError(f"seed must be an integer in [0, {_MAX_SEED}] or null")
-    return int(seed)
+    return seed
 
 
 def _validate_asset_classes(body: dict[str, Any], *, require_lambda: bool) -> list[dict[str, Any]]:

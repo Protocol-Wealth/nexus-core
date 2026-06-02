@@ -17,7 +17,7 @@ current IRS tables for real use. Pure + deterministic; no I/O.
 
 from __future__ import annotations
 
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 FilingStatus = Literal["single", "married_joint", "married_separate", "head_of_household"]
 AccountType = Literal["taxable", "traditional", "roth"]
@@ -155,7 +155,7 @@ def tax_aware_withdrawal(
     """
     if filing_status not in _FILING_STATUSES:
         raise ValueError(f"filingStatus must be one of {', '.join(_FILING_STATUSES)}")
-    status: FilingStatus = cast(FilingStatus, filing_status)  # validated above
+    status: FilingStatus = filing_status  # narrowed by the membership check above
     if gross_need < 0:
         raise ValueError("grossNeed must be non-negative")
 
