@@ -38,7 +38,7 @@ dependencies = [
     "fastapi>=0.136.3",
     "uvicorn>=0.48.0",
     "pydantic>=2.13.4",
-    "httpx>=0.28.0",
+    "httpx>=0.28.1",
     "structlog>=25.5.0",
     "redis>=7.4.0",
     "asyncpg>=0.31.0",
@@ -115,7 +115,7 @@ backtest = [
 
 # Compliance (OFAC screening, XBRL)
 compliance = [
-    "httpx>=0.28.0",               # Moov Watchman runs as separate service
+    "httpx>=0.28.1",               # Moov Watchman runs as separate service
 ]
 
 # Onchain / DeFi
