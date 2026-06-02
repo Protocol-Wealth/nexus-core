@@ -21,6 +21,20 @@ adds QuantLib + FinancePy; the vanilla-option math here needs neither.
 """
 
 from .black_scholes import Greeks, OptionKind, bs_price, greeks, implied_vol
+from .crypto_overlays import (
+    CryptoCoveredCallIllustration,
+    Settlement,
+    crypto_covered_call,
+)
+from .option_chain import ChainQuote, rank_covered_calls, select_by_delta
+from .options_book import (
+    BookMtm,
+    BookPosition,
+    ScenarioCell,
+    ScenarioResult,
+    book_mtm,
+    scenario_stress,
+)
 from .overlays import (
     CashSecuredPutIllustration,
     CollarIllustration,
@@ -29,17 +43,41 @@ from .overlays import (
     collar_overlay,
     covered_call_overlay,
 )
+from .overwrite import (
+    CoveredCallLadder,
+    LadderLeg,
+    RollAnalysis,
+    covered_call_ladder,
+    roll_analysis,
+)
 
 __all__ = [
+    "BookMtm",
+    "BookPosition",
     "CashSecuredPutIllustration",
+    "ChainQuote",
     "CollarIllustration",
     "CoveredCallIllustration",
+    "CoveredCallLadder",
+    "CryptoCoveredCallIllustration",
     "Greeks",
+    "LadderLeg",
     "OptionKind",
+    "RollAnalysis",
+    "ScenarioCell",
+    "ScenarioResult",
+    "Settlement",
+    "book_mtm",
     "bs_price",
     "cash_secured_put_overlay",
     "collar_overlay",
+    "covered_call_ladder",
     "covered_call_overlay",
+    "crypto_covered_call",
     "greeks",
     "implied_vol",
+    "rank_covered_calls",
+    "roll_analysis",
+    "scenario_stress",
+    "select_by_delta",
 ]

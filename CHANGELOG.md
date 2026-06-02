@@ -15,6 +15,30 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 #### Added
 
+- **Crypto options covered-call *overwriting* suite (engine + REST + MCP).** A
+  settlement-aware analytics layer for writing calls against a crypto treasury,
+  built on the existing Black-Scholes engine + Deribit client (BTC/ETH inverse,
+  SOL/XRP/TRX/AVAX linear). New pure `engine/pricing/` modules:
+  - `crypto_overlays.crypto_covered_call` — inverse (coin-settled) vs linear
+    (USDC) covered call. Surfaces the coin-denominated yield/income that a
+    coin-treasury overwrite actually earns, alongside the unified USD metrics
+    (static + annualized yield, cushion, return-if-assigned, breakeven, P(OTM)).
+  - `option_chain.{rank_covered_calls, select_by_delta}` — rank a chain's OTM
+    calls by annualized covered-call yield; pick a strike by target delta.
+  - `overwrite.{covered_call_ladder, roll_analysis}` — a calendar/strike ladder
+    (coverage, blended yield, per-leg) and roll up/out economics (net credit,
+    realized P&L, roll type).
+  - `options_book.{book_mtm, scenario_stress}` — mark a multi-leg book + aggregate
+    net Greeks (incl. the underlying coin delta), and a spot×IV stress grid with
+    short-call assignment flags. Inverse Greeks are a documented USD-space BS
+    approximation (directional, not exact settlement P&L).
+
+  Surfaced as REST `GET/POST /api/options/crypto/{currency}/...` (covered-call,
+  covered-call-chain, ladder, roll, book/mtm, book/scenario; live spot +
+  settlement from the Deribit index) and as MCP tools `crypto_covered_call` +
+  `crypto_covered_call_chain`. 17 engine + 11 route + 2 MCP tests. Educational
+  illustration only — booking under an ISDA/CSA, execution (FalconX), and
+  custody/collateral (Anchorage) are explicitly out of scope.
 - **Three more planning calculators (engine + REST/MCP tools), planning tools
   13 → 16.** All pure + deterministic in `engine/planning/`, with matching gateway
   tools (JSON `body`, `contractVersion` echo); no contract-version bump (additive
