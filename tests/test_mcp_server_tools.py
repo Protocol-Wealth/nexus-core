@@ -128,6 +128,10 @@ def test_full_tool_set_registers() -> None:
         "crypto_protective_put",
         "crypto_collar",
         "crypto_regime_overwrite",
+        "crypto_covered_call_ladder",
+        "crypto_option_roll",
+        "crypto_options_book_mtm",
+        "crypto_options_scenario",
         "defi_protocols",
         "defi_protocol",
         "defi_chains",
@@ -308,6 +312,111 @@ def test_crypto_regime_overwrite_without_regime_engine_errors() -> None:
     server = build_server(market=_FakeMarket(), deribit=_FakeDeribit())  # type: ignore[arg-type]
     body = json.loads(_call_text(server, "crypto_regime_overwrite", {"currency": "BTC"}))
     assert "error" in body  # tool registers but reports the missing regime engine
+
+
+def test_crypto_structured_tools_ladder_roll_book_scenario() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket(), deribit=_FakeDeribit())  # type: ignore[arg-type]
+
+    ladder = json.loads(
+        _call_text(
+            server,
+            "crypto_covered_call_ladder",
+            {
+                "currency": "BTC",
+                "total_coins": 10,
+                "legs": [
+                    {"expiry_days": 30, "strike": 120000, "coins": 4, "premium": 0.02},
+                    {"expiry_days": 60, "strike": 130000, "coins": 3, "premium": 0.03},
+                ],
+            },
+        )
+    )
+    assert ladder["coverage_pct"] == 70.0
+    assert ladder["total_premium_usd"] == 17000.0
+
+    roll = json.loads(
+        _call_text(
+            server,
+            "crypto_option_roll",
+            {
+                "currency": "BTC",
+                "coins": 2,
+                "current_strike": 110000,
+                "current_expiry_days": 5,
+                "current_entry_premium": 0.03,
+                "current_close_premium": 0.05,
+                "new_strike": 120000,
+                "new_expiry_days": 35,
+                "new_open_premium": 0.04,
+            },
+        )
+    )
+    assert roll["roll_type"] == "roll up and out"
+    assert roll["net_credit_usd"] == -2000.0
+
+    book = json.loads(
+        _call_text(
+            server,
+            "crypto_options_book_mtm",
+            {
+                "currency": "BTC",
+                "coins_held": 1,
+                "positions": [
+                    {
+                        "kind": "call",
+                        "side": "short",
+                        "strike": 120000,
+                        "expiry_days": 30,
+                        "coins": 1,
+                        "entry_premium": 0.03,
+                        "iv": 0.6,
+                        "mark_premium": 0.02,
+                    }
+                ],
+            },
+        )
+    )
+    assert book["total_pnl_usd"] == 1000.0
+
+    scenario = json.loads(
+        _call_text(
+            server,
+            "crypto_options_scenario",
+            {
+                "currency": "BTC",
+                "coins_held": 1,
+                "positions": [
+                    {
+                        "kind": "call",
+                        "side": "short",
+                        "strike": 120000,
+                        "expiry_days": 30,
+                        "coins": 1,
+                        "entry_premium": 0.03,
+                        "iv": 0.6,
+                    }
+                ],
+                "spot_shocks": [-0.2, 0.0, 0.25],
+            },
+        )
+    )
+    assert len(scenario["cells"]) == 3
+
+
+def test_crypto_structured_tool_bad_input_errors() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket(), deribit=_FakeDeribit())  # type: ignore[arg-type]
+    body = json.loads(
+        _call_text(
+            server,
+            "crypto_options_book_mtm",
+            {"currency": "BTC", "positions": [{"kind": "spread", "side": "short"}]},
+        )
+    )
+    assert "error" in body
 
 
 def test_crypto_protective_put_and_collar_tools() -> None:
