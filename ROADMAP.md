@@ -81,7 +81,7 @@ gracefully to `None` / empty / `503` when its key is absent.
 - **`GET /api/usage`** — provider usage / quota report.
 - **`POST /mcp`** — MCP-over-HTTP transport (FastMCP, also `nexus-core mcp` over
   stdio) exposing the above as tools, plus `health` / `describe` / `get_quotes`
-  and the six planning tools. `GET /mcp/tools` + `POST /mcp/tools/{id}` are the
+  and the 12 planning tools. `GET /mcp/tools` + `POST /mcp/tools/{id}` are the
   REST planning gateway (contractVersion `0.1.0`) for the pwplan-core shell.
 - **Persistence** — private Cloud SQL (`nexus-marketdata`, POSTGRES_16,
   private-IP-only on `pwllc-prod-vpc`, backups + deletion protection).

@@ -127,10 +127,10 @@ read-only with `readOnlyHint` + the educational disclaimer):
 - **Options** — `option_price`, `covered_call`, `cash_secured_put`, `collar`
 - **Crypto options** — `crypto_option_instruments`, `crypto_option_ticker`
 - **DeFi** — `defi_protocols`, `defi_protocol`, `defi_chains`
-- **Planning** (6) — `monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`
+- **Planning** (12) — `monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`
 - **Meta** — `health` (per-upstream status), `describe` (catalog + symbology + contract version)
 
-The 6 planning tools are served *both* natively (above) and via the REST gateway
+The 12 planning tools are served *both* natively (above) and via the REST gateway
 (`POST /mcp/tools/{id}`) for the browser-based pwplan-core shell — same handlers,
 contractVersion `0.1.0`.
 
@@ -219,8 +219,13 @@ key is absent.
   Errors are masked (`mask_error_details=True`) so no `str(e)` leaks to the wire.
 - **CI** gates `ruff` + `mypy --strict` + `pytest` (80% floor) on every push/PR.
 
-## Recent work (this cycle — platform hardening, deployed `nexus-core-00040`)
+## Recent work (this cycle — platform hardening, deployed `nexus-core-00041`)
 
+- **Planning tools 6 → 12** — added `roth_conversion`, `sequence_of_returns_stress`,
+  `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`
+  (pure `engine/planning/` primitives + REST/native-MCP tools); the MCP guide gained
+  a Claude Code quick-start + worked prompts + `examples/planning_agent.py` (Agent
+  SDK); a machine-readable AI-disclosure card at `/.well-known/ai-disclosure.json`.
 - **Native MCP planning tools** + `health`/`describe`/`get_quotes` + `readOnlyHint` annotations
 - **Compliance** — canonical disclaimers everywhere; `score_asset` → `NOT APPLICABLE` on
   insufficient coverage (was a verdict-shaped `BELOW THRESHOLD`)

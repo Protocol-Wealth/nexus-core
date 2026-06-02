@@ -138,10 +138,12 @@ def build_configured_server(
     the EMF ``score_asset`` (sharing the REST ``/api/score`` context builder +
     framework, so MCP and REST return identical scores), market quotes/history,
     FRED economic series, DefiLlama TVL, the options pricing/overlay + Deribit
-    crypto-option tools, and the six planning tools (monte_carlo_decumulation,
+    crypto-option tools, and the 12 planning tools (monte_carlo_decumulation,
     glide_path, tax_aware_withdrawal, correlation_matrix, regime_return_generator,
-    capital_market_assumptions) — the same handlers the REST planning gateway
-    serves, so the MCP transport and ``POST /mcp/tools/{id}`` stay in lock-step.
+    capital_market_assumptions, roth_conversion, sequence_of_returns_stress, rmd,
+    tax_bracket_headroom, social_security_claiming, regime_conditioned_swr) — the
+    same handlers the REST planning gateway serves, so the MCP transport and
+    ``POST /mcp/tools/{id}`` stay in lock-step.
 
     Both transports build from here so the stdio server (``nexus-core mcp``,
     for Claude Desktop) and the HTTP server (``/mcp``) expose an identical set
