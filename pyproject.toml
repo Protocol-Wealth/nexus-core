@@ -61,7 +61,7 @@ optimization = [
 risk = [
     "empyrical-reloaded>=0.5.12",  # Apache 2.0
     "pyfolio-reloaded>=0.9.9",     # Apache 2.0
-    "ffn>=1.0.0",                  # MIT
+    "ffn>=1.1.5",                  # MIT
 ]
 
 # Derivatives pricing
