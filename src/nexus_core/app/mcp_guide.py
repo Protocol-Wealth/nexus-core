@@ -253,6 +253,10 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     <li><code>regime_return_generator</code> — live regime + transition matrix for path generation</li>
     <li><code>roth_conversion</code> — convert-now vs. leave-pre-tax after-tax comparison + breakeven rate</li>
     <li><code>sequence_of_returns_stress</code> — ordering effect on a fixed return set (worst/best/as-given)</li>
+    <li><code>rmd</code> — required minimum distribution (IRS Uniform Lifetime Table)</li>
+    <li><code>tax_bracket_headroom</code> — marginal bracket + room before the next rate (Roth-fill)</li>
+    <li><code>social_security_claiming</code> — benefit by claim age 62–70 + breakeven ages</li>
+    <li><code>regime_conditioned_swr</code> — base safe withdrawal rate adjusted for the live regime</li>
   </ul>
   <div class="note">
     <code>monte_carlo_decumulation</code> takes an optional <code>retirementAge</code>:

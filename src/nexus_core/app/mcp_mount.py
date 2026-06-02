@@ -64,6 +64,24 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "best-first / as-given to isolate the ordering effect on a withdrawal "
         "plan. JSON request object in `body`."
     ),
+    "rmd": (
+        "Required Minimum Distribution: IRS Uniform Lifetime Table RMD for a "
+        "traditional account given age + prior-year-end balance. JSON request "
+        "object in `body`."
+    ),
+    "tax_bracket_headroom": (
+        "Tax-bracket headroom / Roth-fill: marginal bracket + ordinary-income "
+        "room before the next federal rate (or up to a target rate). JSON request "
+        "object in `body`."
+    ),
+    "social_security_claiming": (
+        "Social Security claiming-age: benefit at each claim age 62-70 from the "
+        "PIA + breakeven ages between strategies. JSON request object in `body`."
+    ),
+    "regime_conditioned_swr": (
+        "Regime-conditioned safe withdrawal rate: a base SWR adjusted for the "
+        "LIVE macro regime (illustrative overlay). JSON request object in `body`."
+    ),
 }
 
 
