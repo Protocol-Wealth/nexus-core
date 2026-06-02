@@ -99,6 +99,8 @@ def test_list_tools_version_handshake() -> None:
     assert "tax_aware_withdrawal" in body["tools"]
     assert "regime_return_generator" in body["tools"]
     assert "monte_carlo_decumulation" in body["tools"]
+    assert "roth_conversion" in body["tools"]
+    assert "sequence_of_returns_stress" in body["tools"]
 
 
 _MC_PAYLOAD: dict[str, Any] = {
@@ -307,6 +309,66 @@ def test_identity_field_rejected_400() -> None:
     r = _client().post("/mcp/tools/glide_path", json={**_GLIDE, "email": "a@b.com"})
     assert r.status_code == 400
     assert "identity" in r.text.lower()
+
+
+_ROTH: dict[str, Any] = {
+    "contractVersion": "0.1.0",
+    "currentTaxableIncome": 100_000,
+    "filingStatus": "single",
+    "conversionAmount": 10_000,
+    "growthRate": 0.05,
+    "years": 10,
+    "retirementMarginalRate": 0.24,
+    "taxesPaidFromConversion": True,
+}
+
+
+def test_roth_conversion_happy_path() -> None:
+    r = _client().post("/mcp/tools/roth_conversion", json=_ROTH)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert body["conversionTax"] == 2_200.0  # 10k inside the 22% bracket
+    assert body["effectiveConversionRate"] == 0.22
+    assert body["rothSeed"] == 7_800.0
+    # retirement rate (24%) > effective conversion rate (22%) -> converting wins
+    assert body["netBenefit"] > 0
+
+
+def test_roth_conversion_bad_filing_status_400() -> None:
+    r = _client().post(
+        "/mcp/tools/roth_conversion", json={**_ROTH, "filingStatus": "martian"}
+    )
+    assert r.status_code == 400
+    assert "filingStatus" in r.text
+
+
+_SOR: dict[str, Any] = {
+    "contractVersion": "0.1.0",
+    "initialBalance": 100.0,
+    "netSpendByYear": [50.0, 50.0],
+    "annualReturns": [0.5, -0.4],
+}
+
+
+def test_sequence_of_returns_stress_happy_path() -> None:
+    r = _client().post("/mcp/tools/sequence_of_returns_stress", json=_SOR)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["contractVersion"] == CONTRACT_VERSION
+    # worst-first depletes by year 1; best-first survives (see engine tests).
+    assert body["worstFirst"] == {"terminalBalance": 0.0, "depletedYear": 1}
+    assert body["bestFirst"]["depletedYear"] is None
+    assert body["sequenceRiskGap"] > 0
+
+
+def test_sequence_of_returns_stress_length_mismatch_400() -> None:
+    r = _client().post(
+        "/mcp/tools/sequence_of_returns_stress",
+        json={**_SOR, "annualReturns": [0.5]},
+    )
+    assert r.status_code == 400
+    assert "same length" in r.text
 
 
 def test_nested_identity_field_rejected_400() -> None:

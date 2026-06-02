@@ -54,6 +54,16 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "Live macro regime + transition matrix + path cache key for regime-aware "
         "return generation. JSON request object in `body`."
     ),
+    "roth_conversion": (
+        "Roth conversion calculator: convert-now vs. leave-pre-tax after-tax "
+        "comparison with the true incremental (bracket-creep) federal tax and a "
+        "breakeven retirement rate. JSON request object in `body`."
+    ),
+    "sequence_of_returns_stress": (
+        "Sequence-of-returns stress: replay one return set worst-first / "
+        "best-first / as-given to isolate the ordering effect on a withdrawal "
+        "plan. JSON request object in `body`."
+    ),
 }
 
 

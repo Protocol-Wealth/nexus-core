@@ -57,7 +57,7 @@ pair (`BTC-USD`); crypto *options* use a Deribit code (`BTC`, `ETH`, `SOL`).
 - **Options** (`option_price`, `covered_call`, `cash_secured_put`, `collar`) — Black-Scholes price/Greeks + overlay illustrations. Educational, not recommendations.
 - **Crypto options** (`crypto_option_instruments`, `crypto_option_ticker`) — Deribit BTC/ETH/SOL/XRP/TRX/AVAX.
 - **DeFi** (`defi_protocols`, `defi_protocol`, `defi_chains`) — DefiLlama TVL.
-- **Planning** (`monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`) — PII-free retirement math. De-identified inputs only (age, never date of birth).
+- **Planning** (`monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`) — PII-free retirement math. De-identified inputs only (age, never date of birth).
 - **Meta** (`health`, `describe`) — upstream status + the tool catalog/symbology.
 
 ## Planning over REST (pwplan-core contract v0.1.0)

@@ -207,7 +207,7 @@ nexus-core mcp        # MCP server over stdio</code></pre>
       accounts.&rdquo;</li>
   </ul>
   <div class="note">
-    The six planning tools take the request as a single JSON object in a
+    The planning tools take the request as a single JSON object in a
     <code>body</code> argument, matching the pwplan-core wire contract
     (<code>contractVersion 0.1.0</code>). The client assembles it from your
     prompt; inputs are de-identified — age, never date of birth.
@@ -242,7 +242,7 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     The wire contract is <code>contractVersion 0.1.0</code> — every successful
     tool response echoes it, and the client rejects a mismatch.
   </p>
-  <h3>The six planning tools</h3>
+  <h3>The planning tools</h3>
   <p>Invoke a tool with <code>POST /mcp/tools/{{tool_id}}</code> and a JSON body:</p>
   <ul>
     <li><code>monte_carlo_decumulation</code> — primary retirement decumulation simulation</li>
@@ -251,6 +251,8 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     <li><code>correlation_matrix</code> — real-data return correlation across asset classes</li>
     <li><code>capital_market_assumptions</code> — forward return / volatility / correlation assumptions</li>
     <li><code>regime_return_generator</code> — live regime + transition matrix for path generation</li>
+    <li><code>roth_conversion</code> — convert-now vs. leave-pre-tax after-tax comparison + breakeven rate</li>
+    <li><code>sequence_of_returns_stress</code> — ordering effect on a fixed return set (worst/best/as-given)</li>
   </ul>
   <div class="note">
     <code>monte_carlo_decumulation</code> takes an optional <code>retirementAge</code>:

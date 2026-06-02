@@ -30,6 +30,8 @@ from ...engine.planning import (
     compute_glide_path,
     correlation_matrix,
     monte_carlo_decumulation,
+    roth_conversion,
+    sequence_of_returns_stress,
     tax_aware_withdrawal,
 )
 from ...engine.planning.regime import (
@@ -38,6 +40,7 @@ from ...engine.planning.regime import (
     to_generic_regime,
     transition_matrix,
 )
+from ...engine.planning.tax import FilingStatus
 from ...engine.regime import RegimeEngine
 from .contract import PlanningInfeasibleError, PlanningInputError
 from .universe import ASSET_UNIVERSE, proxy_tickers, universe_ids
@@ -92,6 +95,17 @@ def _as_str_list(body: dict[str, Any], key: str) -> list[str]:
     if not isinstance(value, list) or not value or not all(isinstance(x, str) for x in value):
         raise PlanningInputError(f"field '{key}' must be a non-empty list of strings")
     return value
+
+
+def _as_num_list(body: dict[str, Any], key: str) -> list[float]:
+    value = _require(body, key)
+    if (
+        not isinstance(value, list)
+        or not value
+        or any(isinstance(x, bool) or not isinstance(x, (int, float)) for x in value)
+    ):
+        raise PlanningInputError(f"field '{key}' must be a non-empty list of numbers")
+    return [float(x) for x in value]
 
 
 def _fetch_aligned_returns(
@@ -172,6 +186,50 @@ def tax_aware_withdrawal_tool(body: dict[str, Any]) -> dict[str, Any]:
         )
     except InfeasiblePlanError as exc:
         raise PlanningInfeasibleError(str(exc)) from exc
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+_FILING_STATUSES: tuple[FilingStatus, ...] = (
+    "single",
+    "married_joint",
+    "married_separate",
+    "head_of_household",
+)
+
+
+def roth_conversion_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``roth_conversion`` — convert-now vs. leave-pre-tax after-tax comparison."""
+    filing = _as_str(body, "filingStatus")
+    if filing not in _FILING_STATUSES:
+        raise PlanningInputError(
+            f"filingStatus must be one of {', '.join(_FILING_STATUSES)}"
+        )
+    taxes_from = body.get("taxesPaidFromConversion", False)
+    if not isinstance(taxes_from, bool):
+        raise PlanningInputError("taxesPaidFromConversion must be a boolean")
+    try:
+        return roth_conversion(
+            current_taxable_income=_as_number(body, "currentTaxableIncome"),
+            filing_status=filing,
+            conversion_amount=_as_number(body, "conversionAmount"),
+            growth_rate=_as_number(body, "growthRate"),
+            years=_as_int(body, "years"),
+            retirement_marginal_rate=_as_number(body, "retirementMarginalRate"),
+            taxes_paid_from_conversion=taxes_from,
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def sequence_of_returns_stress_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``sequence_of_returns_stress`` — ordering effect on a fixed return set."""
+    try:
+        return sequence_of_returns_stress(
+            initial_balance=_as_number(body, "initialBalance"),
+            net_spend_by_year=_as_num_list(body, "netSpendByYear"),
+            annual_returns=_as_num_list(body, "annualReturns"),
+        )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
 
@@ -528,6 +586,8 @@ def build_tool_handlers(
         "correlation_matrix": correlation_matrix_tool,
         "capital_market_assumptions": capital_market_assumptions_tool,
         "regime_return_generator": regime_return_generator_tool,
+        "roth_conversion": roth_conversion_tool,
+        "sequence_of_returns_stress": sequence_of_returns_stress_tool,
     }
 
 
@@ -535,5 +595,7 @@ __all__ = [
     "ToolHandler",
     "build_tool_handlers",
     "glide_path_tool",
+    "roth_conversion_tool",
+    "sequence_of_returns_stress_tool",
     "tax_aware_withdrawal_tool",
 ]

@@ -15,6 +15,24 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 #### Added
 
+- **`roth_conversion` + `sequence_of_returns_stress` are now planning tools.**
+  Both engine primitives are exposed as REST tools (`POST /mcp/tools/{id}`) and
+  native MCP tools (`/mcp` HTTP + stdio) via the same generic handler registry —
+  taking a JSON `body` and echoing `contractVersion`. The two planning-tool count
+  goes 6 → 8 (`tools/list`, `/mcp/tools`, the MCP guide, and `llms.txt` updated).
+  Gateway tests cover happy-path + a validation case for each.
+- **Roth conversion calculator (`engine.planning.roth_conversion`).** Should you
+  convert pre-tax dollars to Roth this year? Computes the conversion's *true
+  incremental* federal tax by reusing the engine's progressive bracket model
+  (`ordinary_tax(income + conversion) − ordinary_tax(income)`), so it captures
+  bracket creep instead of assuming a flat marginal rate, then compares the
+  after-tax terminal value of converting now vs. leaving the dollars pre-tax and
+  taxing them at a retirement marginal rate. Reports `conversionTax`,
+  `effectiveConversionRate`, `rothSeed` / `externalTaxPaidToday` (taxes paid from
+  the conversion vs. outside funds), the two `*AfterTaxValue`s, `netBenefit`, and
+  `breakevenRetirementRate`. Pure + deterministic; documented federal-only
+  simplifications; 11 tests, 100% module coverage. Engine primitive — no
+  wire-contract change (tool/contract/UI exposure is a follow-up).
 - **Sequence-of-returns stress (`engine.planning.sequence_of_returns_stress`).**
   A pure, deterministic complement to the Monte Carlo: hold a fixed multiset of
   annual returns constant and replay the same withdrawal schedule worst-first /
