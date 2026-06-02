@@ -15,6 +15,15 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 #### Added
 
+- **Sequence-of-returns stress (`engine.planning.sequence_of_returns_stress`).**
+  A pure, deterministic complement to the Monte Carlo: hold a fixed multiset of
+  annual returns constant and replay the same withdrawal schedule worst-first /
+  best-first / as-given. Since the arithmetic mean is identical across orderings,
+  the terminal spread (`sequenceRiskGap`) is attributable purely to ordering —
+  and with no withdrawals it is provably zero. Reports per-ordering terminal
+  balance + depletion year. Within-year mechanic (withdraw at start, grow, floor
+  at zero) matches `monte_carlo_decumulation`. 11 tests, 100% module coverage; no
+  wire-contract change (engine primitive — tool/contract exposure is a follow-up).
 - **Planning tools are now native MCP tools.** The six pwplan-core planning
   tools (`monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`,
   `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`)
