@@ -15,6 +15,12 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 #### Added
 
+- **MCP coverage for the structured crypto-options tools.** The ladder / roll /
+  book-MTM / scenario operations (REST-only since the overwriting suite landed)
+  are now also native MCP tools: `crypto_covered_call_ladder`, `crypto_option_roll`,
+  `crypto_options_book_mtm`, `crypto_options_scenario` (structured `legs` /
+  `positions` list params, validated with human-readable errors). The full crypto
+  overwriting + hedge surface is now reachable from agents, not just REST. +2 tests.
 - **Regime-conditioned covered-call strike selection (the EMF differentiator).**
   `engine/pricing/regime_overlay.py` tilts the written call's *target delta* by the
   LIVE EMF macro regime: defensive (further OTM, lower delta) in fragile regimes

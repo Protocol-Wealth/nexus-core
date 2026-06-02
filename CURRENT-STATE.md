@@ -128,9 +128,10 @@ read-only with `readOnlyHint` + the educational disclaimer):
 - **Crypto options** — `crypto_option_instruments`, `crypto_option_ticker`,
   `crypto_covered_call` (settlement-aware overwrite), `crypto_covered_call_chain`
   (rank OTM calls by yield), `crypto_protective_put`, `crypto_collar`,
-  `crypto_regime_overwrite` (strike tilted by the live EMF regime). Full
-  overwriting + hedge suite (ladder / roll / book MTM / scenario stress) on the
-  REST surface under `/api/options/crypto/{currency}/...`
+  `crypto_regime_overwrite` (strike tilted by the live EMF regime), plus the
+  structured `crypto_covered_call_ladder` / `crypto_option_roll` /
+  `crypto_options_book_mtm` / `crypto_options_scenario`. Full overwriting + hedge
+  suite is on BOTH the REST surface (`/api/options/crypto/{currency}/...`) and MCP.
 - **DeFi** — `defi_protocols`, `defi_protocol`, `defi_chains`
 - **Planning** (16) — `monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `fire`, `risk_metrics`, `rebalance`
 - **Meta** — `health` (per-upstream status), `describe` (catalog + symbology + contract version)

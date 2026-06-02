@@ -47,15 +47,21 @@ from ...data.onchain import DefiLlamaClient
 from ...data.providers import MacroDataProvider, MarketDataProvider
 from ...engine.planning.regime import to_generic_regime
 from ...engine.pricing import (
+    BookPosition,
     ChainQuote,
+    LadderLeg,
     OptionKind,
+    book_mtm,
     bs_price,
     cash_secured_put_overlay,
     collar_overlay,
+    covered_call_ladder,
     covered_call_overlay,
     greeks,
     rank_covered_calls,
     regime_conditioned_overwrite,
+    roll_analysis,
+    scenario_stress,
 )
 from ...engine.pricing.crypto_overlays import Settlement
 from ...engine.pricing.crypto_overlays import crypto_collar as _crypto_collar
@@ -271,6 +277,10 @@ def build_server(
                         "crypto_protective_put",
                         "crypto_collar",
                         "crypto_regime_overwrite",
+                        "crypto_covered_call_ladder",
+                        "crypto_option_roll",
+                        "crypto_options_book_mtm",
+                        "crypto_options_scenario",
                     ],
                     "defi": ["defi_protocols", "defi_protocol", "defi_chains"],
                     "planning": [name for name, _d, _f in (extra_tools or ())],
@@ -845,6 +855,194 @@ def _register_crypto_options_tools(
         return _ok(
             "crypto_regime_overwrite",
             {"currency": cur, "settlement": settlement, "spot": spot, **asdict(result)},
+            filters,
+            disclaimer,
+        )
+
+    def _f(value: Any) -> float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError("expected a number")
+        return float(value)
+
+    def _of(value: Any) -> float | None:
+        return None if value is None else _f(value)
+
+    def _i(value: Any) -> int:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("expected a whole number")
+        return value
+
+    @mcp.tool(annotations=_RO_OPEN)
+    def crypto_covered_call_ladder(
+        currency: str, total_coins: float, legs: list[dict[str, Any]]
+    ) -> str:
+        """Calendar/strike covered-call ladder against a crypto treasury — coverage, blended yield, per-leg. legs: [{expiry_days, strike, coins, premium?, iv?, delta?}]. Live spot from Deribit. Not advice."""
+        resolved = _spot_settlement(currency)
+        if resolved is None:
+            return _err(
+                "crypto_covered_call_ladder",
+                f"Unsupported or unpriced '{currency}'",
+                filters,
+                disclaimer,
+            )
+        cur, spot, settlement = resolved
+        try:
+            ladder_legs = [
+                LadderLeg(
+                    expiry_days=_i(leg["expiry_days"]),
+                    strike=_f(leg["strike"]),
+                    coins=_f(leg["coins"]),
+                    premium=_of(leg.get("premium")),
+                    iv=_of(leg.get("iv")),
+                    delta=_of(leg.get("delta")),
+                )
+                for leg in legs
+            ]
+            result = covered_call_ladder(
+                spot=spot, settlement=settlement, total_coins=_f(total_coins), legs=ladder_legs
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            return _err(
+                "crypto_covered_call_ladder", f"invalid ladder input: {exc}", filters, disclaimer
+            )
+        return _ok(
+            "crypto_covered_call_ladder",
+            {"currency": cur, "settlement": settlement, **asdict(result)},
+            filters,
+            disclaimer,
+        )
+
+    @mcp.tool(annotations=_RO_OPEN)
+    def crypto_option_roll(
+        currency: str,
+        coins: float,
+        current_strike: float,
+        current_expiry_days: int,
+        current_entry_premium: float,
+        current_close_premium: float,
+        new_strike: float,
+        new_expiry_days: int,
+        new_open_premium: float,
+        new_delta: float | None = None,
+    ) -> str:
+        """Roll a short call up/out: net credit, realized P&L on the closed leg, new cap/cushion. Premiums in native unit (coin/inverse, USD/linear). Live spot from Deribit. Not advice."""
+        resolved = _spot_settlement(currency)
+        if resolved is None:
+            return _err(
+                "crypto_option_roll", f"Unsupported or unpriced '{currency}'", filters, disclaimer
+            )
+        cur, spot, settlement = resolved
+        try:
+            result = roll_analysis(
+                spot=spot,
+                settlement=settlement,
+                coins=coins,
+                current_strike=current_strike,
+                current_expiry_days=current_expiry_days,
+                current_entry_premium=current_entry_premium,
+                current_close_premium=current_close_premium,
+                new_strike=new_strike,
+                new_expiry_days=new_expiry_days,
+                new_open_premium=new_open_premium,
+                new_delta=new_delta,
+            )
+        except ValueError as exc:
+            return _err("crypto_option_roll", f"invalid roll input: {exc}", filters, disclaimer)
+        return _ok(
+            "crypto_option_roll",
+            {"currency": cur, "settlement": settlement, **asdict(result)},
+            filters,
+            disclaimer,
+        )
+
+    def _positions(raw: list[dict[str, Any]]) -> list[BookPosition]:
+        out: list[BookPosition] = []
+        for pos in raw:
+            kind = pos.get("kind")
+            side = pos.get("side")
+            if kind not in ("call", "put") or side not in ("short", "long"):
+                raise ValueError("each position needs kind call/put and side short/long")
+            out.append(
+                BookPosition(
+                    kind=kind,
+                    side=side,
+                    strike=_f(pos["strike"]),
+                    expiry_days=_i(pos["expiry_days"]),
+                    coins=_f(pos["coins"]),
+                    entry_premium=_f(pos["entry_premium"]),
+                    iv=_of(pos.get("iv")),
+                    mark_premium=_of(pos.get("mark_premium")),
+                    label=pos.get("label") if isinstance(pos.get("label"), str) else None,
+                )
+            )
+        return out
+
+    @mcp.tool(annotations=_RO_OPEN)
+    def crypto_options_book_mtm(
+        currency: str, positions: list[dict[str, Any]], coins_held: float = 0.0
+    ) -> str:
+        """Mark a crypto options book + aggregate net Greeks (incl. underlying coin delta). positions: [{kind, side, strike, expiry_days, coins, entry_premium, iv?, mark_premium?}]. Live spot from Deribit. Not advice."""
+        resolved = _spot_settlement(currency)
+        if resolved is None:
+            return _err(
+                "crypto_options_book_mtm",
+                f"Unsupported or unpriced '{currency}'",
+                filters,
+                disclaimer,
+            )
+        cur, spot, settlement = resolved
+        try:
+            result = book_mtm(
+                spot=spot,
+                settlement=settlement,
+                positions=_positions(positions),
+                coins_held=_f(coins_held),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            return _err(
+                "crypto_options_book_mtm", f"invalid book input: {exc}", filters, disclaimer
+            )
+        return _ok(
+            "crypto_options_book_mtm",
+            {"currency": cur, "settlement": settlement, **asdict(result)},
+            filters,
+            disclaimer,
+        )
+
+    @mcp.tool(annotations=_RO_OPEN)
+    def crypto_options_scenario(
+        currency: str,
+        positions: list[dict[str, Any]],
+        spot_shocks: list[float],
+        iv_shocks: list[float] | None = None,
+        coins_held: float = 0.0,
+    ) -> str:
+        """Spot×IV stress an options book + held coins → P&L grid with short-call assignment flags. spot_shocks fractional (e.g. [-0.3,0,0.3]); iv_shocks vol-point shifts. Live spot from Deribit. Not advice."""
+        resolved = _spot_settlement(currency)
+        if resolved is None:
+            return _err(
+                "crypto_options_scenario",
+                f"Unsupported or unpriced '{currency}'",
+                filters,
+                disclaimer,
+            )
+        cur, spot, settlement = resolved
+        try:
+            result = scenario_stress(
+                spot=spot,
+                settlement=settlement,
+                positions=_positions(positions),
+                spot_shocks=[_f(s) for s in spot_shocks],
+                iv_shocks=[_f(s) for s in iv_shocks] if iv_shocks else None,
+                coins_held=_f(coins_held),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            return _err(
+                "crypto_options_scenario", f"invalid scenario input: {exc}", filters, disclaimer
+            )
+        return _ok(
+            "crypto_options_scenario",
+            {"currency": cur, "settlement": settlement, **asdict(result)},
             filters,
             disclaimer,
         )
