@@ -74,6 +74,7 @@ The deployed surface is public, read-only, and carries no client data and no aut
 | `GET /api/options/crypto/{currency}/covered-call` | Settlement-aware covered-call overwrite illustration (coin yield) |
 | `GET /api/options/crypto/{currency}/covered-call-chain` | Rank live OTM calls by annualized covered-call yield |
 | `GET /api/options/crypto/{currency}/regime-overwrite` | Covered-call strike tilted by the LIVE EMF macro regime |
+| `GET /api/options/crypto/{currency}/iv-term-structure` | Near-ATM implied-vol curve across tenors (which expiry pays richest) |
 | `POST /api/options/crypto/{currency}/ladder` | Calendar/strike covered-call ladder (coverage, blended yield) |
 | `POST /api/options/crypto/{currency}/roll` | Roll a short call (up/out net-credit economics) |
 | `POST /api/options/crypto/{currency}/book/mtm` | Mark an options book + aggregate Greeks |

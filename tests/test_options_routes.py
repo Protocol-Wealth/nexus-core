@@ -247,6 +247,16 @@ def test_crypto_covered_call_chain_ranks() -> None:
     assert body["selected_by_delta"]["strike"] == 120000.0
 
 
+def test_crypto_iv_term_structure_route() -> None:
+    r = _client().get("/api/options/crypto/btc/iv-term-structure", params={"max_days": 90})
+    assert r.status_code == 200
+    body = r.json()
+    # Fake chain: 110k @30d + 120k @45d, both mark_iv 62.5 -> 2 tenors, flat curve.
+    assert [p["expiry_days"] for p in body["points"]] == [30, 45]
+    assert all(p["atm_iv"] == 62.5 for p in body["points"])
+    assert body["shape"] == "flat"
+
+
 def test_crypto_regime_overwrite_route() -> None:
     r = _client().get("/api/options/crypto/btc/regime-overwrite", params={"max_days": 60})
     assert r.status_code == 200

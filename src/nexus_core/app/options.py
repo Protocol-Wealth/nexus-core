@@ -48,6 +48,7 @@ from ..engine.pricing import (
     crypto_covered_call,
     crypto_protective_put,
     greeks,
+    iv_term_structure,
     rank_covered_calls,
     regime_conditioned_overwrite,
     roll_analysis,
@@ -483,6 +484,28 @@ def build_options_router(
             "considered": len(quotes),
             "ranked": ranked,
             "selected_by_delta": selected,
+            "disclaimer": _DISCLAIMER,
+        }
+
+    @router.get(
+        "/crypto/{currency}/iv-term-structure",
+        summary="Near-ATM IV term structure (which tenor pays richest)",
+    )
+    def crypto_iv_term_structure(
+        response: Response,
+        currency: str = Path(description="BTC, ETH, SOL, XRP, TRX, or AVAX"),
+        max_days: int = Query(120, ge=1, le=1095, description="Tenor window"),
+    ) -> dict[str, Any]:
+        """Near-ATM implied-vol curve across expiries from the live Deribit chain."""
+        cur, spot, settlement = _crypto_spot_settlement(deribit, currency)
+        # Wider fetch than the yield chain so multiple tenors are represented.
+        quotes = _chain_quotes(deribit, cur, spot, max_days=max_days, limit=60)
+        result = iv_term_structure(spot=spot, quotes=quotes)
+        response.headers["Cache-Control"] = f"public, max-age={_CRYPTO_TTL}"
+        return {
+            "currency": cur,
+            "settlement": settlement,
+            **asdict(result),
             "disclaimer": _DISCLAIMER,
         }
 

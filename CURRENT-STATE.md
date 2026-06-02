@@ -128,8 +128,9 @@ read-only with `readOnlyHint` + the educational disclaimer):
 - **Crypto options** — `crypto_option_instruments`, `crypto_option_ticker`,
   `crypto_covered_call` (settlement-aware overwrite), `crypto_covered_call_chain`
   (rank OTM calls by yield), `crypto_protective_put`, `crypto_collar`,
-  `crypto_regime_overwrite` (strike tilted by the live EMF regime), plus the
-  structured `crypto_covered_call_ladder` / `crypto_option_roll` /
+  `crypto_regime_overwrite` (strike tilted by the live EMF regime + a tunable
+  `defensiveness` knob), `crypto_iv_term_structure` (near-ATM IV by tenor), plus
+  the structured `crypto_covered_call_ladder` / `crypto_option_roll` /
   `crypto_options_book_mtm` / `crypto_options_scenario`. Full overwriting + hedge
   suite is on BOTH the REST surface (`/api/options/crypto/{currency}/...`) and MCP.
 - **DeFi** — `defi_protocols`, `defi_protocol`, `defi_chains`

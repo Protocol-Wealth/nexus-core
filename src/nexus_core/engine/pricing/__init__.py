@@ -30,7 +30,14 @@ from .crypto_overlays import (
     crypto_covered_call,
     crypto_protective_put,
 )
-from .option_chain import ChainQuote, rank_covered_calls, select_by_delta
+from .option_chain import (
+    ChainQuote,
+    IvTermStructure,
+    TermStructurePoint,
+    iv_term_structure,
+    rank_covered_calls,
+    select_by_delta,
+)
 from .options_book import (
     BookMtm,
     BookPosition,
@@ -72,6 +79,7 @@ __all__ = [
     "CryptoCoveredCallIllustration",
     "CryptoProtectivePutIllustration",
     "Greeks",
+    "IvTermStructure",
     "LadderLeg",
     "OptionKind",
     "RegimeConditionedOverwrite",
@@ -79,6 +87,7 @@ __all__ = [
     "ScenarioCell",
     "ScenarioResult",
     "Settlement",
+    "TermStructurePoint",
     "book_mtm",
     "bs_price",
     "cash_secured_put_overlay",
@@ -90,6 +99,7 @@ __all__ = [
     "crypto_protective_put",
     "greeks",
     "implied_vol",
+    "iv_term_structure",
     "rank_covered_calls",
     "regime_adjusted_target_delta",
     "regime_conditioned_overwrite",

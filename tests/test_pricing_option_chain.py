@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from nexus_core.engine.pricing.option_chain import (
     ChainQuote,
+    iv_term_structure,
     rank_covered_calls,
     select_by_delta,
 )
@@ -50,3 +51,42 @@ def test_select_by_delta_picks_nearest() -> None:
 def test_select_by_delta_none_when_no_match() -> None:
     no_delta = [ChainQuote("X", "call", 1, 1, premium=0.1, delta=None)]
     assert select_by_delta(quotes=no_delta, target_delta=0.25) is None
+
+
+_TS_QUOTES = [
+    # 7d: near-ATM (105k) IV 70; 30d: near-ATM (110k) IV 65; 90d: 120k IV 60.
+    ChainQuote("BTC-7d-105k-C", "call", 105_000, 7, premium=0.02, mark_iv=70.0),
+    ChainQuote("BTC-7d-115k-C", "call", 115_000, 7, premium=0.01, mark_iv=74.0),
+    ChainQuote("BTC-30d-110k-C", "call", 110_000, 30, premium=0.03, mark_iv=65.0),
+    ChainQuote("BTC-90d-120k-C", "call", 120_000, 90, premium=0.05, mark_iv=60.0),
+]
+
+
+def test_iv_term_structure_backwardation_and_richest() -> None:
+    ts = iv_term_structure(spot=100_000, quotes=_TS_QUOTES)
+    assert [p.expiry_days for p in ts.points] == [7, 30, 90]
+    # Near-ATM IV per tenor: 7d picks 105k (70), not the 115k (74).
+    assert ts.points[0].atm_strike == 105_000
+    assert ts.points[0].atm_iv == 70.0
+    assert ts.points[0].mean_iv == 72.0  # (70 + 74) / 2
+    assert ts.richest_expiry_days == 7  # highest near-ATM IV
+    assert ts.shape == "backwardation"  # front 70 > back 60
+
+
+def test_iv_term_structure_contango() -> None:
+    quotes = [
+        ChainQuote("A", "call", 110_000, 7, premium=0.02, mark_iv=50.0),
+        ChainQuote("B", "call", 110_000, 60, premium=0.03, mark_iv=65.0),
+    ]
+    ts = iv_term_structure(spot=100_000, quotes=quotes)
+    assert ts.shape == "contango"  # back 65 > front 50
+    assert ts.richest_expiry_days == 60
+
+
+def test_iv_term_structure_no_iv() -> None:
+    ts = iv_term_structure(
+        spot=100_000, quotes=[ChainQuote("X", "call", 110_000, 30, premium=0.02, mark_iv=None)]
+    )
+    assert ts.points == []
+    assert ts.richest_expiry_days is None
+    assert ts.shape == "n/a"

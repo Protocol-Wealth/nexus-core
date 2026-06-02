@@ -21,7 +21,7 @@ Educational illustration over public market data — not advice.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from nexus_core.engine.pricing.crypto_overlays import Settlement, crypto_covered_call
@@ -135,4 +135,93 @@ def select_by_delta(
     return min(candidates, key=lambda q: abs(abs(q.delta) - target))  # type: ignore[arg-type]
 
 
-__all__ = ["ChainQuote", "rank_covered_calls", "select_by_delta"]
+# ── IV term structure ────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class TermStructurePoint:
+    """Near-ATM implied vol at one expiry tenor.
+
+    Attributes:
+        expiry_days: Calendar days to expiry.
+        atm_strike: The listed strike nearest spot (the near-ATM proxy).
+        atm_iv: Mark IV (percent, Deribit convention) of that near-ATM call.
+        mean_iv: Mean mark IV across all of this expiry's quoted strikes.
+        n_strikes: Number of strikes quoted at this expiry.
+    """
+
+    expiry_days: int
+    atm_strike: float
+    atm_iv: float | None
+    mean_iv: float | None
+    n_strikes: int
+
+
+@dataclass
+class IvTermStructure:
+    """The near-ATM implied-vol curve across tenors — which expiry pays richest."""
+
+    spot: float
+    points: list[TermStructurePoint]  # sorted by expiry_days
+    richest_expiry_days: int | None  # tenor with the highest near-ATM IV
+    shape: str  # "contango" | "backwardation" | "flat" | "n/a"
+    notes: list[str] = field(default_factory=list)
+
+
+def iv_term_structure(*, spot: float, quotes: list[ChainQuote]) -> IvTermStructure:
+    """Build the near-ATM IV term structure from a set of call quotes.
+
+    Groups quotes (calls carrying a ``mark_iv``) by ``expiry_days``; per tenor the
+    near-ATM IV is the IV of the strike nearest ``spot``. Flags the richest tenor
+    (highest near-ATM IV — where a writer is paid most per unit vol) and the curve
+    ``shape`` (front-vs-back: backwardation = near-term richer, contango = rising).
+    A planning illustration over near-ATM listed calls, not a fitted vol surface.
+    """
+    by_expiry: dict[int, list[ChainQuote]] = {}
+    for q in quotes:
+        if q.kind != "call" or q.mark_iv is None:
+            continue
+        by_expiry.setdefault(q.expiry_days, []).append(q)
+
+    points: list[TermStructurePoint] = []
+    for days in sorted(by_expiry):
+        group = by_expiry[days]
+        atm = min(group, key=lambda q: abs(q.strike - spot))
+        ivs = [q.mark_iv for q in group if q.mark_iv is not None]
+        points.append(
+            TermStructurePoint(
+                expiry_days=days,
+                atm_strike=atm.strike,
+                atm_iv=atm.mark_iv,
+                mean_iv=round(sum(ivs) / len(ivs), 2) if ivs else None,
+                n_strikes=len(group),
+            )
+        )
+
+    richest: int | None = None
+    shape = "n/a"
+    priced = [p for p in points if p.atm_iv is not None]
+    if priced:
+        richest = max(priced, key=lambda p: p.atm_iv).expiry_days  # type: ignore[arg-type,return-value]
+    if len(priced) >= 2:
+        front, back = priced[0].atm_iv, priced[-1].atm_iv
+        if front is not None and back is not None and front > 0:
+            ratio = back / front
+            shape = "contango" if ratio > 1.02 else "backwardation" if ratio < 0.98 else "flat"
+
+    notes = [
+        "Near-ATM IV uses the nearest listed call per expiry; illustration, not a fitted surface."
+    ]
+    return IvTermStructure(
+        spot=spot, points=points, richest_expiry_days=richest, shape=shape, notes=notes
+    )
+
+
+__all__ = [
+    "ChainQuote",
+    "IvTermStructure",
+    "TermStructurePoint",
+    "iv_term_structure",
+    "rank_covered_calls",
+    "select_by_delta",
+]
