@@ -54,6 +54,11 @@ from .overwrite import (
     covered_call_ladder,
     roll_analysis,
 )
+from .regime_overlay import (
+    RegimeConditionedOverwrite,
+    regime_adjusted_target_delta,
+    regime_conditioned_overwrite,
+)
 
 __all__ = [
     "BookMtm",
@@ -69,6 +74,7 @@ __all__ = [
     "Greeks",
     "LadderLeg",
     "OptionKind",
+    "RegimeConditionedOverwrite",
     "RollAnalysis",
     "ScenarioCell",
     "ScenarioResult",
@@ -85,6 +91,8 @@ __all__ = [
     "greeks",
     "implied_vol",
     "rank_covered_calls",
+    "regime_adjusted_target_delta",
+    "regime_conditioned_overwrite",
     "roll_analysis",
     "scenario_stress",
     "select_by_delta",

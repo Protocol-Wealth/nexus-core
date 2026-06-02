@@ -21,6 +21,8 @@ from nexus_core.mcp.server import build_server  # noqa: E402
 
 
 class _RegimeResult:
+    regime = "GROWTH"  # EMF code -> generic "expansion"
+
     def to_dict(self) -> dict[str, str]:
         return {"regime": "GROWTH"}
 
@@ -125,6 +127,7 @@ def test_full_tool_set_registers() -> None:
         "crypto_covered_call_chain",
         "crypto_protective_put",
         "crypto_collar",
+        "crypto_regime_overwrite",
         "defi_protocols",
         "defi_protocol",
         "defi_chains",
@@ -281,6 +284,30 @@ def test_crypto_covered_call_chain_tool_ranks() -> None:
     assert "error" not in body
     assert body["considered"] == 1  # the single OTM 110k call
     assert body["ranked"][0]["strike"] == 110000.0
+
+
+def test_crypto_regime_overwrite_tool() -> None:
+    import json
+
+    server = build_server(
+        regime_engine=_FakeRegime(),  # type: ignore[arg-type]
+        market=_FakeMarket(),  # type: ignore[arg-type]
+        deribit=_FakeDeribit(),  # type: ignore[arg-type]
+    )
+    body = json.loads(
+        _call_text(server, "crypto_regime_overwrite", {"currency": "BTC", "max_days": 60})
+    )
+    assert "error" not in body
+    assert body["regime"] == "expansion"  # fake GROWTH -> expansion
+    assert body["adjusted_target_delta"] == 0.30
+
+
+def test_crypto_regime_overwrite_without_regime_engine_errors() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket(), deribit=_FakeDeribit())  # type: ignore[arg-type]
+    body = json.loads(_call_text(server, "crypto_regime_overwrite", {"currency": "BTC"}))
+    assert "error" in body  # tool registers but reports the missing regime engine
 
 
 def test_crypto_protective_put_and_collar_tools() -> None:

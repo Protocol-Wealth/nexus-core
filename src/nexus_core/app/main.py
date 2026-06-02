@@ -100,11 +100,20 @@ _SERVERS = [
 #: Tag descriptions so /docs groups are self-documenting.
 _OPENAPI_TAGS = [
     {"name": "regime", "description": "Current macro regime classification + raw signals."},
-    {"name": "scoring", "description": "EMF 8-check durability score over SEC EDGAR fundamentals (educational)."},
+    {
+        "name": "scoring",
+        "description": "EMF 8-check durability score over SEC EDGAR fundamentals (educational).",
+    },
     {"name": "market", "description": "Quotes + OHLCV history (stocks, ETFs, indices, crypto)."},
     {"name": "economic", "description": "FRED economic series."},
-    {"name": "options", "description": "Black-Scholes pricing + covered-call / CSP / collar overlays + Deribit crypto options (educational)."},
-    {"name": "planning", "description": "PII-free retirement-planning tools (pwplan-core contract). Public, browser-callable."},
+    {
+        "name": "options",
+        "description": "Black-Scholes pricing + covered-call / CSP / collar overlays + Deribit crypto options (educational).",
+    },
+    {
+        "name": "planning",
+        "description": "PII-free retirement-planning tools (pwplan-core contract). Public, browser-callable.",
+    },
     {"name": "lp", "description": "Uniswap V3 / Aerodrome Slipstream LP analytics."},
     {"name": "wallet", "description": "Anonymous EVM wallet balances (DeBank)."},
     {"name": "chain", "description": "Multi-chain native balances (Tatum)."},
@@ -237,7 +246,7 @@ def create_app(
     app.add_middleware(SecurityHeadersMiddleware)
 
     app.include_router(build_router(engine=engine, market=market, macro=macro))
-    app.include_router(build_options_router(market=market))
+    app.include_router(build_options_router(market=market, regime_engine=engine))
     app.include_router(build_score_router(market=market, regime_engine=engine))
     app.include_router(build_wallet_router(debank=DeBankClient()))
     app.include_router(build_chain_router(tatum=TatumClient()))

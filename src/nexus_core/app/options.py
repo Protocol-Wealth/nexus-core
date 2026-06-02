@@ -33,6 +33,7 @@ from fastapi import APIRouter, Body, HTTPException, Path, Query, Response
 from ..data.derivatives import DeribitClient
 from ..data.providers import MarketDataProvider
 from ..disclaimers import TERSE
+from ..engine.planning.regime import to_generic_regime
 from ..engine.pricing import (
     BookPosition,
     ChainQuote,
@@ -48,12 +49,14 @@ from ..engine.pricing import (
     crypto_protective_put,
     greeks,
     rank_covered_calls,
+    regime_conditioned_overwrite,
     roll_analysis,
     scenario_stress,
     select_by_delta,
 )
 from ..engine.pricing.black_scholes import OptionKind
 from ..engine.pricing.crypto_overlays import Settlement
+from ..engine.regime import RegimeEngine
 
 _OVERLAY_TTL = 300
 _CRYPTO_TTL = 60
@@ -259,7 +262,10 @@ def _chain_quotes(
 
 
 def build_options_router(
-    *, market: MarketDataProvider, deribit: DeribitClient | None = None
+    *,
+    market: MarketDataProvider,
+    deribit: DeribitClient | None = None,
+    regime_engine: RegimeEngine | None = None,
 ) -> APIRouter:
     """Build the educational options router around the market provider.
 
@@ -267,6 +273,8 @@ def build_options_router(
         market: Market data provider (spot + history for the equity overlays).
         deribit: Deribit client for crypto options. Defaults to a keyless live
             client; inject one wired to a mock transport for hermetic tests.
+        regime_engine: Live regime classifier. Required for the regime-conditioned
+            overwrite endpoint; that route 503s when it is not wired.
     """
     router = APIRouter(prefix="/api/options", tags=["options"])
     deribit = deribit or DeribitClient()
@@ -477,6 +485,34 @@ def build_options_router(
             "selected_by_delta": selected,
             "disclaimer": _DISCLAIMER,
         }
+
+    @router.get(
+        "/crypto/{currency}/regime-overwrite",
+        summary="Regime-conditioned covered-call strike (EMF live regime)",
+    )
+    def crypto_regime_overwrite(
+        response: Response,
+        currency: str = Path(description="BTC, ETH, SOL, XRP, TRX, or AVAX"),
+        max_days: int = Query(60, ge=1, le=1095, description="Chain window"),
+        base_target_delta: float = Query(0.25, gt=0, lt=1, description="Neutral target delta"),
+        coins: float = Query(1.0, gt=0, description="Coins overwritten"),
+    ) -> dict[str, Any]:
+        """Pick a covered-call strike whose delta is tilted by the LIVE EMF regime."""
+        if regime_engine is None:
+            raise HTTPException(status_code=503, detail="Regime engine not configured")
+        cur, spot, settlement = _crypto_spot_settlement(deribit, currency)
+        regime = to_generic_regime(regime_engine.classify().regime)
+        quotes = _chain_quotes(deribit, cur, spot, max_days=max_days, limit=_CHAIN_LIMIT)
+        result = regime_conditioned_overwrite(
+            regime=regime,
+            spot=spot,
+            settlement=settlement,
+            quotes=quotes,
+            base_target_delta=base_target_delta,
+            coins=coins,
+        )
+        response.headers["Cache-Control"] = f"public, max-age={_CRYPTO_TTL}"
+        return {"currency": cur, "settlement": settlement, "spot": spot, **asdict(result)}
 
     @router.get(
         "/crypto/{currency}/protective-put",
