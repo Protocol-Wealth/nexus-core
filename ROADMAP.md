@@ -39,12 +39,29 @@ gracefully to `None` / empty / `503` when its key is absent.
 
 - **`GET /api/options/price`** — Black-Scholes pricing (`engine/pricing`).
 - **`GET /api/options/overlay/{covered-call,cash-secured-put,collar}`** —
-  educational overlay structures.
+  educational equity/ETF overlay structures.
 - **`GET /api/options/crypto/currencies`,
   `/api/options/crypto/{currency}/instruments`,
   `/api/options/crypto/instrument/{instrument_name}`** — Deribit crypto options
   on BTC/ETH (coin-settled inverse) + SOL/XRP/TRX/AVAX (USDC-settled linear,
   read from Deribit's `USDC` umbrella) (`data/derivatives`). Keyless.
+- **Crypto covered-call overwriting + hedge suite** — settlement-aware analytics
+  for writing calls against a crypto treasury, live spot/settlement from the
+  Deribit index. Pure engine in
+  `engine/pricing/{crypto_overlays,option_chain,overwrite,options_book,regime_overlay,skew}.py`;
+  exposed as REST `GET/POST /api/options/crypto/{ccy}/...` and as MCP tools:
+  - `covered-call` / `covered-call-chain` — coin-denominated yield + chain ranked
+    by annualized yield.
+  - `iv-term-structure` (which tenor pays richest) + `vol-skew` (IV + vega by
+    strike, 25Δ call skew, richest strike — which strike to write).
+  - `regime-overwrite` — strike delta tilted by the LIVE EMF regime, with a
+    `defensiveness` risk knob.
+  - `protective-put` / `collar` — coin-denominated downside hedges.
+  - `ladder` / `roll` / `book/mtm` / `book/scenario` — calendar ladder, roll
+    economics, book MTM + net Greeks, spot×IV stress.
+
+  Educational illustration only — booking (ISDA/CSA), execution (FalconX), and
+  custody (Anchorage) are out of scope; the production program lives elsewhere.
 
 ### Onchain & DeFi
 
@@ -147,11 +164,18 @@ Prioritized. Top item first.
    way benchmarks are already snapshotted daily, enabling historical PnL/IL
    series.
 
+Crypto-options follow-ups (the overwriting suite above is shipped; these deepen it):
+put-side skew / risk-reversal (downside vol vs the call wing); coin-denominated
+collar laddering; IV-rank/percentile context on the term structure; and an optional
+config surface for the `regime_overlay` delta multipliers (the `defensiveness` knob
+is the per-request version today). The pwdemo.com browser + chat surface that drives
+these tools is built/iterated in the separate **pw-demo** repo, not here.
+
 Agent/analytics capability ideas (from the consumer-diagnostic roadmap, not yet built):
-real options chains + IV (Tradier) and IV-rank to replace the theoretical σ;
-`score_portfolio` (sleeve-level aggregate of the 8-check); `defi_yields` / `defi_risk`;
-a `resolve_symbol` resolver; and structured provenance/versioning (`framework_version`)
-on score outputs for Rule 17a-4 reproducibility.
+real *equity* options chains + IV (Tradier) and IV-rank to replace the theoretical σ
+(crypto already uses live Deribit IV); `score_portfolio` (sleeve-level aggregate of
+the 8-check); `defi_yields` / `defi_risk`; a `resolve_symbol` resolver; and structured
+provenance/versioning (`framework_version`) on score outputs for Rule 17a-4 reproducibility.
 
 ---
 
