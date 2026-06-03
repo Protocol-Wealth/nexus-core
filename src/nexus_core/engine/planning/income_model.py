@@ -151,13 +151,21 @@ def federal_picture(
     deduction = bt.total_deduction(
         fs, itemized=_itemized(income), n_seniors=n_seniors, magi=magi_irmaa
     )
-    ordinary_income_gross = max(0.0, agi - preferential)
-    ordinary_taxable = max(0.0, ordinary_income_gross - deduction)
-
     brackets = bt.brackets_for(fs)
-    ord_tax = ordinary_tax(ordinary_income_gross, fs, brackets=brackets, std_deduction=deduction)
     breakpoints = bt.ltcg_breakpoints[fs]
-    ltcg = stacked_ltcg_tax(ordinary_taxable, preferential, breakpoints)
+
+    # IRS Qualified-Dividends & Capital-Gain worksheet ordering: the full
+    # deduction reduces *taxable income*, and preferential income (LTCG +
+    # qualified dividends) stacks on top of the post-deduction ordinary base — so
+    # deduction left over after ordinary income shelters preferential income
+    # first (it is NOT dropped). ``pref_taxable`` is the preferential amount that
+    # survives the deduction; ``ordinary_taxable`` is the rest of taxable income.
+    taxable_income = max(0.0, agi - deduction)
+    pref_taxable = min(preferential, taxable_income)
+    ordinary_taxable = max(0.0, taxable_income - pref_taxable)
+
+    ord_tax = ordinary_tax(ordinary_taxable, fs, brackets=brackets, std_deduction=0.0)
+    ltcg = stacked_ltcg_tax(ordinary_taxable, pref_taxable, breakpoints)
     niit = bt.niit_rate * min(nii, max(0.0, magi_niit - bt.niit_threshold[fs]))
 
     return FederalPicture(
@@ -174,7 +182,7 @@ def federal_picture(
         ltcg_tax=ltcg,
         niit=niit,
         marginal_ordinary_rate=marginal_ordinary_rate(ordinary_taxable, brackets),
-        marginal_ltcg_rate=marginal_ltcg_rate(ordinary_taxable + preferential, breakpoints),
+        marginal_ltcg_rate=marginal_ltcg_rate(taxable_income, breakpoints),
     )
 
 

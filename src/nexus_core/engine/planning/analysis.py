@@ -177,8 +177,14 @@ class YearAnalysis:
     binding_constraint: str
     #: Final recommended gross conversion for the year (after the liquidity gate).
     recommended_amount: float
+    #: Incremental ordinary federal income tax on the conversion (the SS torpedo is
+    #: included; the LTCG-stacking and NIIT pieces are reported separately below).
     incremental_federal_tax: float
+    #: All-in marginal cost of converting, on the taxable portion: ordinary federal
+    #: + LTCG-stacking + NIIT + state.
     effective_conversion_rate: float
+    #: FEDERAL all-in rate (ordinary + LTCG-stacking + NIIT), to compare against the
+    #: retirement marginal rate the dollars would otherwise face.
     breakeven_retirement_rate: float
     options: tuple[ConversionOption, ...]
     irmaa: IrmaaHeadroom

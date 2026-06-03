@@ -345,7 +345,16 @@ def _analyze_year(
     inc_ltcg = _round(rec_pic.ltcg_tax - base.ltcg_tax)
     inc_niit = _round(rec_pic.niit - base.niit)
     state_amt = _state_tax_amount(state_rule, rec_taxable, ages[0])
-    eff_rate = round(inc_fed / rec_taxable, 4) if rec_taxable > 0.0 else 0.0
+    # The conversion's true marginal cost includes the interactions it triggers,
+    # not just the ordinary-income tax: the effective rate is all-in (federal
+    # ordinary + LTCG-stacking + NIIT + state) on the taxable portion, and the
+    # breakeven is the FEDERAL all-in rate (compared against a future federal
+    # marginal rate). incremental_federal_tax stays the ordinary-tax line; the
+    # LTCG/NIIT/state pieces are reported separately below.
+    federal_all_in = inc_fed + inc_ltcg + inc_niit
+    total_incremental = federal_all_in + state_amt
+    eff_rate = round(total_incremental / rec_taxable, 4) if rec_taxable > 0.0 else 0.0
+    breakeven = round(federal_all_in / rec_taxable, 4) if rec_taxable > 0.0 else 0.0
 
     notes = _year_notes(contract, year, ages, per_person, taxable_fraction, irmaa, recommended)
 
@@ -362,7 +371,7 @@ def _analyze_year(
         recommended_amount=_round(recommended),
         incremental_federal_tax=inc_fed,
         effective_conversion_rate=eff_rate,
-        breakeven_retirement_rate=eff_rate,
+        breakeven_retirement_rate=breakeven,
         options=options,
         irmaa=irmaa,
         niit=NiitInteraction(
