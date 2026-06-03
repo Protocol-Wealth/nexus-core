@@ -21,32 +21,50 @@ import math
 import secrets
 import statistics
 from collections.abc import Callable
+from dataclasses import asdict
 from typing import Any, cast
 
 from ...data.providers import MarketDataProvider
 from ...engine.planning import (
     GlidePathShape,
     InfeasiblePlanError,
+    analyze_roth_conversion,
     bracket_headroom,
     compute_glide_path,
     correlation_matrix,
     fire,
+    irmaa_headroom,
     monte_carlo_decumulation,
     portfolio_xray,
     rebalance,
+    reference_bracket_table,
+    reference_irmaa_table,
+    reference_state_rule,
     regime_conditioned_swr,
     risk_metrics,
     rmd,
     roth_conversion,
+    sequence_conversions,
     sequence_of_returns_stress,
     social_security_claiming,
     tax_aware_withdrawal,
+)
+from ...engine.planning.case import (
+    PlanningContract,
+    PlanningContractError,
+    engine_filing_status,
 )
 from ...engine.planning.regime import (
     path_cache_key,
     seed_from_cache_key,
     to_generic_regime,
     transition_matrix,
+)
+from ...engine.planning.tables import (
+    BracketTable,
+    IrmaaTable,
+    StateConversionRule,
+    TableError,
 )
 from ...engine.planning.tax import FilingStatus
 from ...engine.regime import RegimeEngine
@@ -741,6 +759,121 @@ def _monte_carlo_decumulation_tool(
     )
 
 
+def _opt_num(body: dict[str, Any], key: str, default: float) -> float:
+    if key not in body or body[key] is None:
+        return default
+    value = body[key]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise PlanningInputError(f"field '{key}' must be a number")
+    return float(value)
+
+
+def _resolve_engine_filing_status(raw: Any) -> FilingStatus:
+    """Accept the contract codes (single/mfj/mfs) or the engine's own statuses."""
+    if not isinstance(raw, str):
+        raise PlanningInputError("filing_status must be a string")
+    if raw in ("single", "mfj", "mfs"):
+        return engine_filing_status(cast("Any", raw))
+    if raw in ("married_joint", "married_separate", "head_of_household"):
+        return cast(FilingStatus, raw)
+    raise PlanningInputError("filing_status must be one of single/mfj/mfs")
+
+
+def irmaa_headroom_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``irmaa_headroom`` — room before the next projected Medicare IRMAA cliff."""
+    try:
+        raw_table = body.get("irmaa_table")
+        if raw_table is not None:
+            table = IrmaaTable.from_dict(raw_table)
+        else:
+            fs = _resolve_engine_filing_status(body.get("filing_status", "single"))
+            source_year = body.get("source_year", 2025)
+            if isinstance(source_year, bool) or not isinstance(source_year, int):
+                raise PlanningInputError("source_year must be an integer")
+            table = reference_irmaa_table(fs, source_year=source_year)
+        result = irmaa_headroom(
+            table=table,
+            target_premium_year=_as_int(body, "target_premium_year"),
+            magi_ex_conversion=_as_number(body, "magi_ex_conversion"),
+            per_person=_as_int(body, "per_person"),
+            inflation=_as_number(body, "inflation"),
+            buffer=_as_number(body, "buffer"),
+        )
+    except TableError as exc:
+        raise PlanningInputError(str(exc)) from exc
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+    return asdict(result)
+
+
+def _parse_contract(body: dict[str, Any]) -> PlanningContract:
+    raw = body.get("contract")
+    if not isinstance(raw, dict):
+        raise PlanningInputError("'contract' (a PlanningContract object) is required")
+    try:
+        return PlanningContract.from_dict(raw)
+    except PlanningContractError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def _resolve_tables(
+    body: dict[str, Any], contract: PlanningContract
+) -> tuple[BracketTable, IrmaaTable, StateConversionRule | None, str, str, str]:
+    """Use caller-injected tables when present, else the engine reference set."""
+    try:
+        if body.get("bracket_table") is not None:
+            bt, bt_src = BracketTable.from_dict(body["bracket_table"]), "caller_provided"
+        else:
+            bt, bt_src = reference_bracket_table(contract.tax_year), "engine_reference"
+        if body.get("irmaa_table") is not None:
+            it, it_src = IrmaaTable.from_dict(body["irmaa_table"]), "caller_provided"
+        else:
+            it, it_src = reference_irmaa_table(contract.engine_filing_status), "engine_reference"
+        if body.get("state_rule") is not None:
+            sr: StateConversionRule | None = StateConversionRule.from_dict(body["state_rule"])
+            sr_src = "caller_provided"
+        else:
+            sr, sr_src = reference_state_rule(contract.state_code), "engine_reference"
+    except TableError as exc:
+        raise PlanningInputError(str(exc)) from exc
+    return bt, it, sr, bt_src, it_src, sr_src
+
+
+def analyze_roth_conversion_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``analyze_roth_conversion`` — composite multi-year Roth/IRMAA analysis."""
+    contract = _parse_contract(body)
+    bt, it, sr, bt_src, it_src, sr_src = _resolve_tables(body, contract)
+    result = analyze_roth_conversion(
+        contract,
+        irmaa_table=it,
+        bracket_table=bt,
+        state_rule=sr,
+        irmaa_inflation=_opt_num(body, "irmaa_inflation", 0.03),
+        irmaa_buffer=_opt_num(body, "irmaa_buffer", 5_000.0),
+        growth_rate=_opt_num(body, "growth_rate", 0.05),
+        bracket_table_source=bt_src,
+        irmaa_table_source=it_src,
+        state_rule_source=sr_src,
+    )
+    return asdict(result)
+
+
+def sequence_conversions_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``sequence_conversions`` — the multi-year split roll-up only."""
+    contract = _parse_contract(body)
+    bt, it, sr, _bt_src, _it_src, _sr_src = _resolve_tables(body, contract)
+    result = sequence_conversions(
+        contract,
+        irmaa_table=it,
+        bracket_table=bt,
+        state_rule=sr,
+        irmaa_inflation=_opt_num(body, "irmaa_inflation", 0.03),
+        irmaa_buffer=_opt_num(body, "irmaa_buffer", 5_000.0),
+        growth_rate=_opt_num(body, "growth_rate", 0.05),
+    )
+    return asdict(result)
+
+
 def build_tool_handlers(
     *, market: MarketDataProvider, regime_engine: RegimeEngine
 ) -> dict[str, ToolHandler]:
@@ -784,14 +917,20 @@ def build_tool_handlers(
         "fire": fire_tool,
         "risk_metrics": risk_metrics_tool,
         "rebalance": rebalance_tool,
+        "irmaa_headroom": irmaa_headroom_tool,
+        "analyze_roth_conversion": analyze_roth_conversion_tool,
+        "sequence_conversions": sequence_conversions_tool,
     }
 
 
 __all__ = [
     "ToolHandler",
+    "analyze_roth_conversion_tool",
     "build_tool_handlers",
     "fire_tool",
     "glide_path_tool",
+    "irmaa_headroom_tool",
+    "sequence_conversions_tool",
     "rebalance_tool",
     "risk_metrics_tool",
     "rmd_tool",

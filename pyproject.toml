@@ -159,6 +159,11 @@ nexus-core = "nexus_core.cli:main"
 where = ["src"]
 include = ["nexus_core*"]
 
+[tool.setuptools.package-data]
+# Ship the canonical PlanningContract JSON-Schema (cross-language source of truth)
+# alongside the wheel so adopters + the in-sync test can load it.
+nexus_core = ["engine/planning/*.json"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

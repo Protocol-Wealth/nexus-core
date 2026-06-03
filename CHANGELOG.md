@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Multi-year Roth-conversion + IRMAA planning (PlanningContract v1.0.0)
+
+A composite planning capability that sizes a Roth conversion for a ~60-something
+retiree across multiple years when the binding constraint is **IRMAA (Medicare
+premium surcharges), not the tax bracket**. All tax/IRMAA figures are *injected*
+tables — the engine reads no built-in dollar amount — so a caller can snapshot the
+exact basis used into a retention record. PII-free by construction.
+
+#### Added
+
+- **PlanningContract v1.0.0 — the canonical PII-free case shape.** A frozen
+  dataclass (`engine/planning/case.py`) + a canonical JSON-Schema
+  (`engine/planning/planning_contract.schema.json`, the cross-language source of
+  truth) + a strict `from_dict` validator. Opaque `case_id`, birth *years* not
+  DOBs, aggregated balances — no identity field anywhere, in input or output.
+  Nested unknown keys are rejected (closes a PII-smuggling gap), non-finite
+  numbers are rejected, and `tax_year` must be the earliest `intent.years`. The
+  output `RothConversionAnalysis` shape (`engine/planning/analysis.py`) has a
+  drift-proof JSON-Schema *generated* from the dataclasses
+  (`engine/planning/result_schema.py`).
+- **`irmaa_headroom`** (`engine/planning/irmaa.py`) — room before the next
+  *projected* IRMAA cliff. IRMAA runs on a 2-year MAGI lookback (a conversion in
+  year N drives premiums in N+2) and CMS publishes the N+2 floors late, so this
+  projects the source-year tiers forward at an inflation assumption (rounded to
+  $1k) and holds a buffer below the projected floor. Returns the projection
+  inputs for snapshotting. It is a cliff: $1 over a floor applies the whole
+  tier's surcharge, per beneficiary.
+- **`analyze_roth_conversion`** (`engine/planning/roth_analysis.py`) — the
+  composite. Per year: `bracket_ceiling` vs `irmaa_ceiling`, takes `min(...)`
+  (IRMAA usually binds for 60s), gates by `taxable_liquidity` (tax paid from
+  *outside* the IRA), applies IRC §72 pro-rata when nondeductible basis is
+  present, and surfaces the Social-Security tax torpedo, the LTCG-stacking
+  interaction (0%→15%→20%), NIIT (3.8%), state treatment (e.g. PA exempts
+  conversions past retirement age), the IRMAA cliff cost if crossed, the breakeven
+  retirement rate, and the do-nothing RMD drag (SECURE 2.0 start age 73/75). OBBBA
+  (2025) made the brackets permanent, so the rationale is the gap-year window, not
+  a TCJA sunset.
+- **`sequence_conversions`** (`engine/planning/roth_analysis.py`) — the multi-year
+  sequencer: the per-year split + totals across the intent years against both
+  ceilings, drawing down the running IRA balance.
+- **Injected tables** (`engine/planning/tables.py`) — `BracketTable`,
+  `IrmaaTable`/`IrmaaTier`, `StateConversionRule` with wire-form `from_dict`
+  parsers + illustrative `reference_*` factories (clearly labelled; verify against
+  IRS/CMS). The income→tax model (`engine/planning/income_model.py`) computes
+  taxable Social Security, AGI, the IRMAA + NIIT MAGIs, and the three federal tax
+  components together so the interactions are captured.
+- **Exposed on the internal service + MCP.** New gateway tool ids
+  `analyze_roth_conversion`, `sequence_conversions`, `irmaa_headroom`
+  (`POST /mcp/tools/{id}`, snake_case body; `analyze_*`/`sequence_*` take the
+  PlanningContract under `contract`, with optional injected tables flagged
+  `caller_provided` vs `engine_reference` in the snapshot). The same handlers are
+  registered as native MCP tools. Fail-closed PII scan + disclaimer apply.
+- **Tests.** ~100 new tests: the cliff (just-under vs just-over a tier), the
+  projection math + buffer, pro-rata with basis, the binding-ceiling = `min(...)`
+  selection, the liquidity gate, a 2-year split, the SS torpedo, LTCG stacking,
+  NIIT, state treatment, contract round-trip/validation, schema in-sync, and the
+  serializable + identity-free output.
+
+#### Changed
+
+- `ordinary_tax`, `bracket_headroom`, and `roth_conversion` gained optional
+  `brackets` / `std_deduction` arguments (backward-compatible; default to the
+  built-in table) so the composite can inject a snapshot-able bracket basis.
+
 ### Platform hardening — compliance, security, reliability, MCP, EMF coverage
 
 A broad pass making the public deployment agent-reliable and audit-ready. Test

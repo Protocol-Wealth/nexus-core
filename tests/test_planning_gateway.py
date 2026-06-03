@@ -707,3 +707,96 @@ def test_rebalance_targets_must_sum_to_one_400() -> None:
     r = _client().post("/mcp/tools/rebalance", json=bad)
     assert r.status_code == 400
     assert "sum to 1" in r.text
+
+
+# --- composite Roth/IRMAA tools (PlanningContract v1.0.0) ------------------
+
+_ROTH_CONTRACT: dict[str, Any] = {
+    "case_id": "gw-case-1",
+    "tax_year": 2026,
+    "filing_status": "mfj",
+    "state_code": "PA",
+    "birth_years": [1962, 1963],
+    "medicare_enrolled": 2,
+    "income_ex_conversion": {
+        "pension": 30_000,
+        "social_security_gross": 48_000,
+        "taxable_interest": 5_000,
+        "tax_exempt_interest": 8_000,
+        "ordinary_dividends": 12_000,
+        "qualified_dividends": 9_000,
+        "long_term_gains": 10_000,
+    },
+    "accounts": {
+        "trad_ira_aggregate": 1_400_000,
+        "nondeductible_basis": 0,
+        "roth_balance": 200_000,
+        "taxable_liquidity": 250_000,
+    },
+    "intent": {"target_rule": "fill_to_irmaa_tier", "years": [2026, 2027]},
+}
+
+
+def test_analyze_roth_conversion_gateway() -> None:
+    r = _client().post("/mcp/tools/analyze_roth_conversion", json={"contract": _ROTH_CONTRACT})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["contract_version"] == "1.0.0"
+    assert len(body["years"]) == 2
+    y0 = body["years"][0]
+    assert y0["binding_constraint"] == "irmaa"
+    assert y0["recommended_amount"] > 0
+    # reference tables were used (no caller injection) -> snapshot says so.
+    assert body["snapshot"]["irmaa_table_source"] == "engine_reference"
+    assert body["disclaimer"]  # disclaimer attached
+
+
+def test_sequence_conversions_gateway() -> None:
+    r = _client().post("/mcp/tools/sequence_conversions", json={"contract": _ROTH_CONTRACT})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert len(body["recommended_by_year"]) == 2
+    assert body["total_recommended"] > 0
+
+
+def test_irmaa_headroom_gateway() -> None:
+    r = _client().post(
+        "/mcp/tools/irmaa_headroom",
+        json={
+            "filing_status": "mfj",
+            "target_premium_year": 2028,
+            "magi_ex_conversion": 150_000,
+            "per_person": 2,
+            "inflation": 0.03,
+            "buffer": 5_000,
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["target_premium_year"] == 2028
+    assert body["tiers_source_year"] == 2025
+    assert "irmaa_safe_headroom" in body
+
+
+def test_new_tools_are_listed() -> None:
+    tools = _client().get("/mcp/tools").json()["tools"]
+    assert "analyze_roth_conversion" in tools
+    assert "sequence_conversions" in tools
+    assert "irmaa_headroom" in tools
+
+
+def test_analyze_rejects_identity_in_contract() -> None:
+    bad = {"contract": {**_ROTH_CONTRACT, "ssn": "123-45-6789"}}
+    r = _client().post("/mcp/tools/analyze_roth_conversion", json=bad)
+    assert r.status_code == 400
+    assert "identity" in r.text.lower()
+
+
+def test_analyze_caller_injected_state_rule_is_flagged() -> None:
+    body = {
+        "contract": _ROTH_CONTRACT,
+        "state_rule": {"state_code": "PA", "treatment": "flat", "rate": 0.05},
+    }
+    r = _client().post("/mcp/tools/analyze_roth_conversion", json=body)
+    assert r.status_code == 200, r.text
+    assert r.json()["snapshot"]["state_rule_source"] == "caller_provided"

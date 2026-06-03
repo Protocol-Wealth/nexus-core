@@ -26,6 +26,8 @@ def bracket_headroom(
     taxable_income: float,
     filing_status: FilingStatus,
     target_rate: float | None = None,
+    brackets: list[tuple[float, float]] | None = None,
+    std_deduction: float | None = None,
 ) -> dict[str, Any]:
     """Marginal bracket + room before the next rate (and optionally a target rate).
 
@@ -34,6 +36,10 @@ def bracket_headroom(
         filing_status: Federal filing status.
         target_rate: Optional marginal rate to "fill up to"; reports the income
             room before the marginal rate would exceed it.
+        brackets: Optional ``(upper_bound, rate)`` schedule overriding the engine's
+            built-in table (lets a caller inject a snapshot-able bracket table).
+        std_deduction: Optional deduction overriding the built-in standard
+            deduction (e.g. an itemized total or a senior-adjusted figure).
 
     Returns:
         ``taxableIncome`` (after the standard deduction), ``marginalRate``, the
@@ -50,8 +56,10 @@ def bracket_headroom(
     if target_rate is not None and not 0.0 <= target_rate < 1.0:
         raise ValueError("target_rate must be in [0, 1)")
 
-    brackets = ordinary_brackets(filing_status)
-    taxable = max(0.0, taxable_income - standard_deduction(filing_status))
+    if brackets is None:
+        brackets = ordinary_brackets(filing_status)
+    deduction = standard_deduction(filing_status) if std_deduction is None else std_deduction
+    taxable = max(0.0, taxable_income - deduction)
 
     floor = 0.0
     marginal_rate = brackets[-1][1]
