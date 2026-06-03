@@ -102,6 +102,28 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "self-financing trade list (with one-way turnover) for the blended "
         "portfolio. JSON request object in `body`."
     ),
+    "irmaa_headroom": (
+        "IRMAA headroom: room before the next *projected* Medicare Part B+D "
+        "income-surcharge cliff in a target premium year (the 2-year MAGI "
+        "lookback), with a safety buffer below the projected floor. Pass "
+        "target_premium_year, magi_ex_conversion, per_person, inflation, buffer, "
+        "and either irmaa_table or filing_status. JSON request object in `body`."
+    ),
+    "analyze_roth_conversion": (
+        "Composite multi-year Roth-conversion analysis: sizes the conversion under "
+        "BOTH the tax-bracket ceiling and the projected-IRMAA ceiling (IRMAA "
+        "usually binds for a 60-something retiree), with pro-rata basis, the "
+        "Social-Security torpedo, LTCG stacking, NIIT, state treatment, the "
+        "liquidity gate, and the do-nothing RMD drag. Pass a PII-free "
+        "PlanningContract under `contract` (+ optional injected tables). JSON "
+        "request object in `body`."
+    ),
+    "sequence_conversions": (
+        "Multi-year Roth-conversion sequencer: the per-year split + totals across "
+        "the intent years against both ceilings (the roll-up only; "
+        "analyze_roth_conversion returns the same split with full detail). Pass a "
+        "PlanningContract under `contract`. JSON request object in `body`."
+    ),
 }
 
 

@@ -110,12 +110,25 @@ def standard_deduction(filing_status: FilingStatus) -> float:
     return _STD_DEDUCTION[filing_status]
 
 
-def ordinary_tax(income: float, filing_status: FilingStatus) -> float:
-    """Progressive federal ordinary tax after the standard deduction."""
-    taxable = max(0.0, income - _STD_DEDUCTION[filing_status])
+def ordinary_tax(
+    income: float,
+    filing_status: FilingStatus,
+    *,
+    brackets: list[tuple[float, float]] | None = None,
+    std_deduction: float | None = None,
+) -> float:
+    """Progressive federal ordinary tax after the standard deduction.
+
+    ``brackets`` and ``std_deduction`` override the engine's built-in figures so a
+    caller can inject a snapshot-able table (the composite Roth/IRMAA analysis
+    does this); both default to the built-in current-basis values.
+    """
+    ded = _STD_DEDUCTION[filing_status] if std_deduction is None else std_deduction
+    brk = _ORDINARY_BRACKETS[filing_status] if brackets is None else brackets
+    taxable = max(0.0, income - ded)
     tax = 0.0
     lower = 0.0
-    for upper, rate in _ORDINARY_BRACKETS[filing_status]:
+    for upper, rate in brk:
         if taxable <= lower:
             break
         slice_top = min(taxable, upper)

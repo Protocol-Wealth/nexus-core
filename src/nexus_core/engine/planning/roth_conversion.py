@@ -46,6 +46,8 @@ def roth_conversion(
     years: int,
     retirement_marginal_rate: float,
     taxes_paid_from_conversion: bool = False,
+    brackets: list[tuple[float, float]] | None = None,
+    std_deduction: float | None = None,
 ) -> dict[str, Any]:
     """Compare converting ``conversion_amount`` to Roth now vs. leaving it pre-tax.
 
@@ -62,6 +64,10 @@ def roth_conversion(
             the converted amount (only the remainder seeds the Roth). If False
             (default), the tax is paid from outside funds and the full amount
             seeds the Roth; the outlay is reported as ``externalTaxPaidToday``.
+        brackets: Optional ``(upper_bound, rate)`` schedule overriding the built-in
+            table, so a caller can inject a snapshot-able bracket table.
+        std_deduction: Optional deduction overriding the built-in standard
+            deduction (e.g. a senior-adjusted or itemized figure).
 
     Returns:
         A dict with the incremental ``conversionTax`` and
@@ -87,8 +93,13 @@ def roth_conversion(
         raise ValueError("retirement_marginal_rate must be in [0, 1)")
 
     conversion_tax = ordinary_tax(
-        current_taxable_income + conversion_amount, filing_status
-    ) - ordinary_tax(current_taxable_income, filing_status)
+        current_taxable_income + conversion_amount,
+        filing_status,
+        brackets=brackets,
+        std_deduction=std_deduction,
+    ) - ordinary_tax(
+        current_taxable_income, filing_status, brackets=brackets, std_deduction=std_deduction
+    )
     effective_conversion_rate = conversion_tax / conversion_amount
 
     factor = (1.0 + growth_rate) ** years
