@@ -135,12 +135,14 @@ read-only with `readOnlyHint` + the educational disclaimer):
   `crypto_options_book_mtm` / `crypto_options_scenario`. Full overwriting + hedge
   suite is on BOTH the REST surface (`/api/options/crypto/{currency}/...`) and MCP.
 - **DeFi** — `defi_protocols`, `defi_protocol`, `defi_chains`
-- **Planning** (16) — `monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `fire`, `risk_metrics`, `rebalance`
+- **Planning** (16 live) — `monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `fire`, `risk_metrics`, `rebalance`
+- **Planning — composite Roth/IRMAA** (3, **merged to main, live after the next deploy**) — `analyze_roth_conversion`, `sequence_conversions`, `irmaa_headroom` (PlanningContract v1.0.0; size a Roth conversion under both the bracket *and* projected-IRMAA ceilings). Not yet on `nexusmcp.site` — deploy is the remaining step.
 - **Meta** — `health` (per-upstream status), `describe` (catalog + symbology + contract version)
 
-The 16 planning tools are served *both* natively (above) and via the REST gateway
-(`POST /mcp/tools/{id}`) for the browser-based pwplan-core shell — same handlers,
-contractVersion `0.1.0`.
+The 16 single-purpose planning tools are served *both* natively (above) and via the
+REST gateway (`POST /mcp/tools/{id}`) for the browser-based pwplan-core shell — same
+handlers, contractVersion `0.1.0`. The 3 composite Roth/IRMAA tools (case contract
+v1.0.0) share that gateway + native-MCP path and are on main, pending the deploy.
 
 ## Code layout
 
