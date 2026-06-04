@@ -61,6 +61,7 @@ from ...engine.planning.regime import (
     transition_matrix,
 )
 from ...engine.planning.tables import (
+    AcaSituation,
     BracketTable,
     IrmaaTable,
     StateConversionRule,
@@ -839,6 +840,17 @@ def _resolve_tables(
     return bt, it, sr, bt_src, it_src, sr_src
 
 
+def _resolve_aca(body: dict[str, Any]) -> AcaSituation | None:
+    """Parse an optional injected ACA situation; ``None`` ⇒ ACA cliff stays a note."""
+    raw = body.get("aca")
+    if raw is None:
+        return None
+    try:
+        return AcaSituation.from_dict(raw)
+    except (TableError, KeyError, TypeError, ValueError) as exc:
+        raise PlanningInputError(f"invalid 'aca': {exc}") from exc
+
+
 def analyze_roth_conversion_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``analyze_roth_conversion`` — composite multi-year Roth/IRMAA analysis."""
     contract = _parse_contract(body)
@@ -848,6 +860,7 @@ def analyze_roth_conversion_tool(body: dict[str, Any]) -> dict[str, Any]:
         irmaa_table=it,
         bracket_table=bt,
         state_rule=sr,
+        aca=_resolve_aca(body),
         irmaa_inflation=_opt_num(body, "irmaa_inflation", 0.03),
         irmaa_buffer=_opt_num(body, "irmaa_buffer", 5_000.0),
         growth_rate=_opt_num(body, "growth_rate", 0.05),
@@ -867,6 +880,7 @@ def sequence_conversions_tool(body: dict[str, Any]) -> dict[str, Any]:
         irmaa_table=it,
         bracket_table=bt,
         state_rule=sr,
+        aca=_resolve_aca(body),
         irmaa_inflation=_opt_num(body, "irmaa_inflation", 0.03),
         irmaa_buffer=_opt_num(body, "irmaa_buffer", 5_000.0),
         growth_rate=_opt_num(body, "growth_rate", 0.05),
