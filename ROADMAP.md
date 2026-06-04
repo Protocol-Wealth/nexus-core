@@ -99,7 +99,10 @@ gracefully to `None` / empty / `503` when its key is absent.
 - **`POST /mcp`** — MCP-over-HTTP transport (FastMCP, also `nexus-core mcp` over
   stdio) exposing the above as tools, plus `health` / `describe` / `get_quotes`
   and the 16 planning tools. `GET /mcp/tools` + `POST /mcp/tools/{id}` are the
-  REST planning gateway (contractVersion `0.1.0`) for the pwplan-core shell.
+  REST planning gateway (contractVersion `0.1.0`) for the pwplan-core shell. (The
+  3 composite Roth/IRMAA tools — `analyze_roth_conversion`, `sequence_conversions`,
+  `irmaa_headroom`, PlanningContract v1.0.0 — are merged to main + share this path,
+  but are not in the live deployment yet; see Next.)
 - **Persistence** — private Cloud SQL (`nexus-marketdata`, POSTGRES_16,
   private-IP-only on `pwllc-prod-vpc`, backups + deletion protection).
   Reached over Direct VPC egress; `asyncpg` (`data/db.py`, `data/snapshots.py`).
@@ -130,6 +133,15 @@ gracefully to `None` / empty / `503` when its key is absent.
 ## Next
 
 Prioritized. Top item first.
+
+**Do first — deploy the composite Roth/IRMAA planning tools.** `analyze_roth_conversion`,
+`sequence_conversions`, `irmaa_headroom` (PlanningContract v1.0.0) are built, merged to
+main, CI-green, and unit-tested, but **not yet on `nexusmcp.site`**. A deploy is the only
+step between "merged" and "live" — it unblocks the pwplan-core Roth·IRMAA tab and the
+pw-api production planning path (both currently work only against a local `nexus-core serve`).
+Possible v2 follow-ons once live: model the ACA premium-tax-credit cliff (currently only
+flagged), employer-plan (401k) balances, and explicit survivor-year filing transitions
+(documented v1 exclusions in `engine/planning/case.py`).
 
 1. **Aerodrome Slipstream — full coverage via Envio.** The on-chain RPC path
    is **live** today: `GET /api/lp/aerodrome/{token_id}/analytics` reads Base
