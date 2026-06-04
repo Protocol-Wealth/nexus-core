@@ -138,6 +138,16 @@ def test_major_version_mismatch_is_rejected() -> None:
         PlanningContract.from_dict(payload)
 
 
+def test_employer_plan_aggregate_round_trips() -> None:
+    # contract v1.1.0 additive field.
+    payload = _valid_payload()
+    payload["accounts"]["employer_plan_aggregate"] = 600_000
+    contract = PlanningContract.from_dict(payload)
+    assert contract.accounts.employer_plan_aggregate == 600_000.0
+    # absent → defaults to 0 (backward-compatible with v1.0.0 callers)
+    assert PlanningContract.from_dict(_valid_payload()).accounts.employer_plan_aggregate == 0.0
+
+
 def test_itemized_deduction_accepted() -> None:
     payload = _valid_payload()
     payload["income_ex_conversion"]["itemized_or_standard"] = 41_000

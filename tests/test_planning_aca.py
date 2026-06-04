@@ -127,9 +127,18 @@ def test_injected_aca_quantifies_the_year_note() -> None:
     assert not any("not modeled here" in n for n in notes)
 
 
-def test_absent_aca_leaves_generic_flag() -> None:
-    notes = _analyze(None).years[0].notes
-    assert any("not modeled here" in n for n in notes)
+def test_absent_aca_leaves_generic_flag_and_null_struct() -> None:
+    y = _analyze(None).years[0]
+    assert any("not modeled here" in n for n in y.notes)
+    assert y.aca is None  # structured field null when no situation injected
+
+
+def test_injected_aca_populates_structured_field() -> None:
+    y = _analyze(reference_aca_situation(household_size=2, benchmark_premium_annual=18_000.0)).years[0]
+    assert y.aca is not None  # contract v1.1.0 structured AcaInteraction
+    assert y.aca.cliff_mode == "hard_400fpl"
+    assert y.aca.magi_pct_fpl_after >= y.aca.magi_pct_fpl_before
+    assert y.aca.incremental_ptc_loss >= 0.0
 
 
 def test_output_unchanged_serializable_and_identity_free_with_aca() -> None:

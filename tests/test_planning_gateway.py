@@ -741,7 +741,7 @@ def test_analyze_roth_conversion_gateway() -> None:
     r = _client().post("/mcp/tools/analyze_roth_conversion", json={"contract": _ROTH_CONTRACT})
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["contract_version"] == "1.0.0"
+    assert body["contract_version"] == "1.1.0"
     assert len(body["years"]) == 2
     y0 = body["years"][0]
     assert y0["binding_constraint"] == "irmaa"
