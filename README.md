@@ -276,7 +276,7 @@ deployment.
 
 ### Using with any MCP client
 
-The hosted MCP endpoint is public and read-only, so any MCP-compatible AI client (Claude, GPT, Gemini) can register `https://nexusmcp.site/mcp` as a read-only MCP server — no account, no API key, no auth. For example, in a `.mcp.json` (or any client config that follows the same shape):
+The hosted MCP endpoint is public and read-only, so any MCP-compatible AI client (Claude, GPT, Gemini), or an agent platform such as SmythOS, can register `https://nexusmcp.site/mcp` as a read-only MCP server — no account, no API key, no auth. For example, in a `.mcp.json` (or any client config that follows the same shape):
 
 ```json
 {
