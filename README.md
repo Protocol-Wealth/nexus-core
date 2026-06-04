@@ -274,6 +274,23 @@ interactive docs at `/docs`, and an MCP endpoint at `/mcp`. See
 [DEPLOY.md](DEPLOY.md) for the Cloud Run + Cloud SQL + Cloud Scheduler
 deployment.
 
+### Using with any MCP client
+
+The hosted MCP endpoint is public and read-only, so any MCP-compatible AI client (Claude, GPT, Gemini) can register `https://nexusmcp.site/mcp` as a read-only MCP server — no account, no API key, no auth. For example, in a `.mcp.json` (or any client config that follows the same shape):
+
+```json
+{
+  "mcpServers": {
+    "nexus-core": {
+      "type": "http",
+      "url": "https://nexusmcp.site/mcp"
+    }
+  }
+}
+```
+
+See the [MCP setup guide](https://nexusmcp.site/mcp-guide) for per-client steps (Claude.ai, Claude Code, Claude Desktop, and other clients) and `tools/list` output.
+
 ## Configuration
 
 All configuration is environment-driven. Every variable is optional; the app
