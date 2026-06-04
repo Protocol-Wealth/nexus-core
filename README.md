@@ -313,7 +313,7 @@ Python 3.12 · FastAPI · FastMCP · `httpx` · `asyncpg` · PostgreSQL (Cloud S
 **Patent Pending** — USPTO Application #64/034,229
 "Compliance-First Quantitative Research Engine with Multi-Signal Regime Detection, Systematic Asset Scoring, and AI Tool Orchestration via Model Context Protocol for SEC/FINRA-Regulated Financial Advisory Services"
 
-- [USPTO Patent Center](https://patentcenter.uspto.gov/applications/64034229)
+- [Patent disclosure](https://nexusmcp.site/patent) · [USPTO Patent Center](https://patentcenter.uspto.gov/applications/64034229)
 - Applicant: Protocol Wealth, LLC
 - Inventor: Nicholas Rygiel
 - Filed: April 9, 2026
@@ -321,7 +321,7 @@ Python 3.12 · FastAPI · FastMCP · `httpx` · `asyncpg` · PostgreSQL (Cloud S
 
 This patent was filed **defensively** under Apache 2.0. The intent is to establish formal prior art and prevent third parties from patenting these concepts and restricting their use by independent financial advisors. Under Apache 2.0, you receive an automatic, perpetual, royalty-free patent grant. If you sue Protocol Wealth for patent infringement related to this software, your license terminates automatically.
 
-**Open Invention Network (OIN) Member** — Protocol Wealth is a member of the OIN 2.0 community, the world's largest patent non-aggression network with 4,100+ members including Google, IBM, Toyota, Meta, Microsoft, and Amazon. [Learn more](https://openinventionnetwork.com/about-us/member-benefits/)
+**Open Invention Network (OIN) Member** — Protocol Wealth LLC is a member of the Open Invention Network (OIN), the world's largest patent non-aggression network with 4,100+ members including Google, IBM, Toyota, Meta, Microsoft, and Amazon. [Learn more](https://openinventionnetwork.com/about-us/member-benefits/)
 
 See [PATENTS](PATENTS) for full non-assertion pledge.
 
