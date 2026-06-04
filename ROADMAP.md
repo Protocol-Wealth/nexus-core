@@ -134,14 +134,15 @@ gracefully to `None` / empty / `503` when its key is absent.
 
 Prioritized. Top item first.
 
-**Do first — deploy the composite Roth/IRMAA planning tools.** `analyze_roth_conversion`,
-`sequence_conversions`, `irmaa_headroom` (PlanningContract v1.0.0) are built, merged to
-main, CI-green, and unit-tested, but **not yet on `nexusmcp.site`**. A deploy is the only
-step between "merged" and "live" — it unblocks the pwplan-core Roth·IRMAA tab and the
-pw-api production planning path (both currently work only against a local `nexus-core serve`).
-Possible v2 follow-ons once live: model the ACA premium-tax-credit cliff (currently only
-flagged), employer-plan (401k) balances, and explicit survivor-year filing transitions
-(documented v1 exclusions in `engine/planning/case.py`).
+**Composite Roth/IRMAA planning tools — LIVE** (`analyze_roth_conversion`,
+`sequence_conversions`, `irmaa_headroom`, PlanningContract v1.0.0) on `nexusmcp.site`
+since rev `nexus-core-00047` (2026-06-03), verified by a production POST. v2 follow-ons
+(in value order): model the **ACA premium-tax-credit cliff** (today only *flagged* in the
+year notes — the common pre-65 case), **employer-plan (401k/403b) balances**, and explicit
+**survivor-year filing transitions** (the documented v1 exclusions in
+`engine/planning/case.py`). The ACA cliff needs case-specific inputs (marketplace
+enrollment, household size/FPL, benchmark premium) — additive optional contract fields
+(a v1.1.0 minor bump) or a caller-injected `aca_rule`; decide before building.
 
 1. **Aerodrome Slipstream — full coverage via Envio.** The on-chain RPC path
    is **live** today: `GET /api/lp/aerodrome/{token_id}/analytics` reads Base
