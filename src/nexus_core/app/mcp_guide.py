@@ -139,6 +139,8 @@ _PAGE = """\
   <p>
     Most clients that support remote MCP servers accept the URL directly — point
     them at <code>{mcp_url}</code> with the HTTP / Streamable-HTTP transport.
+    Any MCP-compatible AI client (Claude, GPT, Gemini) can register this
+    read-only endpoint the same way — no account, no API key, no auth.
   </p>
   <div class="note">
     <strong>Tools not showing up?</strong> Fully quit and reopen Claude Desktop
