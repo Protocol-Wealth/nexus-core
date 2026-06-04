@@ -136,13 +136,13 @@ read-only with `readOnlyHint` + the educational disclaimer):
   suite is on BOTH the REST surface (`/api/options/crypto/{currency}/...`) and MCP.
 - **DeFi** — `defi_protocols`, `defi_protocol`, `defi_chains`
 - **Planning** (16 live) — `monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `fire`, `risk_metrics`, `rebalance`
-- **Planning — composite Roth/IRMAA** (3, **live** since rev `nexus-core-00047`, 2026-06-03) — `analyze_roth_conversion`, `sequence_conversions`, `irmaa_headroom` (PlanningContract v1.0.0; size a Roth conversion under both the bracket *and* projected-IRMAA ceilings). Verified live on `nexusmcp.site` (POST returns the analysis, binding=irmaa).
+- **Planning — composite Roth/IRMAA** (3, **live** since rev `nexus-core-00048` (**PlanningContract v1.1.0**), 2026-06-04) — `analyze_roth_conversion`, `sequence_conversions`, `irmaa_headroom` (size a Roth conversion under both the bracket *and* projected-IRMAA ceilings). v1.1.0 added `accounts.employer_plan_aggregate` (→ RMD drag), the structured `YearAnalysis.aca` (ACA PTC cliff when an `aca` situation is injected), and `DoNothingProjection` survivor-compression + employer-plan fields. Verified live on `nexusmcp.site` (POST returns `contract_version 1.1.0`, binding=irmaa).
 - **Meta** — `health` (per-upstream status), `describe` (catalog + symbology + contract version)
 
 The 16 single-purpose planning tools are served *both* natively (above) and via the
 REST gateway (`POST /mcp/tools/{id}`) for the browser-based pwplan-core shell — same
 handlers, contractVersion `0.1.0`. The 3 composite Roth/IRMAA tools (case contract
-v1.0.0) share that gateway + native-MCP path and are live (rev `nexus-core-00047`).
+v1.1.0) share that gateway + native-MCP path and are live (rev `nexus-core-00048`).
 
 ## Code layout
 
