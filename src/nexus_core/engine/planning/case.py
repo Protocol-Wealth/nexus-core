@@ -66,7 +66,7 @@ from .tax import FilingStatus
 #: Semver for the PlanningContract + RothConversionAnalysis shapes. Bump the
 #: MAJOR on any breaking change to either; coordinate across nexus-core /
 #: pwos-core / pwplan-core and record it in every CHANGELOG.
-PLANNING_CONTRACT_VERSION = "1.0.0"
+PLANNING_CONTRACT_VERSION = "1.1.0"
 
 #: Filing statuses the contract accepts. Deliberately narrower than the engine's
 #: full set: a single retiree is ``single``, a couple is ``mfj``, and ``mfs`` is
@@ -163,7 +163,9 @@ class AccountBalances:
     ``trad_ira_aggregate`` sums **all** Traditional/SEP/SIMPLE IRA balances —
     the pro-rata rule (IRC §72) applies across the total, so they cannot be
     analysed in isolation. ``taxable_liquidity`` is cash available **outside**
-    the IRA to pay the conversion tax.
+    the IRA to pay the conversion tax. ``employer_plan_aggregate`` (added in
+    contract v1.1.0) is pre-tax employer-plan money (401(k)/403(b)); it is **not**
+    directly convertible (roll to an IRA first) but it adds to the future RMD drag.
     """
 
     trad_ira_aggregate: float
@@ -171,9 +173,13 @@ class AccountBalances:
     roth_balance: float = 0.0
     first_roth_year: int | None = None
     taxable_liquidity: float = 0.0
+    employer_plan_aggregate: float = 0.0
 
     def __post_init__(self) -> None:
-        for name in ("trad_ira_aggregate", "nondeductible_basis", "roth_balance", "taxable_liquidity"):
+        for name in (
+            "trad_ira_aggregate", "nondeductible_basis", "roth_balance",
+            "taxable_liquidity", "employer_plan_aggregate",
+        ):
             if getattr(self, name) < 0.0:
                 raise PlanningContractError(f"{name} must be non-negative")
         if self.nondeductible_basis > self.trad_ira_aggregate + 1e-6:
@@ -450,6 +456,7 @@ def _parse_accounts(obj: dict[str, Any]) -> AccountBalances:
         roth_balance=_num(obj, "roth_balance"),
         first_roth_year=first_roth,
         taxable_liquidity=_num(obj, "taxable_liquidity"),
+        employer_plan_aggregate=_num(obj, "employer_plan_aggregate"),
     )
 
 

@@ -158,6 +158,24 @@ class ConversionOption:
 
 
 @dataclass(frozen=True, slots=True)
+class AcaInteraction:
+    """ACA premium-tax-credit (PTC) erosion from the conversion (contract v1.1.0).
+
+    Populated only when an ``AcaSituation`` is injected and someone is under 65 +
+    marketplace-enrolled; ``None`` on ``YearAnalysis.aca`` otherwise. A
+    flag-with-magnitude estimate, not a precise PTC determination.
+    """
+
+    cliff_mode: str
+    magi_pct_fpl_before: float
+    magi_pct_fpl_after: float
+    ptc_before: float
+    ptc_after: float
+    incremental_ptc_loss: float
+    crosses_hard_cliff: bool
+
+
+@dataclass(frozen=True, slots=True)
 class YearAnalysis:
     """Per-year conversion analysis."""
 
@@ -194,6 +212,9 @@ class YearAnalysis:
     state_tax: StateTax
     liquidity: LiquidityGate
     notes: tuple[str, ...]
+    #: ACA PTC erosion (contract v1.1.0); ``None`` unless an ACA situation is
+    #: injected and someone is under 65 + marketplace-enrolled.
+    aca: AcaInteraction | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,6 +233,13 @@ class DoNothingProjection:
     first_year_rmd: float
     first_year_rmd_marginal_rate: float
     note: str
+    #: Pre-tax employer-plan (401k/403b) balance folded into the RMD-drag pool
+    #: (contract v1.1.0); the projection is on trad IRA + this.
+    employer_plan_aggregate: float = 0.0
+    #: Survivor-year filing compression (contract v1.1.0): the marginal rate the
+    #: first-year RMD would face if the surviving spouse filed **single** instead
+    #: of jointly. ``None`` when filing is already single/mfs (no transition).
+    survivor_first_year_rmd_marginal_rate: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,6 +290,7 @@ class RothConversionAnalysis:
 
 
 __all__ = [
+    "AcaInteraction",
     "BindingConstraint",
     "ConversionOption",
     "DoNothingProjection",

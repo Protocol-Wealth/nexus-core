@@ -26,6 +26,7 @@ from collections.abc import Callable
 from ...disclaimers import MC_DISCLAIMER
 from .aca import aca_cliff_estimate
 from .analysis import (
+    AcaInteraction,
     ConversionOption,
     DoNothingProjection,
     LiquidityGate,
@@ -368,7 +369,7 @@ def _analyze_year(
     eff_rate = round(total_incremental / rec_taxable, 4) if rec_taxable > 0.0 else 0.0
     breakeven = round(federal_all_in / rec_taxable, 4) if rec_taxable > 0.0 else 0.0
 
-    aca_note = _aca_note(aca, ages, base.magi_irmaa, rec_pic.magi_irmaa)
+    aca_struct, aca_note = _aca(aca, ages, base.magi_irmaa, rec_pic.magi_irmaa)
     notes = _year_notes(
         contract, year, ages, per_person, taxable_fraction, irmaa, recommended, aca_note
     )
@@ -427,6 +428,7 @@ def _analyze_year(
             ),
         ),
         notes=notes,
+        aca=aca_struct,
     )
 
 
@@ -532,32 +534,44 @@ def _state_tax(rule: StateConversionRule | None, amount: float, state_code: str)
     )
 
 
-def _aca_note(
+def _aca(
     aca: AcaSituation | None, ages: tuple[int, ...], magi_before: float, magi_after: float
-) -> str | None:
-    """Quantified ACA-cliff note when a situation is injected; else ``None`` (the
-    caller falls back to the generic qualitative flag)."""
+) -> tuple[AcaInteraction | None, str | None]:
+    """Structured ACA PTC interaction + a quantified note when a situation is
+    injected (and someone is under 65 + marketplace-enrolled); else ``(None, None)``
+    so the caller falls back to the generic qualitative flag."""
     if aca is None or not aca.marketplace_enrolled or not any(a < 65 for a in ages):
-        return None
+        return None, None
     est = aca_cliff_estimate(magi_before, magi_after, aca)
+    struct = AcaInteraction(
+        cliff_mode=aca.cliff_mode,
+        magi_pct_fpl_before=round(est.pct_fpl_before, 4),
+        magi_pct_fpl_after=round(est.pct_fpl_after, 4),
+        ptc_before=_round(est.ptc_before),
+        ptc_after=_round(est.ptc_after),
+        incremental_ptc_loss=_round(est.incremental_ptc_loss),
+        crosses_hard_cliff=est.crosses_hard_cliff,
+    )
     before_pct = f"{est.pct_fpl_before * 100:.0f}%"
     after_pct = f"{est.pct_fpl_after * 100:.0f}%"
     if est.crosses_hard_cliff:
-        return (
+        note = (
             f"ACA cliff CROSSED: the conversion lifts MAGI from {before_pct} to {after_pct} of "
             f"FPL, past the 400% hard cliff — estimated premium-tax-credit loss "
             f"~${est.incremental_ptc_loss:,.0f}/yr (the whole benchmark credit). "
             "Flag-with-magnitude estimate, not a precise PTC determination."
         )
-    if est.incremental_ptc_loss > 0.0:
-        return (
+    elif est.incremental_ptc_loss > 0.0:
+        note = (
             f"ACA: the conversion lifts MAGI from {before_pct} to {after_pct} of FPL, eroding the "
             f"premium tax credit by ~${est.incremental_ptc_loss:,.0f}/yr (estimate)."
         )
-    return (
-        f"ACA: MAGI is {after_pct} of FPL after the conversion; no premium-tax-credit erosion "
-        "estimated (already above the credit range, or no credit at this income)."
-    )
+    else:
+        note = (
+            f"ACA: MAGI is {after_pct} of FPL after the conversion; no premium-tax-credit erosion "
+            "estimated (already above the credit range, or no credit at this income)."
+        )
+    return struct, note
 
 
 def _year_notes(
@@ -614,7 +628,11 @@ def _do_nothing(
     start_age = _rmd_start_age(self_birth)
     first_rmd_year = self_birth + start_age
     years_until = max(0, first_rmd_year - contract.tax_year)
-    projected = contract.accounts.trad_ira_aggregate * (1.0 + growth_rate) ** years_until
+    # The RMD-drag pool is the whole pre-tax balance subject to future RMDs: the
+    # Traditional IRA + employer-plan (401k/403b) money (the latter added in v1.1.0).
+    employer_plan = contract.accounts.employer_plan_aggregate
+    pretax_pool = contract.accounts.trad_ira_aggregate + employer_plan
+    projected = pretax_pool * (1.0 + growth_rate) ** years_until
     first_rmd = rmd(age=start_age, balance=projected)
     fs = contract.engine_filing_status
     base = federal_picture(
@@ -624,6 +642,22 @@ def _do_nothing(
     )
     rmd_amount = first_rmd["rmdAmount"]
     rate = marginal_ordinary_rate(base.ordinary_taxable + rmd_amount, bracket_table.brackets_for(fs))
+    # Survivor compression: for a married-joint plan, the surviving spouse files
+    # single — the same RMD lands in the ~half-width single brackets.
+    survivor_rate: float | None = None
+    if fs == "married_joint":
+        survivor_rate = marginal_ordinary_rate(
+            base.ordinary_taxable + rmd_amount, bracket_table.brackets_for("single")
+        )
+    plan_clause = (
+        f" (Traditional IRA + ${employer_plan:,.0f} employer-plan)" if employer_plan > 0 else ""
+    )
+    survivor_clause = (
+        f" If the surviving spouse later files single, that RMD lands near the "
+        f"{survivor_rate:.0%} bracket — the joint→single compression."
+        if survivor_rate is not None and survivor_rate > rate
+        else ""
+    )
     return DoNothingProjection(
         rmd_start_age=start_age,
         first_rmd_year=first_rmd_year,
@@ -633,11 +667,13 @@ def _do_nothing(
         first_year_rmd=_round(rmd_amount),
         first_year_rmd_marginal_rate=rate,
         note=(
-            f"If nothing is converted, the Traditional IRA grows to about "
+            f"If nothing is converted, the pre-tax balance{plan_clause} grows to about "
             f"${projected:,.0f} by {first_rmd_year}, forcing a first-year RMD of "
             f"~${rmd_amount:,.0f} taxed near the {rate:.0%} marginal rate — the drag "
-            "the conversion window is meant to relieve."
+            f"the conversion window is meant to relieve.{survivor_clause}"
         ),
+        employer_plan_aggregate=_round(employer_plan),
+        survivor_first_year_rmd_marginal_rate=survivor_rate,
     )
 
 

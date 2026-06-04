@@ -145,6 +145,27 @@ def test_output_is_serializable_and_identity_free() -> None:
     assert find_identity_keys(d) == []  # no identity-shaped keys in the output
 
 
+def test_employer_plan_balance_folds_into_rmd_drag() -> None:
+    # contract v1.1.0: employer_plan_aggregate adds to the do-nothing RMD pool.
+    without = _run(_contract()).do_nothing
+    with_401k = _run(_contract(accounts={"employer_plan_aggregate": 600_000})).do_nothing
+    assert with_401k.employer_plan_aggregate == 600_000.0
+    assert with_401k.projected_trad_balance_at_rmd > without.projected_trad_balance_at_rmd
+    assert with_401k.first_year_rmd > without.first_year_rmd
+
+
+def test_survivor_compression_rate_for_mfj() -> None:
+    # contract v1.1.0: mfj reports the surviving-spouse single-filing RMD rate.
+    mfj = _run(_contract()).do_nothing
+    assert mfj.survivor_first_year_rmd_marginal_rate is not None
+    # single brackets are ~half-width → survivor rate >= the joint rate.
+    assert mfj.survivor_first_year_rmd_marginal_rate >= mfj.first_year_rmd_marginal_rate
+    single = _run(
+        _contract(filing_status="single", birth_years=[1962], medicare_enrolled=1)
+    ).do_nothing
+    assert single.survivor_first_year_rmd_marginal_rate is None  # no joint→single transition
+
+
 def test_do_nothing_rmd_start_age_by_birth_year() -> None:
     born_1962 = _run(_contract())  # born 1960+ → 75
     assert born_1962.do_nothing.rmd_start_age == 75

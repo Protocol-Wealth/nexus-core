@@ -85,7 +85,7 @@ def roth_conversion_analysis_schema() -> dict[str, Any]:
     """Draft-2020-12 JSON-Schema for :class:`RothConversionAnalysis`."""
     schema = _dataclass_to_schema(RothConversionAnalysis)
     schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
-    schema["$id"] = "https://nexusmcp.site/schemas/roth-conversion-analysis-1.0.0.json"
+    schema["$id"] = "https://nexusmcp.site/schemas/roth-conversion-analysis-1.1.0.json"
     schema["title"] = "RothConversionAnalysis"
     schema["description"] = (
         "PII-free output of analyze_roth_conversion / sequence_conversions. "

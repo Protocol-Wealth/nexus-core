@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### PlanningContract v1.1.0 — employer-plan balances, survivor compression, structured ACA
+
+Additive, backward-compatible minor bump (a v1.0.0 caller still works; new fields
+default/optional). `PLANNING_CONTRACT_VERSION` 1.0.0 → **1.1.0**.
+
+#### Added
+
+- **Input: `accounts.employer_plan_aggregate`** (`engine/planning/case.py` + schema)
+  — pre-tax 401(k)/403(b) money. Not directly convertible (roll to an IRA first), but
+  it's folded into the **do-nothing RMD-drag pool** (the projection is now on the
+  Traditional IRA + employer plan).
+- **Output: survivor-year compression** on `DoNothingProjection`
+  (`survivor_first_year_rmd_marginal_rate`) — for a married-joint plan, the marginal
+  rate the first-year RMD would face if the surviving spouse filed **single** (the
+  ~half-width brackets); `None` when filing is already single/mfs. Computed from the
+  injected bracket table's single schedule (no new input needed).
+- **Output: structured ACA interaction** on `YearAnalysis.aca` (`AcaInteraction`) —
+  promotes the prior notes-only ACA estimate to a structured field (cliff_mode,
+  MAGI %-of-FPL before/after, PTC before/after, incremental loss, hard-cliff crossing)
+  when an `AcaSituation` is injected; `None` otherwise. The human note is retained.
+- Output JSON-Schema (`result_schema.py`) regenerates with the new fields; both
+  schema `$id`s bumped to 1.1.0.
+- +4 tests (employer-plan RMD pool, survivor rate for mfj vs none for single, ACA
+  structured field present/absent, employer-plan round-trip). Full suite green;
+  coverage 88%.
+
 ### ACA premium-tax-credit cliff — flag-with-magnitude (no contract change)
 
 The composite Roth/IRMAA analysis can now **quantify** the ACA marketplace
