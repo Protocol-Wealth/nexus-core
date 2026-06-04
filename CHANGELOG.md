@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### ACA premium-tax-credit cliff — flag-with-magnitude (no contract change)
+
+The composite Roth/IRMAA analysis can now **quantify** the ACA marketplace
+premium-tax-credit (PTC) cliff for a pre-65, marketplace-enrolled household,
+instead of only flagging it. It is an **injected parameter** — `analyze_roth_conversion`
+/ `sequence_conversions` gain an optional `aca: AcaSituation | None` (like
+`state_rule`), so **PlanningContract v1.0.0 and the output shape are unchanged**
+(the estimate is surfaced in the per-year `notes`, not a new field).
+
+#### Added
+
+- **`AcaSituation`** (`engine/planning/tables.py`) — injected ACA config: household
+  size, benchmark (SLCSP) premium, marketplace enrollment, FPL figures, the
+  applicable-percentage ramp, and `cliff_mode` (`hard_400fpl` — the pre-2021 /
+  post-2025 hard 400%-FPL cliff; `capped_8_5` — the 2021–2025 ARPA/IRA 8.5% cap).
+  `from_dict` + `reference_aca_situation(...)` (illustrative 2024-basis FPL incl.
+  AK/HI).
+- **`engine/planning/aca.py`** — pure `aca_ptc(magi, situation)` +
+  `aca_cliff_estimate(magi_before, magi_after, situation)` (PTC erosion + hard-cliff
+  crossing). Documented as a flag-with-magnitude estimate, not a precise PTC
+  determination; uses the conversion-year IRMAA MAGI as the ACA MAGI proxy.
+- When an `AcaSituation` is injected, the year note reads e.g. *"ACA cliff CROSSED:
+  the conversion lifts MAGI from 350% to 425% of FPL … estimated PTC loss ~$13,240/yr"*;
+  absent the injection, the prior qualitative flag is kept.
+- Gateway: `POST /mcp/tools/{analyze_roth_conversion,sequence_conversions}` accept an
+  optional `aca` object in the body (omitted on the public/reference path).
+- 18 new tests (PTC math, the hard cliff vs 8.5% cap, the cross-cliff estimate, and
+  the composite note quantified-vs-generic). Full suite green; coverage 88%.
+
 ### Multi-year Roth-conversion + IRMAA planning (PlanningContract v1.0.0)
 
 A composite planning capability that sizes a Roth conversion for a ~60-something

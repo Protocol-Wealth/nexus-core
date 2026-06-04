@@ -260,6 +260,78 @@ class StateConversionRule:
         )
 
 
+AcaCliffMode = str  # "hard_400fpl" | "capped_8_5"
+
+
+@dataclass(frozen=True, slots=True)
+class AcaSituation:
+    """Injected ACA-marketplace situation for the premium-tax-credit (PTC) cliff.
+
+    Like :class:`StateConversionRule`, this is an injected *parameter*, not a
+    PlanningContract field — so quantifying the ACA cliff needs no contract
+    change. It bundles the case data (household size, benchmark premium,
+    marketplace enrollment) with the credit-formula reference figures (FPL,
+    applicable-percentage ramp). When absent, the composite leaves the ACA cliff
+    as a qualitative note.
+
+    The PTC is ``max(0, benchmark_premium_annual - applicable_pct(MAGI%FPL) *
+    MAGI)``. ``cliff_mode`` selects the policy regime: ``hard_400fpl`` — the
+    pre-2021 / post-2025 hard cliff (one dollar over 400% FPL → $0 PTC);
+    ``capped_8_5`` — the 2021–2025 ARPA/IRA cap (contribution capped at
+    ``cap_contribution_pct`` of MAGI with no hard cliff).
+
+    Documented simplification (a flag-with-magnitude estimate, NOT a precise PTC
+    determination): the applicable percentage ramps linearly from 0% at/below
+    ``lower_fpl_pct`` to ``cap_contribution_pct`` at ``cap_fpl_pct``; uses the
+    conversion-year IRMAA MAGI as the ACA MAGI proxy; ignores age-rating of the
+    benchmark premium and the household's coverage months.
+    """
+
+    marketplace_enrolled: bool
+    household_size: int
+    benchmark_premium_annual: float
+    fpl_base: float
+    fpl_per_person: float
+    lower_fpl_pct: float = 1.5
+    cap_fpl_pct: float = 4.0
+    cap_contribution_pct: float = 0.085
+    cliff_mode: AcaCliffMode = "hard_400fpl"
+
+    def __post_init__(self) -> None:
+        if self.household_size < 1:
+            raise TableError("household_size must be >= 1")
+        if self.benchmark_premium_annual < 0.0:
+            raise TableError("benchmark_premium_annual must be non-negative")
+        if self.fpl_base <= 0.0 or self.fpl_per_person < 0.0:
+            raise TableError("fpl_base must be > 0 and fpl_per_person >= 0")
+        if not 0.0 < self.lower_fpl_pct < self.cap_fpl_pct:
+            raise TableError("require 0 < lower_fpl_pct < cap_fpl_pct")
+        if not 0.0 <= self.cap_contribution_pct < 1.0:
+            raise TableError("cap_contribution_pct must be in [0, 1)")
+        if self.cliff_mode not in ("hard_400fpl", "capped_8_5"):
+            raise TableError("cliff_mode must be 'hard_400fpl' or 'capped_8_5'")
+
+    def fpl(self) -> float:
+        """Federal Poverty Level for this household size."""
+        return self.fpl_base + self.fpl_per_person * (self.household_size - 1)
+
+    @classmethod
+    def from_dict(cls, d: Any) -> AcaSituation:
+        if not isinstance(d, dict):
+            raise TableError("aca must be an object")
+        return cls(
+            marketplace_enrolled=bool(d["marketplace_enrolled"]),
+            household_size=int(d["household_size"]),
+            benchmark_premium_annual=float(d["benchmark_premium_annual"]),
+            fpl_base=float(d.get("fpl_base", 15_060.0)),
+            fpl_per_person=float(d.get("fpl_per_person", 5_380.0)),
+            lower_fpl_pct=float(d.get("lower_fpl_pct", 1.5)),
+            cap_fpl_pct=float(d.get("cap_fpl_pct", 4.0)),
+            cap_contribution_pct=float(d.get("cap_contribution_pct", 0.085)),
+            cliff_mode=str(d.get("cliff_mode", "hard_400fpl")),
+        )
+
+
 # --- illustrative reference factories (NOT for production use as-is) --------
 
 # Illustrative current-basis figures. Bracket schedules + standard deductions are
@@ -381,13 +453,46 @@ def reference_state_rule(state_code: str) -> StateConversionRule | None:
     return None
 
 
+def reference_aca_situation(
+    *,
+    household_size: int,
+    benchmark_premium_annual: float,
+    state_code: str = "US",
+    cliff_mode: AcaCliffMode = "hard_400fpl",
+) -> AcaSituation:
+    """An illustrative :class:`AcaSituation` (2024-basis FPL). Verify before real use.
+
+    FPL uses the 48-contiguous-state figure ($15,060 + $5,380/person) by default;
+    ``AK`` and ``HI`` use their higher schedules. The applicable-percentage ramp
+    (0% below 150% FPL → 8.5% at 400% FPL) is the ARPA/IRA basis; pair it with
+    ``cliff_mode="hard_400fpl"`` to model the pre-2021 / post-2025 hard cliff.
+    """
+    fpl_base, fpl_per = 15_060.0, 5_380.0
+    code = state_code.upper()
+    if code == "AK":
+        fpl_base, fpl_per = 18_810.0, 6_730.0
+    elif code == "HI":
+        fpl_base, fpl_per = 17_310.0, 6_190.0
+    return AcaSituation(
+        marketplace_enrolled=True,
+        household_size=household_size,
+        benchmark_premium_annual=benchmark_premium_annual,
+        fpl_base=fpl_base,
+        fpl_per_person=fpl_per,
+        cliff_mode=cliff_mode,
+    )
+
+
 __all__ = [
+    "AcaCliffMode",
+    "AcaSituation",
     "BracketTable",
     "IrmaaTable",
     "IrmaaTier",
     "StateConversionRule",
     "StateTreatment",
     "TableError",
+    "reference_aca_situation",
     "reference_bracket_table",
     "reference_irmaa_table",
     "reference_state_rule",

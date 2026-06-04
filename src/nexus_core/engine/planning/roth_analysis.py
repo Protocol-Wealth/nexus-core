@@ -24,6 +24,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ...disclaimers import MC_DISCLAIMER
+from .aca import aca_cliff_estimate
 from .analysis import (
     ConversionOption,
     DoNothingProjection,
@@ -41,7 +42,7 @@ from .case import PLANNING_CONTRACT_VERSION, PlanningContract
 from .income_model import FederalPicture, federal_picture, marginal_ordinary_rate
 from .irmaa import irmaa_headroom
 from .rmd import rmd
-from .tables import BracketTable, IrmaaTable, StateConversionRule
+from .tables import AcaSituation, BracketTable, IrmaaTable, StateConversionRule
 from .tax import FilingStatus
 
 _CONV_TOL = 1.0  # dollar tolerance for the conversion-ceiling solver
@@ -97,6 +98,7 @@ def analyze_roth_conversion(
     irmaa_table: IrmaaTable,
     bracket_table: BracketTable,
     state_rule: StateConversionRule | None = None,
+    aca: AcaSituation | None = None,
     irmaa_inflation: float = 0.03,
     irmaa_buffer: float = 5_000.0,
     growth_rate: float = 0.05,
@@ -111,6 +113,10 @@ def analyze_roth_conversion(
         irmaa_table: Injected IRMAA tiers for the contract's filing status.
         bracket_table: Injected federal income-tax basis.
         state_rule: Injected state treatment; ``None`` ⇒ state tax left unmodeled.
+        aca: Injected ACA-marketplace situation; ``None`` ⇒ the ACA premium-tax-credit
+            cliff is left as a qualitative note. When given (and someone is under 65 +
+            marketplace-enrolled) the year note quantifies the estimated PTC erosion.
+            Not a PlanningContract field — an injected parameter, like ``state_rule``.
         irmaa_inflation: Annual assumption to project IRMAA floors to year N+2.
         irmaa_buffer: Dollars held below each projected IRMAA floor as a margin.
         growth_rate: Annual growth assumption for the inter-year IRA balance + the
@@ -126,6 +132,7 @@ def analyze_roth_conversion(
         irmaa_table=irmaa_table,
         bracket_table=bracket_table,
         state_rule=state_rule,
+        aca=aca,
         irmaa_inflation=irmaa_inflation,
         irmaa_buffer=irmaa_buffer,
         growth_rate=growth_rate,
@@ -162,6 +169,7 @@ def sequence_conversions(
     irmaa_table: IrmaaTable,
     bracket_table: BracketTable,
     state_rule: StateConversionRule | None = None,
+    aca: AcaSituation | None = None,
     irmaa_inflation: float = 0.03,
     irmaa_buffer: float = 5_000.0,
     growth_rate: float = 0.05,
@@ -180,6 +188,7 @@ def sequence_conversions(
         irmaa_table=irmaa_table,
         bracket_table=bracket_table,
         state_rule=state_rule,
+        aca=aca,
         irmaa_inflation=irmaa_inflation,
         irmaa_buffer=irmaa_buffer,
         growth_rate=growth_rate,
@@ -193,6 +202,7 @@ def _run_sequence(
     irmaa_table: IrmaaTable,
     bracket_table: BracketTable,
     state_rule: StateConversionRule | None,
+    aca: AcaSituation | None,
     irmaa_inflation: float,
     irmaa_buffer: float,
     growth_rate: float,
@@ -214,6 +224,7 @@ def _run_sequence(
             irmaa_table=irmaa_table,
             bracket_table=bracket_table,
             state_rule=state_rule,
+            aca=aca,
             irmaa_inflation=irmaa_inflation,
             irmaa_buffer=irmaa_buffer,
         )
@@ -256,6 +267,7 @@ def _analyze_year(
     irmaa_table: IrmaaTable,
     bracket_table: BracketTable,
     state_rule: StateConversionRule | None,
+    aca: AcaSituation | None,
     irmaa_inflation: float,
     irmaa_buffer: float,
 ) -> YearAnalysis:
@@ -356,7 +368,10 @@ def _analyze_year(
     eff_rate = round(total_incremental / rec_taxable, 4) if rec_taxable > 0.0 else 0.0
     breakeven = round(federal_all_in / rec_taxable, 4) if rec_taxable > 0.0 else 0.0
 
-    notes = _year_notes(contract, year, ages, per_person, taxable_fraction, irmaa, recommended)
+    aca_note = _aca_note(aca, ages, base.magi_irmaa, rec_pic.magi_irmaa)
+    notes = _year_notes(
+        contract, year, ages, per_person, taxable_fraction, irmaa, recommended, aca_note
+    )
 
     return YearAnalysis(
         year=year,
@@ -517,6 +532,34 @@ def _state_tax(rule: StateConversionRule | None, amount: float, state_code: str)
     )
 
 
+def _aca_note(
+    aca: AcaSituation | None, ages: tuple[int, ...], magi_before: float, magi_after: float
+) -> str | None:
+    """Quantified ACA-cliff note when a situation is injected; else ``None`` (the
+    caller falls back to the generic qualitative flag)."""
+    if aca is None or not aca.marketplace_enrolled or not any(a < 65 for a in ages):
+        return None
+    est = aca_cliff_estimate(magi_before, magi_after, aca)
+    before_pct = f"{est.pct_fpl_before * 100:.0f}%"
+    after_pct = f"{est.pct_fpl_after * 100:.0f}%"
+    if est.crosses_hard_cliff:
+        return (
+            f"ACA cliff CROSSED: the conversion lifts MAGI from {before_pct} to {after_pct} of "
+            f"FPL, past the 400% hard cliff — estimated premium-tax-credit loss "
+            f"~${est.incremental_ptc_loss:,.0f}/yr (the whole benchmark credit). "
+            "Flag-with-magnitude estimate, not a precise PTC determination."
+        )
+    if est.incremental_ptc_loss > 0.0:
+        return (
+            f"ACA: the conversion lifts MAGI from {before_pct} to {after_pct} of FPL, eroding the "
+            f"premium tax credit by ~${est.incremental_ptc_loss:,.0f}/yr (estimate)."
+        )
+    return (
+        f"ACA: MAGI is {after_pct} of FPL after the conversion; no premium-tax-credit erosion "
+        "estimated (already above the credit range, or no credit at this income)."
+    )
+
+
 def _year_notes(
     contract: PlanningContract,
     year: int,
@@ -525,6 +568,7 @@ def _year_notes(
     taxable_fraction: float,
     irmaa: object,
     recommended: float,
+    aca_note: str | None = None,
 ) -> tuple[str, ...]:
     notes: list[str] = []
     if min(ages) < 60:  # 59½ rounded; conversions are penalty-free but tax must be external
@@ -534,8 +578,12 @@ def _year_notes(
         )
     if any(a < 65 for a in ages):
         notes.append(
-            "Someone is under 65 — if on an ACA marketplace plan, conversion income "
-            "can vaporize premium tax credits (a separate cliff, not modeled here)."
+            aca_note
+            if aca_note is not None
+            else (
+                "Someone is under 65 — if on an ACA marketplace plan, conversion income "
+                "can vaporize premium tax credits (a separate cliff, not modeled here)."
+            )
         )
     if per_person == 0:
         notes.append(

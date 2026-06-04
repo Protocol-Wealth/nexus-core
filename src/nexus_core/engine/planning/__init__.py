@@ -33,10 +33,12 @@ from .roth_conversion import roth_conversion
 from .sequence_risk import sequence_of_returns_stress
 from .social_security import social_security_claiming
 from .tables import (
+    AcaSituation,
     BracketTable,
     IrmaaTable,
     IrmaaTier,
     StateConversionRule,
+    reference_aca_situation,
     reference_bracket_table,
     reference_irmaa_table,
     reference_state_rule,
@@ -46,6 +48,7 @@ from .xray import portfolio_xray
 
 __all__ = [
     "PLANNING_CONTRACT_VERSION",
+    "AcaSituation",
     "BracketTable",
     "GlidePathShape",
     "InfeasiblePlanError",
@@ -65,6 +68,7 @@ __all__ = [
     "planning_contract_schema",
     "portfolio_xray",
     "rebalance",
+    "reference_aca_situation",
     "reference_bracket_table",
     "reference_irmaa_table",
     "reference_state_rule",
