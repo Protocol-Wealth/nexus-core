@@ -135,14 +135,24 @@ gracefully to `None` / empty / `503` when its key is absent.
 Prioritized. Top item first.
 
 **Composite Roth/IRMAA planning tools — LIVE** (`analyze_roth_conversion`,
-`sequence_conversions`, `irmaa_headroom`, PlanningContract v1.0.0) on `nexusmcp.site`
-since rev `nexus-core-00047` (2026-06-03), verified by a production POST. v2 follow-ons
-(in value order): the **ACA premium-tax-credit cliff** is now a **flag-with-magnitude
-estimate** via an injected `AcaSituation` (no contract change) — full modeling with
-case-specific contract fields (marketplace enrollment, household size/FPL, benchmark
-premium) is still open as a v1.1.0 minor bump. Then **employer-plan (401k/403b)
-balances** and explicit **survivor-year filing transitions** (the documented v1
-exclusions in `engine/planning/case.py`).
+`sequence_conversions`, `irmaa_headroom`, **PlanningContract v1.1.0**) on `nexusmcp.site`
+since rev `nexus-core-00048` (2026-06-04), verified by a production POST. The prior v2
+follow-ons all shipped in v1.1.0 (additive, backward-compatible over v1.0.0): the **ACA
+premium-tax-credit cliff** as a flag-with-magnitude estimate via an injected
+`AcaSituation` (`YearAnalysis.aca`); **employer-plan (401k/403b) balances**
+(`accounts.employer_plan_aggregate`, folded into the do-nothing RMD drag); and explicit
+**survivor-year filing transitions** (`DoNothingProjection.survivor_first_year_rmd_marginal_rate`).
+
+**Next planning build — assumptions provenance (decided 2026-06-04).** Tag every
+reference assumption with its origin + freshness: add a `source` (where the figure came
+from — e.g. the IRS Rev. Proc. / CMS notice + citation) and a `last_verified` date to
+each `reference_*` table factory (`engine/planning/tables.py`), surface them in the
+result `snapshot`, and expose them so an advisor/client can validate or update a figure
+when a newer one is published. The engine already keeps the REAL numbers and supports
+caller-injected tables (`*_source = caller_provided`); this adds the provenance +
+last-analyzed metadata on the reference path. **Firm-wide standard: every assumption
+marks where it came from and when it was last analyzed** (additive — a v1.2.0 minor on
+the `snapshot` shape).
 
 1. **Aerodrome Slipstream — full coverage via Envio.** The on-chain RPC path
    is **live** today: `GET /api/lp/aerodrome/{token_id}/analytics` reads Base
