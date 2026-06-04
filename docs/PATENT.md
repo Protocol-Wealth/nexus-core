@@ -1,5 +1,9 @@
 # Defensive Patent - Nexus Core
 
+> USPTO Application **#64/034,229** (PW-PROV-002, provisional, filed 2026-04-09).
+> System drawing: [Figure 1 (PDF)](PW-PROV-002-FIG1.pdf). Full non-assertion
+> pledge in [`PATENTS`](../PATENTS); posture in [`NOTICE`](../NOTICE).
+
 ## Title
 
 System and Method for Regime-Adaptive, Compliance-Gated Financial Analysis via Model Context Protocol
