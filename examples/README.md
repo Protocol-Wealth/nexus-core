@@ -22,6 +22,13 @@ Runnable examples for Nexus Core capabilities.
   structure → coin-yield illustration, plus protective put / collar and a
   spot-shock stress. Public, illustrative inputs only (a coin, a strike, a tenor)
   — no positions/custody. Same install as the planning agent.
+- **`roth_irmaa_agent.py`** — A Claude Agent SDK agent over the same hosted MCP
+  server driving the **composite Roth-conversion + IRMAA** tool
+  (`analyze_roth_conversion`): for a ~60-something MFJ couple it sizes the
+  conversion across 2026+2027 under both the bracket and the *projected* IRMAA
+  ceilings, reads the binding ceiling, the IRMAA cliff cost, the all-in tax, and
+  the do-nothing RMD drag. PII-free (birth years + aggregated balances, never
+  identity). Same install as the planning agent.
 
 ## Planned
 
