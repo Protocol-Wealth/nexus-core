@@ -85,7 +85,7 @@ market = [
 
 # Model Context Protocol server (MCP-over-HTTP transport)
 mcp = [
-    "fastmcp>=3.3.1,<4",           # Apache 2.0 (3.x: ToolAnnotations, extra_tools registration)
+    "fastmcp>=3.4.2,<4",           # Apache 2.0 (3.x: ToolAnnotations, extra_tools registration)
 ]
 
 # Public deployment surface — HTTP API + MCP server (see nexus_core.app).
