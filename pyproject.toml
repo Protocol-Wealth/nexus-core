@@ -67,7 +67,7 @@ risk = [
 # Derivatives pricing
 pricing = [
     "QuantLib>=1.42.1",            # Modified BSD
-    "financepy>=0.370",            # MIT
+    "financepy>=1.0.1",            # MIT
 ]
 
 # SEC EDGAR integration
