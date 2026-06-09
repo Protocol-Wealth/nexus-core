@@ -221,6 +221,29 @@ def test_monte_carlo_unknown_model_returns_400() -> None:
     assert r.status_code == 400
 
 
+def test_monte_carlo_too_many_asset_classes_returns_400() -> None:
+    # SECURITY-AUDIT-2026-06-09 H8: the public, unauthenticated monte_carlo
+    # surface allocated a (paths, years, n_assets) array + ran O(n^2)/O(n^3)
+    # correlation/Cholesky on an UNBOUNDED asset count — a tiny body amplified
+    # to a multi-GB allocation. The asset-count cap rejects it before any work.
+    too_many = [
+        {
+            "id": f"asset_{i}",
+            "label": f"Asset {i}",
+            "expectedReturn": 0.05,
+            "volatility": 0.10,
+            "lambda": 0.10,
+        }
+        for i in range(65)  # > _MAX_ASSET_CLASSES (64)
+    ]
+    r = _client().post(
+        "/mcp/tools/monte_carlo_decumulation",
+        json={**_MC_PAYLOAD, "assetClasses": too_many},
+    )
+    assert r.status_code == 400
+    assert "at most" in r.text  # "assetClasses must have at most 64 entries"
+
+
 def test_regime_return_generator_live_regime_and_matrix() -> None:
     r = _client().post(
         "/mcp/tools/regime_return_generator",

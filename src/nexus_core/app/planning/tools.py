@@ -74,6 +74,14 @@ from .universe import ASSET_UNIVERSE, proxy_tickers, universe_ids
 
 _MAX_SEED = 2**31 - 1
 _MC_MAX_PATHS = 50000
+# DoS bounds (SECURITY-AUDIT-2026-06-09 H8): the public, unauthenticated
+# monte_carlo surface allocated a (paths, years, n_assets) float64 array and
+# ran O(n^2) correlation + O(n^3) Cholesky on an UNBOUNDED asset count, so a
+# tiny request body amplified to a multi-GB allocation. Cap the asset count
+# (bounds n for every tool that builds a correlation matrix) and bound the
+# combined simulation-array cell count.
+_MAX_ASSET_CLASSES = 64
+_MC_MAX_CELLS = 50_000_000  # paths * years * n_assets float64 -> <= ~400 MB
 _RETURN_MODELS = (
     "multivariate_normal",
     "student_t",
@@ -521,6 +529,10 @@ def _validate_asset_classes(body: dict[str, Any], *, require_lambda: bool) -> li
     raw = _require(body, "assetClasses")
     if not isinstance(raw, list) or not raw:
         raise PlanningInputError("assetClasses must be a non-empty list")
+    if len(raw) > _MAX_ASSET_CLASSES:
+        raise PlanningInputError(
+            f"assetClasses must have at most {_MAX_ASSET_CLASSES} entries"
+        )
     for asset in raw:
         if not isinstance(asset, dict) or not isinstance(asset.get("id"), str):
             raise PlanningInputError("each assetClass must be an object with a string id")
@@ -734,6 +746,12 @@ def _monte_carlo_decumulation_tool(
     paths = body.get("paths", 10000)
     if isinstance(paths, bool) or not isinstance(paths, int) or not 1 <= paths <= _MC_MAX_PATHS:
         raise PlanningInputError(f"paths must be an integer in [1, {_MC_MAX_PATHS}]")
+    # Bound the (paths, years, n_assets) simulation-array allocation (H8).
+    if paths * years * len(asset_classes) > _MC_MAX_CELLS:
+        raise PlanningInputError(
+            "paths * years * assetClasses exceeds the simulation-cell budget; "
+            "reduce paths, the horizon, or the number of asset classes"
+        )
 
     correlation = _build_correlation(body, asset_ids, market)
     seed_used = _resolve_seed(body)
