@@ -42,7 +42,7 @@ pair (`BTC-USD`); crypto *options* use a Deribit code (`BTC`, `ETH`, `SOL`).
 - [MCP setup guide](https://nexusmcp.site/mcp-guide): connect Claude.ai, Claude
   Desktop (via `mcp-remote`), Cursor, or any MCP client — hosted or local.
 - MCP endpoint: `https://nexusmcp.site/mcp` (Streamable HTTP, public).
-- Local stdio server: `pip install "nexus-core[mcp]"` then `nexus-core mcp`.
+- Local stdio server: `pip install "nexus-core[mcp] @ git+https://github.com/Protocol-Wealth/nexus-core.git"` then `nexus-core mcp`.
 
 ## Docs
 - [Interactive REST docs](https://nexusmcp.site/docs)

@@ -2,9 +2,10 @@
 # Copyright 2026 Protocol Wealth, LLC and contributors.
 """Run nexus-core as an MCP server.
 
-Requires::
+Requires (install from the source repo — the bare ``nexus-core`` PyPI name is
+not Protocol Wealth's; a controlled distribution is not yet published)::
 
-    pip install nexus-core[mcp]
+    pip install "nexus-core[mcp] @ git+https://github.com/Protocol-Wealth/nexus-core.git"
 
 Then::
 
