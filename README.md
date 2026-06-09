@@ -201,24 +201,28 @@ Nexus Core stands on a foundation of exceptional open-source projects. We bundle
 
 ## Installation
 
+> **Install from the source repository.** A Protocol Wealth–controlled
+> distribution is not yet published to PyPI — the bare `nexus-core` name on PyPI
+> is **not** ours — so until a controlled distribution is published, install
+> directly from this repository (the git-pinned form below).
+
 ### Full install (all capabilities)
 
 ```bash
-pip install nexus-core[all]
+pip install "nexus-core[all] @ git+https://github.com/Protocol-Wealth/nexus-core.git"
 ```
 
 ### Modular installs (reduce dep footprint)
 
+Swap `[all]` for any single extra: `serve` (the public HTTP API + MCP server,
+nexusmcp.site) · `mcp` (local stdio MCP server) · `optimization` (PyPortfolioOpt,
+Riskfolio, skfolio) · `risk` (empyrical, pyfolio, ffn) · `pricing` (QuantLib,
+FinancePy) · `edgar` (edgartools, Arelle, sec-parser) · `market` (yfinance) ·
+`ai` (FinRL, Transformers, torch — heavy) · `backtest` (zipline-reloaded,
+alphalens). Omit the bracket entirely for core only (regime + scoring).
+
 ```bash
-pip install nexus-core                    # Core only (regime, scoring)
-pip install nexus-core[serve]             # + the public HTTP API + MCP server (nexusmcp.site)
-pip install nexus-core[optimization]      # + PyPortfolioOpt, Riskfolio, skfolio
-pip install nexus-core[risk]              # + empyrical, pyfolio, ffn
-pip install nexus-core[pricing]           # + QuantLib, FinancePy
-pip install nexus-core[edgar]             # + edgartools, Arelle, sec-parser
-pip install nexus-core[market]            # + yfinance
-pip install nexus-core[ai]                # + FinRL, Transformers, torch (heavy)
-pip install nexus-core[backtest]          # + zipline-reloaded, alphalens
+pip install "nexus-core[serve] @ git+https://github.com/Protocol-Wealth/nexus-core.git"
 ```
 
 ### From source
