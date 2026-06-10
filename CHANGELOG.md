@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Dependencies — make `[all]` (and `[backtest]`/`[onchain]`) installable again
+
+The `[all]` extra was unsatisfiable — two latent conflicts blocked any resolution
+of the full graph:
+
+#### Changed
+
+- **`pandas` pinned to `>=2.2,<3.0`** (was `>=3.0.3`). `alphalens-reloaded` (the
+  `[backtest]` extra) caps `pandas<3.0` — pandas 3.0 broke it and there is no
+  pandas-3-compatible release — so the project follows suit to keep `[backtest]`
+  installable + working at its latest (0.4.6). The core engine uses no
+  pandas-3-only API (verified), so the deployed `serve` surface is unaffected.
+  Lift the cap if/when alphalens-reloaded ships pandas-3 support.
+
+#### Removed
+
+- **`ethereum-etl` dropped from the `[onchain]` extra.** It is unused (nothing in
+  `src/` imports it) and its latest release (2.4.2) pins `web3<6`, irreconcilable
+  with the extra's `web3>=7.16.0`. The onchain data layer reads via HTTP providers
+  (DeBank / Tatum / TheGraph / Jupiter / DeFiLlama), not direct RPC; `web3` (kept
+  at the modern v7) remains for any future direct-RPC reader.
+
+With both, `uv lock` resolves the entire `[all]` graph (298 packages) — every
+other extra stays at its latest (zipline 3.1.1, web3 7.16.0, torch 2.12.0,
+numpy 2.4.6); only pandas holds at 2.3.3.
+
 ### PlanningContract v1.1.0 — employer-plan balances, survivor compression, structured ACA
 
 Additive, backward-compatible minor bump (a v1.0.0 caller still works; new fields
