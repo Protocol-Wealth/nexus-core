@@ -42,7 +42,13 @@ dependencies = [
     "structlog>=26.1.0",
     "redis>=7.4.0",
     "asyncpg>=0.31.0",
-    "pandas>=3.0.3",
+    # alphalens-reloaded (the [backtest] extra) caps pandas<3.0 — pandas 3.0
+    # broke it and there is no pandas-3-compatible release — so the whole
+    # project pins pandas<3.0 to keep [all]/[backtest] installable + working.
+    # The core engine uses no pandas-3-only API (verified), so this is a no-op
+    # for the deployed surface. Lift the cap if/when alphalens-reloaded ships
+    # pandas-3 support.
+    "pandas>=2.2,<3.0",
     "numpy>=2.4.6",
     "scipy>=1.17.1",
 ]
@@ -119,8 +125,13 @@ compliance = [
 ]
 
 # Onchain / DeFi
+# The onchain data layer (data/onchain/*) reads via HTTP providers (DeBank /
+# Tatum / TheGraph / Jupiter / DeFiLlama / etc.), not direct RPC — so web3 is
+# the forward-looking dep for any future direct-RPC reader. ethereum-etl was
+# removed: it is unused (nothing imports it) and its latest release (2.4.2)
+# pins web3<6, which is irreconcilable with web3>=7.16.0 and made this extra
+# (and [all]) unsatisfiable.
 onchain = [
-    "ethereum-etl>=2.4.2",         # MIT
     "web3>=7.16.0",                 # MIT
 ]
 
