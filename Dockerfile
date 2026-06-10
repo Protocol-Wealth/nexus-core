@@ -18,11 +18,19 @@ RUN useradd --create-home --uid 10001 nexus
 
 WORKDIR /app
 
-# Install dependencies. Only the files the build needs are copied, so a code
-# change does not invalidate the dependency layer.
-COPY pyproject.toml README.md LICENSE NOTICE ./
+# Install dependencies from the hash-pinned lock first (reproducible builds +
+# supply-chain verification — `--require-hashes` refuses any package whose
+# artifact hash isn't in the lock), then the package itself without re-resolving
+# its deps. Only the files the build needs are copied, so a code change does not
+# invalidate the dependency layer.
+#
+# Regenerate the lock after a dependency change in pyproject.toml:
+#   uv pip compile pyproject.toml --extra serve --generate-hashes \
+#     -o requirements-serve.lock
+COPY pyproject.toml README.md LICENSE NOTICE requirements-serve.lock ./
 COPY src/ ./src/
-RUN pip install ".[serve]"
+RUN pip install --require-hashes --no-deps -r requirements-serve.lock \
+ && pip install --no-deps .
 
 USER nexus
 EXPOSE 8080
