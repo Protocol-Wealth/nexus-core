@@ -59,6 +59,12 @@ def test_default_scenario_valid_structure() -> None:
     assert set(tv) == {"p10", "p25", "p50", "p75", "p90"}
     assert tv["p10"] <= tv["p25"] <= tv["p50"] <= tv["p75"] <= tv["p90"]  # monotone
     assert r["worstPathTerminal"] >= 0.0
+    assert set(r["depletionStats"]) == {
+        "failedPathCount",
+        "failedPathProbability",
+        "depletionYearPercentiles",
+    }
+    assert r["firstDecadeReturnVsOutcome"]["years"] == 10
 
 
 def test_sustainable_scenario_non_degenerate() -> None:
@@ -69,6 +75,23 @@ def test_sustainable_scenario_non_degenerate() -> None:
     )
     assert r["successProbability"] > 0.0
     assert r["terminalValues"]["p90"] > 0.0
+
+
+def test_depletion_age_stats_when_current_age_supplied() -> None:
+    r = _run(
+        current_age=60,
+        years=35,
+        initial_balance=425_287.0,
+        net_spend_by_year=[100_000 * (1.025**y) for y in range(35)],
+        return_model="multivariate_normal",
+    )
+    stats = r["depletionStats"]
+    assert stats["failedPathCount"] > 0
+    assert 0.0 < stats["failedPathProbability"] <= 1.0
+    assert set(stats["depletionYearPercentiles"]) == {"p10", "p50", "p90"}
+    assert set(stats["depletionAgePercentiles"]) == {"p10", "p50", "p90"}
+    assert stats["depletionAgePercentiles"]["p50"] >= 60
+    assert r["firstDecadeReturnVsOutcome"]["failedMedianAnnualReturn"] is not None
 
 
 def test_median_balance_length_equals_horizon_minus_current() -> None:

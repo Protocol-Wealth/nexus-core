@@ -7,11 +7,14 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
 from nexus_core.app.planning import CONTRACT_VERSION, build_planning_router
+from nexus_core.app.planning.contract import PlanningInputError
+from nexus_core.app.planning.tools import _monte_carlo_decumulation_tool
 from nexus_core.data.providers import PriceBar
 
 
@@ -167,8 +170,44 @@ def test_monte_carlo_default_scenario_non_degenerate() -> None:
     assert set(body["terminalValues"]) == {"p10", "p25", "p50", "p75", "p90"}
     assert body["terminalValues"]["p90"] > 0  # upside paths retain wealth
     assert len(body["medianBalanceByYear"]) == 50  # horizonAge - currentAge
+    assert set(body["depletionStats"]["depletionAgePercentiles"]) == {"p10", "p50", "p90"}
+    assert body["firstDecadeReturnVsOutcome"]["years"] == 10
     assert len(body["regimePathSummary"]) == 50  # emf_regime populated
     assert body["seedUsed"] == 12345
+
+
+def test_monte_carlo_spend_schedule_late_ltc_bump_lowers_success() -> None:
+    base_payload = {
+        **_MC_PAYLOAD,
+        "currentAge": 60,
+        "retirementAge": 67,
+        "horizonAge": 95,
+        "accounts": [
+            {
+                "type": "traditional",
+                "balance": 1200000,
+                "allocation": {"us_equity": 0.6, "us_bonds": 0.4},
+            }
+        ],
+        "annualSpend": 70000,
+        "paths": 3000,
+        "seed": 6789,
+    }
+    market = _FakeMarket()
+    regime = _FakeRegimeEngine()
+    base = _monte_carlo_decumulation_tool(base_payload, market, regime)
+    shocked = _monte_carlo_decumulation_tool(
+        {
+            **base_payload,
+            "spendSchedule": [
+                {"mode": "delta", "startAge": 91, "endAge": 95, "amount": 70000}
+            ],
+        },
+        market,
+        regime,
+    )
+    assert shocked["successProbability"] < base["successProbability"]
+    assert shocked["depletionStats"]["depletionAgePercentiles"]["p50"] >= 60
 
 
 def test_monte_carlo_retirement_age_lifts_success() -> None:
@@ -219,6 +258,15 @@ def test_monte_carlo_unknown_model_returns_400() -> None:
         "/mcp/tools/monte_carlo_decumulation", json={**_MC_PAYLOAD, "returnModel": "crystal_ball"}
     )
     assert r.status_code == 400
+
+
+def test_monte_carlo_invalid_spend_schedule_returns_400() -> None:
+    with pytest.raises(PlanningInputError, match="spendSchedule mode"):
+        _monte_carlo_decumulation_tool(
+            {**_MC_PAYLOAD, "spendSchedule": [{"mode": "mystery", "startAge": 91, "amount": 1}]},
+            _FakeMarket(),
+            _FakeRegimeEngine(),
+        )
 
 
 def test_monte_carlo_too_many_asset_classes_returns_400() -> None:

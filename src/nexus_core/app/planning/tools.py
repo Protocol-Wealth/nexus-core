@@ -21,7 +21,7 @@ import math
 import secrets
 import statistics
 from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from typing import Any, cast
 
 from ...data.providers import MarketDataProvider
@@ -89,6 +89,16 @@ _RETURN_MODELS = (
     "markov_regime",
     "emf_regime",
 )
+_SPEND_SCHEDULE_MODES = frozenset({"delta", "override", "one_time"})
+
+
+@dataclass(frozen=True)
+class _SpendScheduleEntry:
+    mode: str
+    start_age: int
+    end_age: int
+    amount: float
+    cola_rate: float
 
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -606,6 +616,85 @@ def _blended_weights(accounts: Any, asset_ids: list[str]) -> tuple[list[float], 
     return [weighted[aid] / total for aid in asset_ids], total
 
 
+def _as_optional_age(entry: dict[str, Any], key: str, default: int) -> int:
+    value = entry.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 < value <= 120:
+        raise PlanningInputError(f"spendSchedule {key} must be an integer age in [1, 120]")
+    return value
+
+
+def _parse_spend_schedule(body: dict[str, Any]) -> list[_SpendScheduleEntry]:
+    """Parse optional gross-spend adjustments.
+
+    ``annualSpend`` remains the base first-year spend grown by ``spendColaRate``.
+    Schedule entries modify that gross spend after retirementAge and before
+    guaranteed income is netted out:
+
+    - ``delta`` (default): add/subtract a recurring amount over an age range.
+    - ``override``: replace gross spend over an age range.
+    - ``one_time``: add/subtract once at ``startAge``.
+    """
+    raw = body.get("spendSchedule", [])
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise PlanningInputError("spendSchedule must be a list")
+
+    parsed: list[_SpendScheduleEntry] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            raise PlanningInputError("each spendSchedule entry must be an object")
+        mode = entry.get("mode", "delta")
+        if not isinstance(mode, str) or mode not in _SPEND_SCHEDULE_MODES:
+            raise PlanningInputError(
+                "spendSchedule mode must be one of delta, override, one_time"
+            )
+        start_age = _as_optional_age(entry, "startAge", 0)
+        end_age = _as_optional_age(entry, "endAge", start_age)
+        if end_age < start_age:
+            raise PlanningInputError("spendSchedule endAge must be >= startAge")
+        amount = entry.get("amount")
+        if isinstance(amount, bool) or not isinstance(amount, (int, float)):
+            raise PlanningInputError("spendSchedule amount must be a number")
+        if mode == "override" and amount < 0:
+            raise PlanningInputError("spendSchedule override amount must be non-negative")
+        cola_rate = entry.get("colaRate", 0.0)
+        if isinstance(cola_rate, bool) or not isinstance(cola_rate, (int, float)):
+            raise PlanningInputError("spendSchedule colaRate must be a number")
+        parsed.append(
+            _SpendScheduleEntry(
+                mode=mode,
+                start_age=start_age,
+                end_age=start_age if mode == "one_time" else end_age,
+                amount=float(amount),
+                cola_rate=float(cola_rate),
+            )
+        )
+    return parsed
+
+
+def _apply_spend_schedule(
+    *,
+    base_spend: float,
+    age: int,
+    entries: list[_SpendScheduleEntry],
+) -> float:
+    spend = base_spend
+    override_seen = False
+    for entry in entries:
+        if not entry.start_age <= age <= entry.end_age:
+            continue
+        amount = entry.amount * (1.0 + entry.cola_rate) ** (age - entry.start_age)
+        if entry.mode == "override":
+            if override_seen:
+                raise PlanningInputError("spendSchedule override entries must not overlap")
+            spend = amount
+            override_seen = True
+        else:
+            spend += amount
+    return spend
+
+
 def _net_spend_schedule(
     *,
     current_age: int,
@@ -640,6 +729,7 @@ def _net_spend_schedule(
             )
         parsed.append((float(amount), start, float(cola)))
 
+    spend_entries = _parse_spend_schedule(body)
     schedule: list[float] = []
     for year in range(years):
         age = current_age + year
@@ -647,6 +737,7 @@ def _net_spend_schedule(
             schedule.append(0.0)  # accumulation: portfolio grows untouched
             continue
         spend = annual_spend * (1.0 + spend_cola) ** year
+        spend = _apply_spend_schedule(base_spend=spend, age=age, entries=spend_entries)
         income_total = sum(
             amount * (1.0 + cola) ** (age - start) for amount, start, cola in parsed if age >= start
         )
@@ -775,6 +866,7 @@ def _monte_carlo_decumulation_tool(
         seed=seed_used,
         regime_seed=regime_seed,
         current_regime=current_regime,
+        current_age=current_age,
     )
 
 

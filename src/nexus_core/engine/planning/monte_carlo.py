@@ -105,6 +105,7 @@ def monte_carlo_decumulation(
     seed: int,
     regime_seed: int,
     current_regime: str,
+    current_age: int | None = None,
 ) -> dict[str, Any]:
     """Run the decumulation simulation and return the contract response fields."""
     w = np.asarray(weights, dtype=float)
@@ -137,19 +138,56 @@ def monte_carlo_decumulation(
     net = np.asarray(net_spend_by_year, dtype=float)
     balance = np.full(paths, float(initial_balance))
     median_by_year = np.empty(years)
+    first_depletion_year = np.full(paths, -1, dtype=int)
     for year in range(years):
         balance = (balance - net[year]) * (1.0 + port_returns[:, year])
         np.maximum(balance, 0.0, out=balance)
+        newly_depleted = (first_depletion_year < 0) & (balance <= 0.0)
+        first_depletion_year[newly_depleted] = year
         median_by_year[year] = float(np.median(balance))
 
     terminal = balance
     percentiles = np.percentile(terminal, [10, 25, 50, 75, 90])
+    failed = first_depletion_year >= 0
+    failed_years = first_depletion_year[failed]
+
+    def _percentile_map(values: np.ndarray) -> dict[str, float]:
+        if values.size == 0:
+            return {}
+        pct = np.percentile(values, [10, 50, 90])
+        return {f"p{p}": round(float(v), 2) for p, v in zip([10, 50, 90], pct, strict=True)}
+
+    first_decade_years = min(10, years)
+    first_decade_returns = np.mean(port_returns[:, :first_decade_years], axis=1)
+    survived = terminal > 0.0
+
+    def _median_or_none(values: np.ndarray) -> float | None:
+        if values.size == 0:
+            return None
+        return round(float(np.median(values)), 4)
+
+    depletion_stats: dict[str, Any] = {
+        "failedPathCount": int(failed.sum()),
+        "failedPathProbability": round(float(np.mean(failed)), 4),
+        "depletionYearPercentiles": _percentile_map(failed_years.astype(float)),
+    }
+    if current_age is not None:
+        depletion_stats["depletionAgePercentiles"] = _percentile_map(
+            (failed_years + current_age).astype(float)
+        )
+
     return {
         "successProbability": round(float(np.mean(terminal > 0.0)), 4),
         "terminalValues": {
             f"p{p}": round(float(v), 2) for p, v in zip([10, 25, 50, 75, 90], percentiles, strict=True)
         },
         "medianBalanceByYear": [round(float(v), 2) for v in median_by_year],
+        "depletionStats": depletion_stats,
+        "firstDecadeReturnVsOutcome": {
+            "years": first_decade_years,
+            "successfulMedianAnnualReturn": _median_or_none(first_decade_returns[survived]),
+            "failedMedianAnnualReturn": _median_or_none(first_decade_returns[~survived]),
+        },
         "worstPathTerminal": round(float(terminal.min()), 2),
         "regimePathSummary": regime_summary,
         "seedUsed": seed,

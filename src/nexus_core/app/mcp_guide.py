@@ -272,18 +272,23 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     <code>monte_carlo_decumulation</code> takes an optional <code>retirementAge</code>:
     the portfolio accumulates untouched until that age, then decumulates. Omit it
     and the engine withdraws from <code>currentAge</code>; pwplan-core's UI defaults
-    the field to <strong>65</strong>. Inputs are de-identified — the engine is
-    PII-free and works on age, never date of birth. Monte Carlo and scenario
-    outputs are illustrative model results from hypothetical assumptions — not
-    predictions or guarantees of any individual outcome.
+    the field to <strong>65</strong>. Optional <code>spendSchedule</code> entries
+    adjust the gross spend after retirement age: <code>delta</code> adds a
+    recurring bump/reduction over an age range, <code>override</code> replaces
+    the base spend for an age range, and <code>one_time</code> adds a single
+    lump expense. Inputs are de-identified — the engine is PII-free and works
+    on age, never date of birth. Monte Carlo and scenario outputs are
+    illustrative model results from hypothetical assumptions — not predictions
+    or guarantees of any individual outcome.
   </div>
   <h3>A worked request — the primary tool</h3>
   <p>
     <code>monte_carlo_decumulation</code> over a de-identified portfolio. The
     response echoes <code>contractVersion</code> and carries
     <code>successProbability</code>, a <code>terminalValues</code> percentile map,
-    <code>medianBalanceByYear</code>, and a <code>regimePathSummary</code> for the
-    regime-aware models:
+    <code>medianBalanceByYear</code>, <code>depletionStats</code>,
+    <code>firstDecadeReturnVsOutcome</code>, and a <code>regimePathSummary</code>
+    for the regime-aware models:
   </p>
   <pre><code>curl -s {mcp_url}tools/monte_carlo_decumulation \\
   -H 'content-type: application/json' \\
@@ -304,6 +309,9 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     "guaranteedIncome": [
       {{"label": "Social Security", "annualAmount": 42000,
        "startAge": 67, "colaRate": 0.02}}
+    ],
+    "spendSchedule": [
+      {{"mode": "delta", "startAge": 91, "endAge": 95, "amount": 70000}}
     ],
     "filingStatus": "married_joint", "returnModel": "emf_regime", "paths": 10000
   }}'</code></pre>

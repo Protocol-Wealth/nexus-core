@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Monte Carlo decumulation — spend schedule + sequence diagnostics
+
+#### Added
+
+- **Input: `spendSchedule`** on `monte_carlo_decumulation` — optional gross-spend
+  adjustments after `retirementAge`: recurring `delta` bumps/reductions, age-range
+  `override` amounts, and `one_time` lump expenses. This makes late-life shocks
+  such as LTC costs first-class instead of forcing a flat-spend proxy.
+- **Output: `depletionStats`** — failed-path count/probability plus conditional
+  depletion-year percentiles, and depletion-age percentiles when `currentAge` is
+  known through the planning gateway.
+- **Output: `firstDecadeReturnVsOutcome`** — median first-decade annual return for
+  successful vs. failed paths, exposing sequence-of-returns sensitivity without
+  changing the existing success/terminal/median-balance fields.
+
 ### Dependencies — make `[all]` (and `[backtest]`/`[onchain]`) installable again
 
 The `[all]` extra was unsatisfiable — two latent conflicts blocked any resolution
