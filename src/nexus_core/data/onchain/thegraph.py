@@ -49,9 +49,9 @@ CHAIN_IDS: dict[str, int] = {
     "polygon": 137,
 }
 
-_V3_POSITION_QUERY = """
-query Position($id: String!) {
-  position(id: $id) {
+# The per-position + pool field selection, shared by the single-position and
+# by-owner queries (so both parse into the same RawV3Position via _parse_position).
+_V3_POSITION_FIELDS = """
     id
     owner
     liquidity
@@ -71,8 +71,28 @@ query Position($id: String!) {
       token1 { id symbol decimals }
       poolDayData(first: 7, orderBy: date, orderDirection: desc) { volumeUSD }
     }
-  }
-}
+"""
+
+_V3_POSITION_QUERY = f"""
+query Position($id: String!) {{
+  position(id: $id) {{
+{_V3_POSITION_FIELDS}  }}
+}}
+"""
+
+# Enumerate the OPEN (liquidity > 0) Uniswap V3 positions an address owns —
+# anonymous public on-chain data (input is a public address + chain). The
+# subgraph stores owner lowercased, so callers lowercase before querying.
+_V3_POSITIONS_BY_OWNER_QUERY = f"""
+query PositionsByOwner($owner: String!, $first: Int!) {{
+  positions(
+    where: {{ owner: $owner, liquidity_gt: "0" }}
+    first: $first
+    orderBy: liquidity
+    orderDirection: desc
+  ) {{
+{_V3_POSITION_FIELDS}  }}
+}}
 """
 
 
@@ -117,6 +137,51 @@ def _to_float(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _parse_position(
+    pos: Any, chain: str, *, fallback_token_id: str = ""
+) -> RawV3Position | None:
+    """Parse one subgraph ``position`` node (+ its embedded pool) to a typed row.
+
+    Shared by the single-position and by-owner queries. ``None`` when the node
+    is malformed (missing pool/position object).
+    """
+    if not isinstance(pos, dict) or not isinstance(pos.get("pool"), dict):
+        return None
+    pool = pos["pool"]
+    t0, t1 = pool.get("token0") or {}, pool.get("token1") or {}
+
+    day_data = pool.get("poolDayData") or []
+    volumes = [_to_float(d.get("volumeUSD")) for d in day_data if isinstance(d, dict)]
+    if volumes:
+        avg_daily_volume = sum(volumes) / len(volumes)
+    else:
+        avg_daily_volume = _to_float(pool.get("volumeUSD")) / 365
+
+    return RawV3Position(
+        token_id=str(pos.get("id") or fallback_token_id),
+        chain=chain.lower(),
+        owner=str(pos.get("owner") or ""),
+        liquidity=_to_int(pos.get("liquidity")),
+        tick_lower=_to_int((pos.get("tickLower") or {}).get("tickIdx")),
+        tick_upper=_to_int((pos.get("tickUpper") or {}).get("tickIdx")),
+        deposited0=_to_float(pos.get("depositedToken0")),
+        deposited1=_to_float(pos.get("depositedToken1")),
+        pool_address=str(pool.get("id") or ""),
+        current_tick=_to_int(pool.get("tick")),
+        sqrt_price_x96=_to_int(pool.get("sqrtPrice")),
+        fee_tier=_to_int(pool.get("feeTier"), 3000),
+        pool_liquidity=_to_int(pool.get("liquidity")),
+        pool_tvl_usd=_to_float(pool.get("totalValueLockedUSD")),
+        pool_avg_daily_volume_usd=avg_daily_volume,
+        token0_address=str(t0.get("id") or ""),
+        token1_address=str(t1.get("id") or ""),
+        token0_symbol=str(t0.get("symbol") or "?"),
+        token1_symbol=str(t1.get("symbol") or "?"),
+        decimals0=_to_int(t0.get("decimals"), 18),
+        decimals1=_to_int(t1.get("decimals"), 18),
+    )
 
 
 class TheGraphClient:
@@ -175,42 +240,36 @@ class TheGraphClient:
         data = self._query(subgraph_id, _V3_POSITION_QUERY, {"id": str(token_id)})
         if not isinstance(data, dict):
             return None
-        pos = data.get("position")
-        if not isinstance(pos, dict) or not isinstance(pos.get("pool"), dict):
-            return None
-        pool = pos["pool"]
-        t0, t1 = pool.get("token0") or {}, pool.get("token1") or {}
+        return _parse_position(data.get("position"), chain, fallback_token_id=str(token_id))
 
-        day_data = pool.get("poolDayData") or []
-        volumes = [_to_float(d.get("volumeUSD")) for d in day_data if isinstance(d, dict)]
-        if volumes:
-            avg_daily_volume = sum(volumes) / len(volumes)
-        else:
-            avg_daily_volume = _to_float(pool.get("volumeUSD")) / 365
+    def fetch_v3_positions_by_owner(
+        self, chain: str, owner: str, *, first: int = 100
+    ) -> list[RawV3Position]:
+        """Enumerate the open (liquidity > 0) Uniswap V3 positions an address owns.
 
-        return RawV3Position(
-            token_id=str(pos.get("id") or token_id),
-            chain=chain.lower(),
-            owner=str(pos.get("owner") or ""),
-            liquidity=_to_int(pos.get("liquidity")),
-            tick_lower=_to_int((pos.get("tickLower") or {}).get("tickIdx")),
-            tick_upper=_to_int((pos.get("tickUpper") or {}).get("tickIdx")),
-            deposited0=_to_float(pos.get("depositedToken0")),
-            deposited1=_to_float(pos.get("depositedToken1")),
-            pool_address=str(pool.get("id") or ""),
-            current_tick=_to_int(pool.get("tick")),
-            sqrt_price_x96=_to_int(pool.get("sqrtPrice")),
-            fee_tier=_to_int(pool.get("feeTier"), 3000),
-            pool_liquidity=_to_int(pool.get("liquidity")),
-            pool_tvl_usd=_to_float(pool.get("totalValueLockedUSD")),
-            pool_avg_daily_volume_usd=avg_daily_volume,
-            token0_address=str(t0.get("id") or ""),
-            token1_address=str(t1.get("id") or ""),
-            token0_symbol=str(t0.get("symbol") or "?"),
-            token1_symbol=str(t1.get("symbol") or "?"),
-            decimals0=_to_int(t0.get("decimals"), 18),
-            decimals1=_to_int(t1.get("decimals"), 18),
+        Anonymous public on-chain data — input is a public address + chain,
+        output is each position's pool/range/liquidity state. Returns ``[]`` on
+        an unsupported chain, an unconfigured key, or any failure.
+        """
+        subgraph_id = _V3_SUBGRAPHS.get(chain.lower())
+        if subgraph_id is None:
+            return []
+        data = self._query(
+            subgraph_id,
+            _V3_POSITIONS_BY_OWNER_QUERY,
+            {"owner": owner.lower(), "first": max(1, min(first, 1000))},
         )
+        if not isinstance(data, dict):
+            return []
+        rows = data.get("positions")
+        if not isinstance(rows, list):
+            return []
+        out: list[RawV3Position] = []
+        for row in rows:
+            parsed = _parse_position(row, chain)
+            if parsed is not None:
+                out.append(parsed)
+        return out
 
 
 __all__ = ["CHAIN_IDS", "RawV3Position", "TheGraphClient"]

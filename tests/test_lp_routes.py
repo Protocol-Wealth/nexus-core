@@ -48,6 +48,12 @@ def _mk(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.Client:
 
 
 def _graph_handler(request: httpx.Request) -> httpx.Response:
+    body = json.loads(request.read())
+    if "PositionsByOwner" in body.get("query", ""):
+        # The by-owner query returns a list under `positions`.
+        return httpx.Response(
+            200, json={"data": {"positions": [_POSITION_DATA["data"]["position"]]}}
+        )
     return httpx.Response(200, json=_POSITION_DATA)
 
 
@@ -146,6 +152,39 @@ def test_lp_analytics_fields() -> None:
 
 def test_lp_bad_chain_400() -> None:
     r = TestClient(_app()).get("/api/lp/uniswap-v3/solana/1/analytics?price_token0_usd=1&price_token1_usd=1")
+    assert r.status_code == 400
+
+
+_OWNER = "0x698d11bce7f9094beb4bffc9739f270923443135"
+
+
+def test_lp_positions_by_owner() -> None:
+    r = TestClient(_app()).get(f"/api/lp/uniswap-v3/ethereum/positions?owner={_OWNER}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["owner"] == _OWNER
+    assert body["count"] == 1
+    pos = body["positions"][0]
+    assert pos["token_id"] == "123"
+    assert pos["in_range"] is True  # tick 200 in [100, 300]
+    assert pos["fee_tier"] == 3000
+    assert pos["token0"]["symbol"] == "USDC"
+    assert pos["token1"]["decimals"] == 18
+    # token amounts are present (price-independent) + uncollected fees from RPC
+    assert pos["amount0"] >= 0
+    assert pos["amount1"] >= 0
+    assert pos["uncollected_fees"]["source"] == "rpc_tokens_owed"
+    assert pos["uncollected_fees"]["token0"] == 1.0  # 1_000_000 / 1e6
+    assert "disclaimer" in body
+
+
+def test_lp_positions_bad_owner_400() -> None:
+    r = TestClient(_app()).get("/api/lp/uniswap-v3/ethereum/positions?owner=not-an-address")
+    assert r.status_code == 400
+
+
+def test_lp_positions_bad_chain_400() -> None:
+    r = TestClient(_app()).get(f"/api/lp/uniswap-v3/solana/positions?owner={_OWNER}")
     assert r.status_code == 400
 
 
