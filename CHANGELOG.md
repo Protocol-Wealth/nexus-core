@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Uniswap V3 — enumerate the positions an address owns
+
+#### Added
+
+- **`GET /api/lp/uniswap-v3/{chain}/positions?owner=`** — list the open
+  (liquidity > 0) Uniswap V3 positions an EVM address owns, on ethereum / base /
+  optimism / polygon. Per position: pool, fee tier, tick range, in-range, current
+  token amounts, and uncollected fees — in **token units** (no USD; valuation
+  still needs the per-token prices the analytics route takes). Anonymous public
+  on-chain data (input is a public address + chain). Complements the existing
+  by-`token_id` analytics route, which required you to already know the NFT id.
+- **`TheGraphClient.fetch_v3_positions_by_owner(chain, owner)`** — the subgraph
+  `positions(where: {owner, liquidity_gt: 0})` enumeration backing it; the
+  single-position + by-owner queries now share one `_parse_position` helper.
+
 ### Monte Carlo decumulation — spend schedule + sequence diagnostics
 
 #### Added

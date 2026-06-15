@@ -105,3 +105,40 @@ def test_missing_position_degrades_to_none() -> None:
         return httpx.Response(200, json={"data": {"position": None}})
 
     assert TheGraphClient(api_key="k", http_client=_client(handler)).fetch_v3_position("ethereum", "9") is None
+
+
+def test_fetch_v3_positions_by_owner_parses_list() -> None:
+    node = _POSITION_DATA["data"]["position"]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = request.read().decode()
+        assert "PositionsByOwner" in body
+        assert "0xowner".lower() in body  # owner is lowercased before query
+        return httpx.Response(200, json={"data": {"positions": [node, node]}})
+
+    rows = TheGraphClient(api_key="k", http_client=_client(handler)).fetch_v3_positions_by_owner(
+        "ethereum", "0xOWNER"
+    )
+    assert len(rows) == 2
+    assert rows[0].token_id == "123"
+    assert rows[0].fee_tier == 3000
+
+
+def test_fetch_v3_positions_by_owner_unsupported_chain_no_request() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover
+        raise AssertionError("no request for an unsupported chain")
+
+    rows = TheGraphClient(api_key="k", http_client=_client(handler)).fetch_v3_positions_by_owner(
+        "solana", "0xowner"
+    )
+    assert rows == []
+
+
+def test_fetch_v3_positions_by_owner_degrades_to_empty() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"errors": [{"message": "boom"}]})
+
+    rows = TheGraphClient(api_key="k", http_client=_client(handler)).fetch_v3_positions_by_owner(
+        "ethereum", "0xowner"
+    )
+    assert rows == []

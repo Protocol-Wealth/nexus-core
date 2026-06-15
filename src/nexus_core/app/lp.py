@@ -24,6 +24,7 @@ nexus-core has no ERC-20-address → USD path yet (auto-pricing is future work).
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict
 from typing import Annotated, Any
 
@@ -38,8 +39,15 @@ from ..data.onchain import (
     TheGraphClient,
 )
 from ..disclaimers import TERSE
-from ..engine.lp import PositionAnalytics, analyze_uniswap_v3_position
+from ..engine.lp import (
+    PositionAnalytics,
+    analyze_uniswap_v3_position,
+    get_amounts_for_liquidity,
+    is_in_range,
+)
 from .benchmarks import fetch_benchmark_series
+
+_EVM_ADDRESS_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
 
 _LP_TTL = 60
 _METHODOLOGY = (
@@ -59,6 +67,12 @@ _AERODROME_NOTE = (
     "amounts, and uncollected fees only. Impermanent loss (needs deposit history), "
     "fee APR (needs pool volume), and AERO gauge reward APR are NOT available in "
     "on-chain-only mode and are reported as null/zero."
+)
+_POSITIONS_NOTE = (
+    "Open Uniswap V3 positions an address owns. Token amounts + uncollected fees are "
+    "in TOKEN units (current underlying via the pool sqrtPrice + the position's range "
+    "+ liquidity; fees as of the position's last interaction). USD valuation needs "
+    "per-token prices — pass them to the per-position analytics route."
 )
 
 
@@ -116,6 +130,58 @@ def build_lp_router(
         )
         return result, ("rpc_tokens_owed" if owed is not None else "unavailable")
 
+    def _list_positions(chain: str, owner: str, limit: int) -> list[dict[str, Any]]:
+        """Enumerate an address's open positions → per-position on-chain state.
+
+        Token amounts + uncollected fees in TOKEN units (no USD — that needs the
+        per-token prices the analytics route takes).
+        """
+        rows: list[dict[str, Any]] = []
+        for pos in thegraph.fetch_v3_positions_by_owner(chain, owner, first=limit):
+            amount0, amount1 = get_amounts_for_liquidity(
+                pos.sqrt_price_x96,
+                pos.tick_lower,
+                pos.tick_upper,
+                pos.liquidity,
+                pos.decimals0,
+                pos.decimals1,
+            )
+            owed = tatum.nfpm_tokens_owed(
+                chain, pos.token_id, decimals0=pos.decimals0, decimals1=pos.decimals1
+            )
+            uncollected0, uncollected1 = owed if owed is not None else (0.0, 0.0)
+            rows.append(
+                {
+                    "token_id": pos.token_id,
+                    "chain": pos.chain,
+                    "pool_address": pos.pool_address,
+                    "fee_tier": pos.fee_tier,
+                    "token0": {
+                        "address": pos.token0_address,
+                        "symbol": pos.token0_symbol,
+                        "decimals": pos.decimals0,
+                    },
+                    "token1": {
+                        "address": pos.token1_address,
+                        "symbol": pos.token1_symbol,
+                        "decimals": pos.decimals1,
+                    },
+                    "tick_lower": pos.tick_lower,
+                    "tick_upper": pos.tick_upper,
+                    "current_tick": pos.current_tick,
+                    "in_range": is_in_range(pos.current_tick, pos.tick_lower, pos.tick_upper),
+                    "liquidity": str(pos.liquidity),
+                    "amount0": amount0,
+                    "amount1": amount1,
+                    "uncollected_fees": {
+                        "token0": uncollected0,
+                        "token1": uncollected1,
+                        "source": "rpc_tokens_owed" if owed is not None else "unavailable",
+                    },
+                }
+            )
+        return rows
+
     def _guard(chain: str) -> None:
         if chain.lower() not in TheGraphClient.supported_chains():
             raise HTTPException(
@@ -134,6 +200,35 @@ def build_lp_router(
                 {"chain": c, "protocol": "uniswap", "version": "v3"}
                 for c in TheGraphClient.supported_chains()
             ],
+            "disclaimer": _DISCLAIMER,
+        }
+
+    @router.get(
+        "/uniswap-v3/{chain}/positions",
+        summary="Uniswap V3 positions owned by an address",
+    )
+    def positions_by_owner(
+        response: Response,
+        chain: Annotated[str, Path(description="Chain key, e.g. ethereum")],
+        owner: Annotated[str, Query(description="EVM address (0x…) that owns the positions")],
+        limit: Annotated[int, Query(ge=1, le=200, description="Max positions to return")] = 100,
+    ) -> dict[str, Any]:
+        """List the open Uniswap V3 positions an address owns.
+
+        Per position: pool, fee tier, range, in-range, current token amounts, and
+        uncollected fees (token units). Anonymous public on-chain data.
+        """
+        _guard(chain)
+        if not _EVM_ADDRESS_RE.match(owner):
+            raise HTTPException(status_code=400, detail="owner must be a 0x EVM address")
+        positions = _list_positions(chain, owner, limit)
+        response.headers["Cache-Control"] = f"public, max-age={_LP_TTL}"
+        return {
+            "chain": chain.lower(),
+            "owner": owner.lower(),
+            "count": len(positions),
+            "positions": positions,
+            "note": _POSITIONS_NOTE,
             "disclaimer": _DISCLAIMER,
         }
 
