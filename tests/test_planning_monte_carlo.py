@@ -99,6 +99,25 @@ def test_median_balance_length_equals_horizon_minus_current() -> None:
     assert len(_run(years=30, net_spend_by_year=_net_spend(30))["medianBalanceByYear"]) == 30
 
 
+def test_balance_percentiles_by_year_is_a_valid_fan() -> None:
+    # The projection fan: p10..p90 balance bands at each year, monotone per year,
+    # one value per horizon year, and the p50 band == medianBalanceByYear.
+    r = _run(years=30, net_spend_by_year=_net_spend(30))
+    bands = r["balancePercentilesByYear"]
+    assert set(bands) == {"p10", "p25", "p50", "p75", "p90"}
+    for key in bands:
+        assert len(bands[key]) == 30
+    for y in range(30):
+        assert (
+            bands["p10"][y]
+            <= bands["p25"][y]
+            <= bands["p50"][y]
+            <= bands["p75"][y]
+            <= bands["p90"][y]
+        )
+    assert bands["p50"] == r["medianBalanceByYear"]
+
+
 def test_determinism_same_seed_identical() -> None:
     assert _run(seed=99, regime_seed=99) == _run(seed=99, regime_seed=99)
 
