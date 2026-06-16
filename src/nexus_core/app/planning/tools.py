@@ -29,6 +29,7 @@ from ...disclaimers import FULL
 from ...engine.planning import (
     GlidePathShape,
     InfeasiblePlanError,
+    analyze_goals,
     analyze_roth_conversion,
     bracket_headroom,
     compute_glide_path,
@@ -338,6 +339,61 @@ def fire_tool(body: dict[str, Any]) -> dict[str, Any]:
             growth_rate=_as_number(body, "growthRate"),
             annual_spend=_as_number(body, "annualSpend"),
             swr=float(swr),
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+#: ``analyze_goals`` wire field (camelCase) → engine field (snake_case). The
+#: wire contract is identity-free: NO free-text label — only an opaque ``id``,
+#: the enum ``kind``, and numbers. The consumer re-attaches labels by id.
+_GOAL_FIELD_MAP = {
+    "id": "id",
+    "kind": "kind",
+    "targetAmount": "target_amount",
+    "yearsToGoal": "years_to_goal",
+    "currentAssets": "current_assets",
+    "monthlyContribution": "monthly_contribution",
+    "fundingYears": "funding_years",
+    "inflationRate": "inflation_rate",
+    "expectedReturn": "expected_return",
+}
+
+_MAX_GOALS = 100
+
+
+def analyze_goals_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``analyze_goals`` — per-goal funding status + a present-value aggregate."""
+    raw_goals = _require(body, "goals")
+    if not isinstance(raw_goals, list) or not raw_goals:
+        raise PlanningInputError("goals must be a non-empty list")
+    if len(raw_goals) > _MAX_GOALS:
+        raise PlanningInputError(f"at most {_MAX_GOALS} goals are supported")
+    goals: list[dict[str, Any]] = []
+    for index, raw in enumerate(raw_goals):
+        if not isinstance(raw, dict):
+            raise PlanningInputError(f"goals[{index}] must be an object")
+        kind = raw.get("kind")
+        if kind is not None and (not isinstance(kind, str) or not kind):
+            raise PlanningInputError(f"goals[{index}].kind must be a non-empty string")
+        translated: dict[str, Any] = {}
+        for wire_key, engine_key in _GOAL_FIELD_MAP.items():
+            if wire_key in raw and raw[wire_key] is not None:
+                translated[engine_key] = raw[wire_key]
+        goals.append(translated)
+
+    default_inflation = body.get("defaultInflationRate", 0.025)
+    if isinstance(default_inflation, bool) or not isinstance(default_inflation, (int, float)):
+        raise PlanningInputError("defaultInflationRate must be a number or omitted")
+    default_return = body.get("defaultExpectedReturn", 0.05)
+    if isinstance(default_return, bool) or not isinstance(default_return, (int, float)):
+        raise PlanningInputError("defaultExpectedReturn must be a number or omitted")
+
+    try:
+        return analyze_goals(
+            goals=goals,
+            default_inflation_rate=float(default_inflation),
+            default_expected_return=float(default_return),
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
@@ -1392,6 +1448,7 @@ def build_tool_handlers(
 
     return {
         "monte_carlo_decumulation": monte_carlo_decumulation_tool,
+        "analyze_goals": analyze_goals_tool,
         "glide_path": glide_path_tool,
         "tax_aware_withdrawal": tax_aware_withdrawal_tool,
         "correlation_matrix": correlation_matrix_tool,
@@ -1417,6 +1474,7 @@ def build_tool_handlers(
 
 __all__ = [
     "ToolHandler",
+    "analyze_goals_tool",
     "analyze_roth_conversion_tool",
     "build_tool_handlers",
     "fire_tool",

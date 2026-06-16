@@ -873,3 +873,60 @@ def test_analyze_caller_injected_state_rule_is_flagged() -> None:
     r = _client().post("/mcp/tools/analyze_roth_conversion", json=body)
     assert r.status_code == 200, r.text
     assert r.json()["snapshot"]["state_rule_source"] == "caller_provided"
+
+
+def test_analyze_goals_happy_path() -> None:
+    payload = {
+        "contractVersion": "0.1.0",
+        "goals": [
+            {
+                "id": "college-1",
+                "kind": "education",
+                "targetAmount": 200_000,
+                "yearsToGoal": 10,
+                "currentAssets": 40_000,
+                "monthlyContribution": 500,
+                "fundingYears": 4,
+                "inflationRate": 0.05,
+                "expectedReturn": 0.06,
+            },
+            {
+                "id": "home-1",
+                "kind": "home",
+                "targetAmount": 150_000,
+                "yearsToGoal": 5,
+            },
+        ],
+    }
+    r = _client().post("/mcp/tools/analyze_goals", json=payload)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert len(body["goals"]) == 2
+    first = body["goals"][0]
+    assert first["id"] == "college-1"  # opaque id echoed; no label in the contract
+    assert first["fundingYears"] == 4
+    assert 0.0 <= first["fundedPct"] <= 100.0
+    assert first["status"] in {"funded", "on_track", "underfunded"}
+    assert body["aggregate"]["goalCount"] == 2
+    assert 0.0 <= body["aggregate"]["overallFundedPct"] <= 100.0
+
+
+def test_analyze_goals_bad_target_400() -> None:
+    r = _client().post(
+        "/mcp/tools/analyze_goals",
+        json={
+            "contractVersion": "0.1.0",
+            "goals": [{"id": "g", "targetAmount": -1, "yearsToGoal": 5}],
+        },
+    )
+    assert r.status_code == 400
+    assert "target_amount" in r.text
+
+
+def test_analyze_goals_empty_list_400() -> None:
+    r = _client().post(
+        "/mcp/tools/analyze_goals",
+        json={"contractVersion": "0.1.0", "goals": []},
+    )
+    assert r.status_code == 400
