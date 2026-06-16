@@ -12,6 +12,7 @@ any specific person's outcome.
 
 from .analysis import RothConversionAnalysis
 from .bracket_headroom import bracket_headroom
+from .cash_flow_projection import project_cash_flow
 from .case import (
     PLANNING_CONTRACT_VERSION,
     PlanningContract,
@@ -70,6 +71,7 @@ __all__ = [
     "monte_carlo_decumulation",
     "planning_contract_schema",
     "portfolio_xray",
+    "project_cash_flow",
     "rebalance",
     "reference_aca_situation",
     "reference_bracket_table",
