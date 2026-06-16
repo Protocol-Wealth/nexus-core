@@ -25,6 +25,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, cast
 
 from ...data.providers import MarketDataProvider
+from ...disclaimers import FULL
 from ...engine.planning import (
     GlidePathShape,
     InfeasiblePlanError,
@@ -70,6 +71,7 @@ from ...engine.planning.tables import (
 from ...engine.planning.tax import FilingStatus
 from ...engine.regime import RegimeEngine
 from .contract import PlanningInfeasibleError, PlanningInputError
+from .report import assemble_report
 from .universe import ASSET_UNIVERSE, proxy_tickers, universe_ids
 
 _MAX_SEED = 2**31 - 1
@@ -522,6 +524,356 @@ def _capital_market_assumptions_tool(
 
     correlations = correlation_matrix(returns_by_id, shrinkage=True)
     return {"assetClasses": asset_classes, "correlations": correlations, "asOf": resolved_as_of}
+
+
+#: ``riskProfile`` → mean-variance risk-aversion (lambda) for max_quadratic_utility.
+#: Higher lambda penalizes variance more (conservative, bond-tilted); lower
+#: tolerates it (aggressive, return-tilted). Monotonic across the efficient frontier.
+RISK_AVERSION_BY_PROFILE: dict[str, float] = {
+    "conservative": 8.0,
+    "moderate_conservative": 5.0,
+    "moderate": 3.0,
+    "moderate_aggressive": 1.75,
+    "aggressive": 1.0,
+}
+
+#: Objectives the moments-driven allocator accepts (mirrors MOMENT_OBJECTIVES;
+#: kept local so importing tools.py never imports the optimization package).
+_ALLOCATION_OBJECTIVES = frozenset(
+    {"max_sharpe", "min_volatility", "max_quadratic_utility", "efficient_return", "efficient_risk"}
+)
+
+
+def _resolve_allocation_universe(body: dict[str, Any]) -> list[str]:
+    """Validate ``assetClassIds`` (default = full universe) for the allocator."""
+    raw_ids = body.get("assetClassIds")
+    if raw_ids is None or raw_ids == []:
+        ids = universe_ids()
+    elif isinstance(raw_ids, list) and all(isinstance(x, str) for x in raw_ids):
+        ids = raw_ids
+    else:
+        raise PlanningInputError("assetClassIds must be a list of strings (or omitted)")
+    if len(set(ids)) != len(ids):
+        raise PlanningInputError("assetClassIds must be unique")
+    unknown = [i for i in ids if i not in ASSET_UNIVERSE]
+    if unknown:
+        raise PlanningInputError(
+            f"unknown asset class id(s): {', '.join(unknown)}. "
+            f"Known asset classes: {', '.join(universe_ids())}."
+        )
+    if len(ids) < 2:
+        raise PlanningInputError("optimize_allocation needs at least 2 asset classes")
+    if len(ids) > _MAX_ASSET_CLASSES:
+        raise PlanningInputError(f"at most {_MAX_ASSET_CLASSES} asset classes are supported")
+    return ids
+
+
+def _resolve_weight_bounds(body: dict[str, Any], n_assets: int) -> tuple[float, float]:
+    """Validate optional ``weightBounds`` ([min, max]); default (0, 1)."""
+    raw = body.get("weightBounds")
+    if raw is None:
+        return (0.0, 1.0)
+    if (
+        not isinstance(raw, list)
+        or len(raw) != 2
+        or any(isinstance(b, bool) or not isinstance(b, (int, float)) for b in raw)
+    ):
+        raise PlanningInputError("weightBounds must be a [min, max] pair of numbers")
+    lo, hi = float(raw[0]), float(raw[1])
+    if not 0.0 <= lo <= hi <= 1.0:
+        raise PlanningInputError("weightBounds must satisfy 0 <= min <= max <= 1")
+    if hi * n_assets < 1.0:
+        raise PlanningInfeasibleError(
+            f"weightBounds upper bound {hi} is too low for {n_assets} assets "
+            f"(a fully-invested portfolio needs an upper bound >= {1.0 / n_assets:.3f})"
+        )
+    if lo * n_assets > 1.0:
+        raise PlanningInfeasibleError(
+            f"weightBounds lower bound {lo} is too high for {n_assets} assets "
+            f"(the minimum weights already exceed 100%; need a lower bound <= {1.0 / n_assets:.3f})"
+        )
+    return (lo, hi)
+
+
+def _resolve_allocation_objective(
+    body: dict[str, Any], live_regime: str, regime_optimizer_map: dict[str, str]
+) -> tuple[str, str, float, float | None, float | None]:
+    """Resolve (objective, source, riskAversion, targetReturn, targetVolatility).
+
+    Precedence: explicit ``objective`` > ``riskProfile`` > (``regimeAware`` ⇒
+    regime-selected) > ``max_sharpe``. ``riskProfile`` maps to
+    ``max_quadratic_utility`` at the profile's risk-aversion.
+    """
+    objective = body.get("objective")
+    risk_profile = body.get("riskProfile")
+    risk_aversion = 1.0
+    target_return: float | None = None
+    target_volatility: float | None = None
+
+    if objective is not None:
+        if risk_profile is not None:
+            raise PlanningInputError("pass either objective or riskProfile, not both")
+        if not isinstance(objective, str) or objective not in _ALLOCATION_OBJECTIVES:
+            raise PlanningInputError(
+                f"objective must be one of {sorted(_ALLOCATION_OBJECTIVES)}"
+            )
+        if objective == "max_quadratic_utility":
+            ra = body.get("riskAversion", 3.0)
+            if isinstance(ra, bool) or not isinstance(ra, (int, float)) or ra <= 0:
+                raise PlanningInputError("riskAversion must be a positive number")
+            risk_aversion = float(ra)
+        elif objective == "efficient_return":
+            target_return = _as_number(body, "targetReturn")
+        elif objective == "efficient_risk":
+            target_volatility = _as_number(body, "targetVolatility")
+        return objective, "explicit", risk_aversion, target_return, target_volatility
+
+    if risk_profile is not None:
+        if not isinstance(risk_profile, str) or risk_profile not in RISK_AVERSION_BY_PROFILE:
+            raise PlanningInputError(
+                f"riskProfile must be one of {sorted(RISK_AVERSION_BY_PROFILE)}"
+            )
+        return (
+            "max_quadratic_utility",
+            "riskProfile",
+            RISK_AVERSION_BY_PROFILE[risk_profile],
+            None,
+            None,
+        )
+
+    regime_aware = body.get("regimeAware", True)
+    if not isinstance(regime_aware, bool):
+        raise PlanningInputError("regimeAware must be a boolean")
+    if regime_aware:
+        selected = regime_optimizer_map.get(live_regime, "max_sharpe")
+        # The regime map may select 'hrp' (TRANSITION); HRP has no moments-only
+        # form, so fall back to its risk-robust intent: min_volatility.
+        if selected not in _ALLOCATION_OBJECTIVES:
+            selected = "min_volatility"
+        return selected, "regime", risk_aversion, None, None
+    return "max_sharpe", "default", risk_aversion, None, None
+
+
+def _finite_round(value: float | None, ndigits: int) -> float | None:
+    """Round a metric; coerce ``None`` and non-finite (inf/nan) to ``None``.
+
+    A degenerate input (e.g. a zero-volatility asset) can drive Sharpe to ±inf.
+    ``inf``/``nan`` are not JSON-compliant and would crash the response renderer
+    outside the gateway's error mapping, so normalize them to ``null`` here.
+    """
+    if value is None or not math.isfinite(value):
+        return None
+    return round(value, ndigits)
+
+
+def _optimize_allocation_tool(
+    body: dict[str, Any], market: MarketDataProvider, regime_engine: RegimeEngine
+) -> dict[str, Any]:
+    """``optimize_allocation`` — optimizer-driven target asset-class weights.
+
+    Composes the engine's capital-market assumptions — forward house-view returns
+    (or a ``historical`` mean), real-data volatility, and a Ledoit-Wolf-shrunk
+    correlation matrix — into a mean-variance optimization, returning target
+    weights per asset class. Driven by a ``riskProfile`` (mapped to a
+    mean-variance risk-aversion), an explicit ``objective``, or — by default — an
+    objective selected for the LIVE macro regime. Educational illustration only,
+    not investment advice or a recommendation.
+    """
+    from ...engine.optimization import REGIME_OPTIMIZER_MAP, optimize_from_moments
+
+    ids = _resolve_allocation_universe(body)
+
+    return_model = body.get("returnModel", "house_view")
+    if return_model not in ("house_view", "historical"):
+        raise PlanningInputError("returnModel must be 'house_view' or 'historical'")
+
+    lookback = body.get("lookbackDays", _DEFAULT_LOOKBACK_DAYS)
+    if (
+        isinstance(lookback, bool)
+        or not isinstance(lookback, int)
+        or not _MIN_LOOKBACK_DAYS <= lookback <= _MAX_LOOKBACK_DAYS
+    ):
+        raise PlanningInputError(
+            f"lookbackDays must be an integer in [{_MIN_LOOKBACK_DAYS}, {_MAX_LOOKBACK_DAYS}]"
+        )
+
+    as_of = body.get("asOf")
+    if as_of is not None and not isinstance(as_of, str):
+        raise PlanningInputError("asOf must be an ISO date string (or omitted)")
+
+    rf = body.get("riskFreeRate", 0.045)
+    if isinstance(rf, bool) or not isinstance(rf, (int, float)):
+        raise PlanningInputError("riskFreeRate must be a number or omitted")
+    rf = float(rf)
+
+    weight_bounds = _resolve_weight_bounds(body, len(ids))
+
+    raw_regime = regime_engine.classify().regime
+    live_regime = str(getattr(raw_regime, "value", raw_regime))
+    objective, objective_source, risk_aversion, target_return, target_volatility = (
+        _resolve_allocation_objective(body, live_regime, dict(REGIME_OPTIMIZER_MAP))
+    )
+
+    tickers = {i: ASSET_UNIVERSE[i].ticker for i in ids}
+    returns_by_id, resolved_as_of = _fetch_aligned_returns(
+        market, tickers, lookback=lookback, as_of=as_of
+    )
+
+    vol_by_id: dict[str, float] = {}
+    for asset_id in ids:
+        series = returns_by_id[asset_id]
+        vol_by_id[asset_id] = (
+            statistics.pstdev(series) * math.sqrt(_TRADING_DAYS) if len(series) > 1 else 0.0
+        )
+    # A zero-variance asset can't be risk-optimized: its correlation row is 0/0
+    # (NaN) and it would make the covariance singular. Reject it cleanly (422)
+    # rather than letting NaN propagate into the solver.
+    degenerate = [aid for aid in ids if vol_by_id[aid] <= 0.0]
+    if degenerate:
+        raise PlanningInfeasibleError(
+            "cannot optimize: no price variation (zero estimated volatility) for "
+            f"asset class(es): {', '.join(degenerate)}"
+        )
+    corr = correlation_matrix(returns_by_id, shrinkage=True)
+    # Annualized covariance from the published CMA: Sigma_ij = corr_ij * vol_i * vol_j.
+    cov = [[corr[ri][ci] * vol_by_id[ri] * vol_by_id[ci] for ci in ids] for ri in ids]
+
+    if return_model == "house_view":
+        mu = {i: ASSET_UNIVERSE[i].expected_return for i in ids}
+    else:
+        # Historical: the mean of daily LOG returns annualizes to a *geometric*
+        # (continuously-compounded) drift, but mean-variance optimization expects
+        # the *arithmetic* expected return. They differ by ~sigma^2/2, so add the
+        # convexity adjustment (vol_by_id is already the annualized stdev, so its
+        # square is the annualized variance). Without this, the historical model
+        # double-penalizes high-volatility assets.
+        mu = {
+            i: statistics.fmean(returns_by_id[i]) * _TRADING_DAYS + 0.5 * vol_by_id[i] ** 2
+            for i in ids
+        }
+
+    try:
+        result = optimize_from_moments(
+            mu,
+            cov,
+            ids,
+            objective=objective,
+            risk_aversion=risk_aversion,
+            target_return=target_return,
+            target_volatility=target_volatility,
+            weight_bounds=weight_bounds,
+            risk_free_rate=rf,
+        )
+    except ImportError as exc:
+        raise PlanningInfeasibleError(
+            "portfolio optimization requires the optional PyPortfolioOpt dependency "
+            "(the [optimization] extra), which this deployment does not have installed."
+        ) from exc
+    except ValueError as exc:
+        raise PlanningInfeasibleError(f"could not solve the allocation: {exc}") from exc
+
+    weights = {aid: round(w, 6) for aid, w in result.weights.items() if abs(w) > 1e-6}
+    asset_classes = [
+        {
+            "id": aid,
+            "label": ASSET_UNIVERSE[aid].label,
+            "expectedReturn": round(mu[aid], 6),
+            "volatility": round(vol_by_id[aid], 6),
+            "weight": round(result.weights.get(aid, 0.0), 6),
+        }
+        for aid in ids
+    ]
+    payload: dict[str, Any] = {
+        "weights": weights,
+        "assetClasses": asset_classes,
+        "objective": result.method,
+        "objectiveSource": objective_source,
+        "returnModel": return_model,
+        "expectedReturn": _finite_round(result.expected_return, 6),
+        "expectedVolatility": _finite_round(result.expected_volatility, 6),
+        "sharpeRatio": _finite_round(result.sharpe_ratio, 4),
+        "riskFreeRate": rf,
+        "weightBounds": list(weight_bounds),
+        "regime": live_regime,
+        "asOf": resolved_as_of,
+    }
+    risk_profile = body.get("riskProfile")
+    if isinstance(risk_profile, str):
+        payload["riskProfile"] = risk_profile
+    if objective == "max_quadratic_utility":
+        payload["riskAversion"] = risk_aversion
+    if objective_source == "regime":
+        payload["regimeNote"] = f"Objective '{result.method}' selected for the live regime."
+    return payload
+
+
+_MAX_REPORT_SECTIONS = 40
+
+
+def _parse_report_section(raw: Any, index: int) -> dict[str, Any]:
+    """Validate one report-section input into a clean dict for ``assemble_report``."""
+    if not isinstance(raw, dict):
+        raise PlanningInputError(f"sections[{index}] must be an object")
+    kind = raw.get("kind")
+    if not isinstance(kind, str) or not kind:
+        raise PlanningInputError(f"sections[{index}].kind must be a non-empty string")
+    section: dict[str, Any] = {"kind": kind}
+
+    title = raw.get("title")
+    if title is not None:
+        if not isinstance(title, str) or not title:
+            raise PlanningInputError(f"sections[{index}].title must be a non-empty string")
+        section["title"] = title
+
+    data = raw.get("data")
+    if data is not None:
+        if not isinstance(data, dict):
+            raise PlanningInputError(f"sections[{index}].data must be an object")
+        section["data"] = data
+
+    for list_field in ("findings", "assumptions"):
+        value = raw.get(list_field)
+        if value is not None:
+            if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+                raise PlanningInputError(
+                    f"sections[{index}].{list_field} must be a list of strings"
+                )
+            section[list_field] = value
+    return section
+
+
+def _build_planning_report_tool(
+    body: dict[str, Any], regime_engine: RegimeEngine
+) -> dict[str, Any]:
+    """``build_planning_report`` — assemble planning tool outputs into a report.
+
+    Takes the (de-identified) outputs of the other planning tools as ``sections``
+    and returns one ordered, render-ready report envelope: canonical section
+    order, auto-derived findings for recognized section kinds, consolidated
+    assumptions, and the comprehensive disclaimer. PII-free — it composes numeric
+    tool outputs, never identity. Not a substitute for an advisor's IPS.
+    """
+    raw_sections = _require(body, "sections")
+    if not isinstance(raw_sections, list) or not raw_sections:
+        raise PlanningInputError("sections must be a non-empty list")
+    if len(raw_sections) > _MAX_REPORT_SECTIONS:
+        raise PlanningInputError(f"at most {_MAX_REPORT_SECTIONS} sections are supported")
+    sections = [_parse_report_section(raw, i) for i, raw in enumerate(raw_sections)]
+
+    title = body.get("title", "Planning Analysis Report")
+    if not isinstance(title, str) or not title:
+        raise PlanningInputError("title must be a non-empty string (or omitted)")
+
+    include_regime = body.get("includeRegime", True)
+    if not isinstance(include_regime, bool):
+        raise PlanningInputError("includeRegime must be a boolean")
+    regime: str | None = None
+    if include_regime:
+        raw_regime = regime_engine.classify().regime
+        regime = str(getattr(raw_regime, "value", raw_regime))
+
+    report = assemble_report(sections, title=title, regime=regime)
+    return {"report": report, "disclaimer": FULL}
 
 
 def _resolve_seed(body: dict[str, Any]) -> int:
@@ -1024,6 +1376,12 @@ def build_tool_handlers(
     def portfolio_xray_tool(body: dict[str, Any]) -> dict[str, Any]:
         return _portfolio_xray_tool(body, regime_engine)
 
+    def optimize_allocation_tool(body: dict[str, Any]) -> dict[str, Any]:
+        return _optimize_allocation_tool(body, market, regime_engine)
+
+    def build_planning_report_tool(body: dict[str, Any]) -> dict[str, Any]:
+        return _build_planning_report_tool(body, regime_engine)
+
     return {
         "monte_carlo_decumulation": monte_carlo_decumulation_tool,
         "glide_path": glide_path_tool,
@@ -1038,12 +1396,14 @@ def build_tool_handlers(
         "social_security_claiming": social_security_claiming_tool,
         "regime_conditioned_swr": regime_conditioned_swr_tool,
         "portfolio_xray": portfolio_xray_tool,
+        "optimize_allocation": optimize_allocation_tool,
         "fire": fire_tool,
         "risk_metrics": risk_metrics_tool,
         "rebalance": rebalance_tool,
         "irmaa_headroom": irmaa_headroom_tool,
         "analyze_roth_conversion": analyze_roth_conversion_tool,
         "sequence_conversions": sequence_conversions_tool,
+        "build_planning_report": build_planning_report_tool,
     }
 
 

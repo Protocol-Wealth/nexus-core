@@ -111,6 +111,8 @@ def test_list_tools_version_handshake() -> None:
     assert "social_security_claiming" in body["tools"]
     assert "regime_conditioned_swr" in body["tools"]
     assert "portfolio_xray" in body["tools"]
+    assert "optimize_allocation" in body["tools"]
+    assert "build_planning_report" in body["tools"]
     assert "fire" in body["tools"]
     assert "risk_metrics" in body["tools"]
     assert "rebalance" in body["tools"]

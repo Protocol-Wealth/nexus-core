@@ -96,9 +96,12 @@ mcp = [
 
 # Public deployment surface — HTTP API + MCP server (see nexus_core.app).
 # fastapi + uvicorn are already core dependencies; this pulls the data and
-# MCP extras the deployed app needs.
+# MCP extras the deployed app needs. PyPortfolioOpt powers the
+# optimize_allocation planning tool on the public surface (the heavier
+# Riskfolio-Lib / skfolio backends stay in the [optimization] extra).
 serve = [
     "nexus-core[market,mcp]",
+    "PyPortfolioOpt>=1.6.0",       # MIT — optimize_allocation planning tool
 ]
 
 # Financial statements + ratios + valuation models (FinanceToolkit, Yahoo Finance backend)

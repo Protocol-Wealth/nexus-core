@@ -10,11 +10,16 @@ long tail — risk parity with 24+ risk measures, hierarchical risk
 parity with rich RMs, CVaR / CDaR / EVaR optimization, factor-RC
 constraints, worst-case MVO.
 
-Twelve entry points:
+Thirteen entry points:
 
-    optimize, max_sharpe, min_volatility, target_return, target_risk,
-    hrp, risk_parity, hierarchical_risk_parity, min_cvar,
-    black_litterman_posterior, discrete_allocate, optimize_for_regime
+    optimize, optimize_from_moments, max_sharpe, min_volatility,
+    target_return, target_risk, hrp, risk_parity,
+    hierarchical_risk_parity, min_cvar, black_litterman_posterior,
+    discrete_allocate, optimize_for_regime
+
+``optimize`` and the convenience wrappers estimate moments from a *price
+history*; ``optimize_from_moments`` takes forward (mu, Sigma) directly, so a
+caller can drive it from capital-market assumptions instead of realized history.
 
 Each backend is lazily imported — calling a function that needs
 PyPortfolioOpt or Riskfolio raises a clear ImportError with the install
@@ -44,10 +49,12 @@ from .discrete import DiscreteAllocationResult, discrete_allocate
 
 # PyPortfolioOpt-backed primitives (existing wrapper)
 from .pypfopt_wrapper import (
+    MOMENT_OBJECTIVES,
     REGIME_OPTIMIZER_MAP,
     OptimizationResult,
     optimize,
     optimize_for_regime,
+    optimize_from_moments,
 )
 
 # Riskfolio-backed primitives — risk parity, HRP-with-rich-RMs, CVaR
@@ -90,10 +97,12 @@ def hrp(prices, **kwargs):  # type: ignore[no-untyped-def]
 
 __all__ = [
     # Core surface
+    "MOMENT_OBJECTIVES",
     "REGIME_OPTIMIZER_MAP",
     "OptimizationResult",
     "optimize",
     "optimize_for_regime",
+    "optimize_from_moments",
     # Convenience entry points
     "max_sharpe",
     "min_volatility",
