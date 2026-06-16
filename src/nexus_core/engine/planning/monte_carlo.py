@@ -137,14 +137,20 @@ def monte_carlo_decumulation(
 
     net = np.asarray(net_spend_by_year, dtype=float)
     balance = np.full(paths, float(initial_balance))
-    median_by_year = np.empty(years)
+    # Per-year percentile bands — the projection fan / cone of outcomes. The
+    # balance array at each step is the full cross-path distribution; keep
+    # p10..p90 each year so a consumer can render the fan, not just the median
+    # path. (median_by_year is the p50 band, retained for back-compat.)
+    band_pcts = (10, 25, 50, 75, 90)
+    bands_by_year = np.empty((years, len(band_pcts)))
     first_depletion_year = np.full(paths, -1, dtype=int)
     for year in range(years):
         balance = (balance - net[year]) * (1.0 + port_returns[:, year])
         np.maximum(balance, 0.0, out=balance)
         newly_depleted = (first_depletion_year < 0) & (balance <= 0.0)
         first_depletion_year[newly_depleted] = year
-        median_by_year[year] = float(np.median(balance))
+        bands_by_year[year] = np.percentile(balance, band_pcts)
+    median_by_year = bands_by_year[:, 2] if years > 0 else np.empty(0)
 
     terminal = balance
     percentiles = np.percentile(terminal, [10, 25, 50, 75, 90])
@@ -182,6 +188,10 @@ def monte_carlo_decumulation(
             f"p{p}": round(float(v), 2) for p, v in zip([10, 25, 50, 75, 90], percentiles, strict=True)
         },
         "medianBalanceByYear": [round(float(v), 2) for v in median_by_year],
+        "balancePercentilesByYear": {
+            f"p{p}": [round(float(v), 2) for v in bands_by_year[:, i]]
+            for i, p in enumerate(band_pcts)
+        },
         "depletionStats": depletion_stats,
         "firstDecadeReturnVsOutcome": {
             "years": first_decade_years,
