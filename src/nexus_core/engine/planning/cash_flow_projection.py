@@ -40,6 +40,7 @@ Conventions (documented because they are load-bearing):
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from .tax import FilingStatus, ordinary_tax
@@ -161,15 +162,25 @@ def project_cash_flow(
         ("retirement_income", retirement_income),
         ("current_liabilities", current_liabilities),
     ):
-        if isinstance(amount, bool) or not isinstance(amount, (int, float)) or amount < 0:
-            raise ValueError(f"{name} must be a non-negative number")
+        if (
+            isinstance(amount, bool)
+            or not isinstance(amount, (int, float))
+            or not math.isfinite(amount)
+            or amount < 0
+        ):
+            raise ValueError(f"{name} must be a finite non-negative number")
     for name, rate in (
         ("income_growth_rate", income_growth_rate),
         ("expense_inflation_rate", expense_inflation_rate),
         ("expected_return", expected_return),
     ):
-        if isinstance(rate, bool) or not isinstance(rate, (int, float)) or rate <= -1:
-            raise ValueError(f"{name} must be a number > -1")
+        if (
+            isinstance(rate, bool)
+            or not isinstance(rate, (int, float))
+            or not math.isfinite(rate)
+            or rate <= -1
+        ):
+            raise ValueError(f"{name} must be a finite number > -1")
     if base_year is not None and (isinstance(base_year, bool) or not isinstance(base_year, int)):
         raise ValueError("base_year must be an integer or omitted")
 
@@ -203,21 +214,28 @@ def project_cash_flow(
             expenses=expenses,
             filing_status=filing_status,
         )
-        # Net cash flow after tax + spending: positive = saved, negative = drawn.
-        net_cash_flow = base_ordinary - tax - expenses
 
-        if net_cash_flow >= 0:
+        if withdrawal <= 0.0:
+            # Surplus (or exactly covered): save it; it compounds from next year.
+            net_cash_flow = base_ordinary - tax - expenses
             portfolio = portfolio * (1.0 + expected_return) + net_cash_flow
+            lifetime_savings += net_cash_flow
         else:
+            # Deficit funded from the portfolio, capped at what is actually there.
+            # Past depletion the desired withdrawal cannot be taken, so the tax is
+            # recomputed on the ACTUAL withdrawal — taxing money that was never
+            # withdrawn would massively overstate lifetime tax + the effective rate.
             if first_deficit_age is None:
                 first_deficit_age = age
             available = portfolio
-            if withdrawal > available:
+            actual_withdrawal = min(withdrawal, available)
+            if actual_withdrawal < withdrawal:
                 if depletion_age is None:
                     depletion_age = age
-                portfolio = 0.0
-            else:
-                portfolio = (available - withdrawal) * (1.0 + expected_return)
+                tax = ordinary_tax(base_ordinary + actual_withdrawal, filing_status)
+            portfolio = (available - actual_withdrawal) * (1.0 + expected_return)
+            net_cash_flow = -actual_withdrawal
+            lifetime_withdrawals += actual_withdrawal
 
         net_worth = portfolio - liabilities
         if net_worth > peak_net_worth:
@@ -227,10 +245,6 @@ def project_cash_flow(
         lifetime_income += base_ordinary
         lifetime_expenses += expenses
         lifetime_taxes += tax
-        if net_cash_flow >= 0:
-            lifetime_savings += net_cash_flow
-        else:
-            lifetime_withdrawals += min(withdrawal, available)
 
         rows.append(
             {

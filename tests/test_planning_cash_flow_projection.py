@@ -152,6 +152,43 @@ def test_depletion_marks_age_and_floors_at_zero() -> None:
     assert all(r["portfolioBalance"] >= 0.0 for r in result["years"])
 
 
+def test_post_depletion_tax_is_on_base_income_only() -> None:
+    # Once the portfolio is exhausted the desired (grossed-up) withdrawal cannot
+    # be taken, so the year's tax must be computed on the ACTUAL withdrawal — NOT
+    # on money that was never withdrawn (the regression: taxing the desired draw
+    # post-depletion massively overstated lifetime tax + the effective rate).
+    result = _project(
+        current_age=80, retirement_age=65, terminal_age=83,
+        current_income=0.0, retirement_income=40_000.0,
+        current_expenses=100_000.0, current_portfolio=50_000.0,
+        filing_status="single",
+    )
+    y0, y1, y2, y3 = result["years"]
+    assert result["aggregate"]["depletionAge"] == 80
+    # Depletion year: the $50k that was actually there is withdrawn, so tax is on
+    # base income ($40k) + the actual $50k draw, not the (larger) desired draw.
+    assert y0["taxes"] == pytest.approx(ordinary_tax(90_000.0, "single"))
+    # After full depletion: nothing left to draw, so tax is on base income alone.
+    base_only_tax = ordinary_tax(40_000.0, "single")
+    for row in (y1, y2, y3):
+        assert row["portfolioBalance"] == 0.0
+        assert row["netCashFlow"] == 0.0
+        assert row["taxes"] == pytest.approx(base_only_tax)
+    # The lifetime effective rate stays sane (would have ballooned under the bug).
+    assert result["lifetimeTax"]["effectiveRate"] < 0.25
+
+
+def test_rejects_non_finite_inputs() -> None:
+    # NaN / Inf must be rejected at validation (else they propagate to the output
+    # and crash JSON serialization with a 500 instead of a clean 400).
+    with pytest.raises(ValueError, match="finite"):
+        _project(current_income=float("nan"))
+    with pytest.raises(ValueError, match="finite"):
+        _project(current_portfolio=float("inf"))
+    with pytest.raises(ValueError, match="finite"):
+        _project(expected_return=float("nan"))
+
+
 def test_funded_through_terminal_true_when_no_depletion() -> None:
     result = _project(current_portfolio=100_000.0, terminal_age=60)
     assert result["aggregate"]["depletionAge"] is None
@@ -195,9 +232,9 @@ def test_determinism() -> None:
         ({"terminal_age": 39}, "terminal_age must be greater"),
         ({"current_age": -1}, "current_age must be in"),
         ({"current_age": 10, "terminal_age": 200}, "at most"),
-        ({"current_income": -5.0}, "current_income must be a non-negative"),
-        ({"current_portfolio": -1.0}, "current_portfolio must be a non-negative"),
-        ({"expected_return": -1.5}, "expected_return must be a number > -1"),
+        ({"current_income": -5.0}, "current_income must be a finite non-negative"),
+        ({"current_portfolio": -1.0}, "current_portfolio must be a finite non-negative"),
+        ({"expected_return": -1.5}, "expected_return must be a finite number > -1"),
         ({"filing_status": "joint"}, "filing_status must be one of"),
     ],
 )
