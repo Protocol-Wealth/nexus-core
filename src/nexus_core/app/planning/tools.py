@@ -172,9 +172,17 @@ def _fetch_aligned_returns(
     closes_by_id: dict[str, dict[str, float]] = {}
     for asset_id, ticker in tickers_by_id.items():
         bars = market.get_price_history(ticker, days=lookback, interval="1d")
-        closes = {b.timestamp: float(b.close) for b in bars if b.close and b.close > 0}
+        # Key by calendar DATE (not the full timestamp). Asset classes route to
+        # different providers whose daily-bar timestamps differ in format and
+        # time-of-day (a crypto source emits "...T00:00:00Z"; an equity source
+        # emits a bare date or a market-close time). A full-timestamp
+        # set-intersection then shares almost no keys, so mixing BTC-USD with
+        # NYSE ETFs — and the default universe, which includes bitcoin — raised
+        # "not enough overlapping dates". Date-keying aligns on common trading
+        # days (crypto weekends simply fall out against the equity calendar).
+        closes = {b.timestamp[:10]: float(b.close) for b in bars if b.close and b.close > 0}
         if as_of is not None:
-            closes = {ts: c for ts, c in closes.items() if ts[:10] <= as_of}
+            closes = {d: c for d, c in closes.items() if d <= as_of}
         if len(closes) < 3:
             raise PlanningInfeasibleError(f"insufficient price history for '{asset_id}' ({ticker})")
         closes_by_id[asset_id] = closes
