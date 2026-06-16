@@ -113,6 +113,7 @@ def test_list_tools_version_handshake() -> None:
     assert "portfolio_xray" in body["tools"]
     assert "optimize_allocation" in body["tools"]
     assert "build_planning_report" in body["tools"]
+    assert "project_cash_flow" in body["tools"]
     assert "fire" in body["tools"]
     assert "risk_metrics" in body["tools"]
     assert "rebalance" in body["tools"]
@@ -930,3 +931,66 @@ def test_analyze_goals_empty_list_400() -> None:
         json={"contractVersion": "0.1.0", "goals": []},
     )
     assert r.status_code == 400
+
+
+def test_project_cash_flow_happy_path() -> None:
+    payload = {
+        "contractVersion": "0.1.0",
+        "currentAge": 45,
+        "retirementAge": 65,
+        "terminalAge": 90,
+        "currentIncome": 180_000,
+        "currentExpenses": 90_000,
+        "currentPortfolio": 600_000,
+        "filingStatus": "married_joint",
+        "retirementIncome": 45_000,
+        "currentLiabilities": 250_000,
+        "baseYear": 2026,
+    }
+    r = _client().post("/mcp/tools/project_cash_flow", json=payload)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert len(body["years"]) == 90 - 45 + 1
+    first = body["years"][0]
+    assert first["age"] == 45
+    assert first["year"] == 2026
+    assert first["phase"] == "accumulation"
+    assert body["aggregate"]["startingNetWorth"] == 600_000 - 250_000
+    assert 0.0 <= body["lifetimeTax"]["effectiveRate"] <= 1.0
+    assert body["assumptions"]["filingStatus"] == "married_joint"
+
+
+def test_project_cash_flow_bad_horizon_400() -> None:
+    r = _client().post(
+        "/mcp/tools/project_cash_flow",
+        json={
+            "contractVersion": "0.1.0",
+            "currentAge": 60,
+            "retirementAge": 65,
+            "terminalAge": 55,
+            "currentIncome": 100_000,
+            "currentExpenses": 50_000,
+            "currentPortfolio": 100_000,
+        },
+    )
+    assert r.status_code == 400
+    assert "terminal_age" in r.text
+
+
+def test_project_cash_flow_bad_filing_status_400() -> None:
+    r = _client().post(
+        "/mcp/tools/project_cash_flow",
+        json={
+            "contractVersion": "0.1.0",
+            "currentAge": 40,
+            "retirementAge": 65,
+            "terminalAge": 90,
+            "currentIncome": 100_000,
+            "currentExpenses": 50_000,
+            "currentPortfolio": 100_000,
+            "filingStatus": "joint",
+        },
+    )
+    assert r.status_code == 400
+    assert "filing_status" in r.text

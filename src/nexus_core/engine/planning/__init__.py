@@ -18,6 +18,7 @@ from .case import (
     PlanningContractError,
     planning_contract_schema,
 )
+from .cash_flow_projection import project_cash_flow
 from .correlation import correlation_matrix
 from .fire import fire
 from .glide_path import GlidePathShape, compute_glide_path
@@ -70,6 +71,7 @@ __all__ = [
     "monte_carlo_decumulation",
     "planning_contract_schema",
     "portfolio_xray",
+    "project_cash_flow",
     "rebalance",
     "reference_aca_situation",
     "reference_bracket_table",

@@ -38,6 +38,7 @@ from ...engine.planning import (
     irmaa_headroom,
     monte_carlo_decumulation,
     portfolio_xray,
+    project_cash_flow,
     rebalance,
     reference_bracket_table,
     reference_irmaa_table,
@@ -394,6 +395,42 @@ def analyze_goals_tool(body: dict[str, Any]) -> dict[str, Any]:
             goals=goals,
             default_inflation_rate=float(default_inflation),
             default_expected_return=float(default_return),
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def _optional_number(body: dict[str, Any], key: str, default: float) -> float:
+    """A numeric field that defaults when omitted; rejects non-numbers."""
+    value = body.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise PlanningInputError(f"{key} must be a number or omitted")
+    return float(value)
+
+
+def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``project_cash_flow`` — year-by-year cash flow + net worth + lifetime tax."""
+    filing_status = body.get("filingStatus", "married_joint")
+    if not isinstance(filing_status, str):
+        raise PlanningInputError("filingStatus must be a string or omitted")
+    base_year = body.get("baseYear")
+    if base_year is not None and (isinstance(base_year, bool) or not isinstance(base_year, int)):
+        raise PlanningInputError("baseYear must be an integer or omitted")
+    try:
+        return project_cash_flow(
+            current_age=_as_int(body, "currentAge"),
+            retirement_age=_as_int(body, "retirementAge"),
+            terminal_age=_as_int(body, "terminalAge"),
+            current_income=_as_number(body, "currentIncome"),
+            current_expenses=_as_number(body, "currentExpenses"),
+            current_portfolio=_as_number(body, "currentPortfolio"),
+            filing_status=cast(Any, filing_status),
+            income_growth_rate=_optional_number(body, "incomeGrowthRate", 0.03),
+            expense_inflation_rate=_optional_number(body, "expenseInflationRate", 0.025),
+            expected_return=_optional_number(body, "expectedReturn", 0.05),
+            retirement_income=_optional_number(body, "retirementIncome", 0.0),
+            current_liabilities=_optional_number(body, "currentLiabilities", 0.0),
+            base_year=base_year,
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
@@ -1449,6 +1486,7 @@ def build_tool_handlers(
     return {
         "monte_carlo_decumulation": monte_carlo_decumulation_tool,
         "analyze_goals": analyze_goals_tool,
+        "project_cash_flow": project_cash_flow_tool,
         "glide_path": glide_path_tool,
         "tax_aware_withdrawal": tax_aware_withdrawal_tool,
         "correlation_matrix": correlation_matrix_tool,
@@ -1480,6 +1518,7 @@ __all__ = [
     "fire_tool",
     "glide_path_tool",
     "irmaa_headroom_tool",
+    "project_cash_flow_tool",
     "sequence_conversions_tool",
     "rebalance_tool",
     "risk_metrics_tool",
