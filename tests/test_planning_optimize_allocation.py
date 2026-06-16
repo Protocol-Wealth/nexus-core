@@ -213,6 +213,44 @@ class _FlatAssetMarket(_FakeMarket):
         return super().get_price_history(symbol, days=days, interval=interval)
 
 
+class _MixedTimestampMarket:
+    """A market whose bar timestamps differ in format per asset class — a crypto
+    source emits full ``...T00:00:00Z`` datetimes, an equity source emits bare
+    dates — over the SAME calendar days. A full-timestamp intersection finds no
+    common keys (the historical 422 bug); date-keying must align them.
+    """
+
+    def get_price_history(
+        self, symbol: str, *, days: int = 365, interval: str = "1d"
+    ) -> list[PriceBar]:
+        closes = _deterministic_closes(symbol)
+        crypto = symbol.endswith("-USD")  # BTC-USD etc.
+        bars: list[PriceBar] = []
+        for i, c in enumerate(closes):
+            day = f"2026-{(i // 28) + 1:02d}-{(i % 28) + 1:02d}"
+            ts = f"{day}T00:00:00Z" if crypto else day
+            bars.append(PriceBar(timestamp=ts, open=c, high=c + 1, low=c - 1, close=c, volume=10.0))
+        return bars
+
+
+def test_mixed_timestamp_formats_align_by_date() -> None:
+    # Regression: bitcoin (crypto datetime bars) + equity/bond (date-only bars)
+    # used to 422 "not enough overlapping dates" because the full timestamps
+    # never intersected. Date-keying aligns them → a valid allocation.
+    app = FastAPI()
+    app.include_router(
+        build_planning_router(market=_MixedTimestampMarket(), regime_engine=_FakeRegimeEngine())
+    )
+    r = TestClient(app).post(
+        "/mcp/tools/optimize_allocation",
+        json={"assetClassIds": ["us_equity", "us_bonds", "gold", "bitcoin"], "riskProfile": "moderate"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert sum(body["weights"].values()) == pytest.approx(1.0, abs=1e-3)
+    assert "bitcoin" in {ac["id"] for ac in body["assetClasses"]}
+
+
 def test_zero_volatility_asset_is_422_not_500() -> None:
     # A zero-variance asset would make the correlation matrix 0/0 (NaN); the tool
     # must reject it cleanly rather than letting NaN reach the solver / renderer.
