@@ -21,6 +21,7 @@ from .case import (
 from .correlation import correlation_matrix
 from .fire import fire
 from .glide_path import GlidePathShape, compute_glide_path
+from .goals import GOAL_KINDS, analyze_goals
 from .irmaa import irmaa_headroom
 from .monte_carlo import monte_carlo_decumulation
 from .rebalance import rebalance
@@ -47,6 +48,7 @@ from .tax import InfeasiblePlanError, tax_aware_withdrawal
 from .xray import portfolio_xray
 
 __all__ = [
+    "GOAL_KINDS",
     "PLANNING_CONTRACT_VERSION",
     "AcaSituation",
     "BracketTable",
@@ -58,6 +60,7 @@ __all__ = [
     "PlanningContractError",
     "RothConversionAnalysis",
     "StateConversionRule",
+    "analyze_goals",
     "analyze_roth_conversion",
     "bracket_headroom",
     "compute_glide_path",

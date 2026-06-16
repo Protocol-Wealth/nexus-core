@@ -39,6 +39,18 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "(incl. live-regime-aware), with optional spendSchedule shocks and "
         "depletion-age diagnostics. Pass the planning request as a JSON object in `body`."
     ),
+    "analyze_goals": (
+        "Goal-based funding analysis: for each financial goal (education, home, "
+        "legacy, major purchase) the inflation-grown future cost, the projected "
+        "resources (earmarked assets grown + the future value of monthly "
+        "contributions), the funded ratio/percent and status, the shortfall "
+        "(future + present value), and the level monthly contribution that would "
+        "fully fund it — plus a present-value-weighted overall funded percentage. "
+        "Pass `goals` (each `{id, kind?, targetAmount, yearsToGoal, currentAssets?, "
+        "monthlyContribution?, fundingYears?, inflationRate?, expectedReturn?}`) + "
+        "optional `defaultInflationRate` / `defaultExpectedReturn`. Identity-free "
+        "(no labels). Illustration only, not advice. JSON request object in `body`."
+    ),
     "glide_path": "Equity-weight glide path by age across the horizon. JSON request object in `body`.",
     "tax_aware_withdrawal": (
         "RMD-first, tax-efficient withdrawal sequencing. JSON request object in `body`."
@@ -202,8 +214,9 @@ def build_configured_server(
     the EMF ``score_asset`` (sharing the REST ``/api/score`` context builder +
     framework, so MCP and REST return identical scores), market quotes/history,
     FRED economic series, DefiLlama TVL, the options pricing/overlay + Deribit
-    crypto-option tools, and the 21 planning tools (monte_carlo_decumulation,
-    glide_path, tax_aware_withdrawal, correlation_matrix, regime_return_generator,
+    crypto-option tools, and the 22 planning tools (monte_carlo_decumulation,
+    analyze_goals, glide_path, tax_aware_withdrawal, correlation_matrix,
+    regime_return_generator,
     capital_market_assumptions, roth_conversion, sequence_of_returns_stress, rmd,
     tax_bracket_headroom, social_security_claiming, regime_conditioned_swr,
     portfolio_xray, optimize_allocation, fire, risk_metrics, rebalance, the
