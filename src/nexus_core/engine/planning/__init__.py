@@ -12,13 +12,13 @@ any specific person's outcome.
 
 from .analysis import RothConversionAnalysis
 from .bracket_headroom import bracket_headroom
-from .cash_flow_projection import project_cash_flow
 from .case import (
     PLANNING_CONTRACT_VERSION,
     PlanningContract,
     PlanningContractError,
     planning_contract_schema,
 )
+from .cash_flow_projection import project_cash_flow
 from .correlation import correlation_matrix
 from .fire import fire
 from .glide_path import GlidePathShape, compute_glide_path
