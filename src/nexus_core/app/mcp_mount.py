@@ -88,6 +88,25 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "diversification, tax-location mix, and EMF regime sensitivity vs the live "
         "regime) for a de-identified portfolio. JSON request object in `body`."
     ),
+    "optimize_allocation": (
+        "Optimizer-driven target asset-class weights: composes the engine's "
+        "capital-market assumptions (forward house-view returns or a `historical` "
+        "mean, real-data volatility, Ledoit-Wolf-shrunk correlations) into a "
+        "mean-variance optimization. Drive it with a `riskProfile` "
+        "(conservative..aggressive), an explicit `objective` (max_sharpe / "
+        "min_volatility / max_quadratic_utility / efficient_return / "
+        "efficient_risk), or — by default — an objective selected for the LIVE "
+        "macro regime. Optional `assetClassIds`, `weightBounds`, `riskFreeRate`. "
+        "Illustration only, not advice. JSON request object in `body`."
+    ),
+    "build_planning_report": (
+        "Assemble the de-identified outputs of the other planning tools into one "
+        "ordered, render-ready report envelope: canonical section order, "
+        "auto-derived findings for recognized section kinds, consolidated "
+        "assumptions, and the comprehensive disclaimer. Pass `sections` (each "
+        "`{kind, title?, data?, findings?, assumptions?}`) + optional `title` / "
+        "`includeRegime`. PII-free; not an IPS. JSON request object in `body`."
+    ),
     "fire": (
         "FIRE / Coast-FIRE: the FIRE number (spend ÷ safe withdrawal rate), the "
         "coast number needed today, and years/age to financial independence with "
@@ -183,14 +202,15 @@ def build_configured_server(
     the EMF ``score_asset`` (sharing the REST ``/api/score`` context builder +
     framework, so MCP and REST return identical scores), market quotes/history,
     FRED economic series, DefiLlama TVL, the options pricing/overlay + Deribit
-    crypto-option tools, and the 19 planning tools (monte_carlo_decumulation,
+    crypto-option tools, and the 21 planning tools (monte_carlo_decumulation,
     glide_path, tax_aware_withdrawal, correlation_matrix, regime_return_generator,
     capital_market_assumptions, roth_conversion, sequence_of_returns_stress, rmd,
     tax_bracket_headroom, social_security_claiming, regime_conditioned_swr,
-    portfolio_xray, fire, risk_metrics, rebalance, plus the composite Roth/IRMAA
-    trio analyze_roth_conversion, sequence_conversions, irmaa_headroom) — the same
-    handlers the REST planning gateway serves, so the MCP transport and
-    ``POST /mcp/tools/{id}`` stay in lock-step.
+    portfolio_xray, optimize_allocation, fire, risk_metrics, rebalance, the
+    composite Roth/IRMAA trio analyze_roth_conversion, sequence_conversions,
+    irmaa_headroom, plus build_planning_report) — the same handlers the REST
+    planning gateway serves, so the MCP transport and ``POST /mcp/tools/{id}``
+    stay in lock-step.
 
     Both transports build from here so the stdio server (``nexus-core mcp``,
     for Claude Desktop) and the HTTP server (``/mcp``) expose an identical set

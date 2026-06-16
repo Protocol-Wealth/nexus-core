@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Planning — optimizer-driven allocation + report assembly (planning tools 19 → 21)
+
+#### Added
+
+- **`optimize_allocation` planning tool (MCP + REST)** — optimizer-driven target
+  asset-class weights. Composes the engine's capital-market assumptions (forward
+  house-view returns or a `historical` mean, real-data volatility, and a
+  Ledoit-Wolf-shrunk correlation matrix) into a mean-variance optimization. Drive
+  it with a `riskProfile` (conservative..aggressive → a mean-variance
+  risk-aversion), an explicit `objective` (`max_sharpe` / `min_volatility` /
+  `max_quadratic_utility` / `efficient_return` / `efficient_risk`), or — by
+  default — an objective selected for the **live macro regime**. Returns weights +
+  expected return/volatility/Sharpe + the regime context. Illustration only.
+- **`build_planning_report` planning tool (MCP + REST)** — assembles the
+  de-identified outputs of the other planning tools into one ordered,
+  render-ready report envelope: canonical section order (executive summary →
+  regime → assumptions → allocation → analytics → projection → withdrawal → tax →
+  Social Security → risk → appendix), auto-derived findings for recognized section
+  kinds, consolidated assumptions, and the comprehensive disclaimer. PII-free; not
+  an IPS.
+- **`engine.optimization.optimize_from_moments(mu, Sigma, asset_ids, ...)`** — a
+  new optimizer entry point that takes forward moments directly (so it can be
+  driven by capital-market assumptions rather than a realized price history),
+  spanning `max_sharpe` / `min_volatility` / `max_quadratic_utility` /
+  `efficient_return` / `efficient_risk`.
+
+#### Changed
+
+- **`serve` extra now includes `PyPortfolioOpt`** so `optimize_allocation` works on
+  the public surface (the heavier Riskfolio-Lib / skfolio backends stay in the
+  `[optimization]` extra). Requires a redeploy to take effect.
+
 ### Uniswap V3 — enumerate the positions an address owns
 
 #### Added

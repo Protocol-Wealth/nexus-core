@@ -35,7 +35,7 @@ gateway already performs.
 Versioning note: this is the **case contract** (``PLANNING_CONTRACT_VERSION``,
 v1.0.0) — the structured Roth/IRMAA case object. It is distinct from, and
 coexists with, the per-tool gateway envelope version in
-``app/planning/contract.py`` (``CONTRACT_VERSION``, the 16 single-purpose
+``app/planning/contract.py`` (``CONTRACT_VERSION``, the 18 single-purpose
 planning tools). The two version on independent timelines.
 
 v1 scope (documented exclusions — adding any of these is a MAJOR bump):

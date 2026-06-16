@@ -40,7 +40,7 @@ The deployed surface is public, read-only, and carries no client data and no aut
 | `GET /mcp-guide` · `GET /llms.txt` | MCP client setup guide · agent site map (llmstxt.org) |
 | `GET /.well-known/security.txt` | RFC 9116 disclosure pointer |
 | `GET /api/usage` | Provider usage / quota report |
-| `POST /mcp` | Model Context Protocol over HTTP (FastMCP, also stdio). `tools/list` = research tools + `health`/`describe`/`get_quotes` + 19 planning tools (incl. the composite Roth/IRMAA trio); all read-only |
+| `POST /mcp` | Model Context Protocol over HTTP (FastMCP, also stdio). `tools/list` = research tools + `health`/`describe`/`get_quotes` + 21 planning tools (incl. `optimize_allocation`, `build_planning_report`, and the composite Roth/IRMAA trio); all read-only |
 | `GET /mcp/tools` · `POST /mcp/tools/{id}` | Planning REST gateway (pwplan-core, contractVersion `0.1.0`, PII-free) |
 
 ### Regime & Scoring
