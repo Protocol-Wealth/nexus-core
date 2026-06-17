@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Docs — stock-idea analysis: capability review + enhancement scaffold (planning)
+
+#### Added
+
+- **`docs/STOCK-RESEARCH-ENHANCEMENT.md`** — a planning/scoping doc (ships no
+  production tool) for evaluating an individual stock idea via Claude Code /
+  Claude.ai over `nexusmcp.site/mcp`. Reviews what the MCP surface does today
+  (regime + 8-check `score_asset` + price only), a prioritized **gap matrix**
+  against the **already-held MBOUM / MarketStack / FMP-FinanceToolkit** data
+  (the rich MBOUM research surface is called only for quotes/history), an
+  **architecture** for an equity-research vertical (a sibling `ResearchDataProvider`
+  protocol modeled on `MacroDataProvider`; read-only `analyst_consensus` /
+  `earnings_estimates` / `fundamentals_statements` / `key_statistics` /
+  `equity_option_chain` / `equity_iv_skew` / `screen_equities` / `insider_activity` /
+  `institutional_holders` / `company_news` tools + a composite
+  `stock_research_dossier`; equity options reuse the **generalized** pricing engine,
+  not a route-layer reimplementation), the Claude Code connection + analysis
+  playbook that work today, and the scoped CML-vs-EMF **backtest harness** (a future
+  `src/nexus_core/research/` subpackage). Documents three **load-bearing gates**:
+  (A) MBOUM/FMP data-redistribution rights before any research data ships publicly;
+  (B) the MBOUM research endpoints are unverified — a live-key probe is task #0;
+  (C) the backtest is SEC-Marketing-Rule-regulated performance/comparison content
+  needing a hard off-the-public-surface boundary + CCO sign-off + copyright review
+  **before** it is built. Findings were adversarially verified for compliance,
+  repo-boundary, and feasibility.
+- **`examples/stock_research_agent.py`** — a runnable Claude Agent SDK reference
+  agent over the hosted MCP server that evaluates one equity idea through the
+  **regime + EMF durability** lens (`current_regime` → `score_asset` →
+  `get_quote`/`get_price_history` → `get_economic_series`) into a graded
+  **REGIME×SCORE** dossier. Uses only shipped, read-only tools (no scaffold
+  required) and renders the valuation / analyst / estimates / equity-IV /
+  news legs as explicit **gap** lines — never fabricated. Output is a
+  confidence-tiered assessment, not a buy/sell call. README + the planned-examples
+  list updated.
+
 ### Planning — optimizer-driven allocation + report assembly (planning tools 19 → 21)
 
 #### Added

@@ -29,6 +29,17 @@ Runnable examples for Nexus Core capabilities.
   ceilings, reads the binding ceiling, the IRMAA cliff cost, the all-in tax, and
   the do-nothing RMD drag. PII-free (birth years + aggregated balances, never
   identity). Same install as the planning agent.
+- **`stock_research_agent.py`** — A Claude Agent SDK agent over the same hosted
+  MCP server that evaluates **one equity idea** through the regime + EMF
+  durability lens: live regime (`current_regime`/`regime_signals`) → 8-check
+  `score_asset` → price/trend (`get_quote`/`get_price_history`) → rate backdrop
+  (`get_economic_series`) → a graded **REGIME×SCORE** dossier. Deliberately
+  honest about today's shape — valuation, analyst consensus, forward estimates,
+  real equity IV/skew, and news/sentiment are rendered as explicit *gap* lines,
+  never fabricated (those tools are planned; see
+  [`docs/STOCK-RESEARCH-ENHANCEMENT.md`](../docs/STOCK-RESEARCH-ENHANCEMENT.md)).
+  Output is a confidence-tiered assessment, **not** a buy/sell call. Same install
+  as the planning agent.
 
 ## Planned
 
@@ -51,6 +62,7 @@ python examples/mcp_server.py
 # ANTHROPIC_API_KEY; no nexus-core install needed — they call the public server)
 python examples/planning_agent.py
 python examples/crypto_options_agent.py
+python examples/stock_research_agent.py
 ```
 
 Contributions welcome — see [CONTRIBUTING.md](../CONTRIBUTING.md).
