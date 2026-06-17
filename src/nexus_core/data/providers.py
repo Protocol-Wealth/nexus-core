@@ -3,7 +3,7 @@
 """Data provider protocols.
 
 Abstract interfaces the rest of nexus-core programs against. Concrete
-implementations — for FRED, FMP, MBOUM, yfinance, Polygon, or your own
+implementations — for FRED, MBOUM, MarketStack, yfinance, or your own
 internal data service — adapt to these protocols.
 
 No production calls belong in this file. Keep provider adapters next to the

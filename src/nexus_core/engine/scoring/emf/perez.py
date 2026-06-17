@@ -135,8 +135,8 @@ def compute_perez_phase(
     curr_rev = _get_val(inc[0], "revenue", "totalRevenue")
     prev_rev = _get_val(inc[1], "revenue", "totalRevenue")
 
-    # FMP uses "capitalExpenditure" (singular); MBOUM the plural form; the
-    # nexus-core SEC fetcher emits snake_case "capital_expenditure".
+    # Some providers use "capitalExpenditure" (singular); MBOUM the plural
+    # form; the nexus-core SEC fetcher emits snake_case "capital_expenditure".
     _capex_keys = ("capitalExpenditures", "capitalExpenditure", "capital_expenditure")
     curr_capex = abs(_get_val(cf[0], *_capex_keys))
     prev_capex = abs(_get_val(cf[1], *_capex_keys)) if len(cf) > 1 else curr_capex

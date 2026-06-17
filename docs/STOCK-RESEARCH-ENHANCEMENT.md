@@ -10,7 +10,7 @@ individual stock idea end-to-end** — the way an analyst would when pressure-
 testing a name surfaced by an outside research service (CML Pro and the like)?
 
 It is a review of the current surface, a gap analysis against the **MBOUM** and
-**MarketStack** API keys (and the dormant **FinanceToolkit/FMP** path) the engine
+**MarketStack** API keys (plus the keyless **SEC EDGAR** path) the engine
 already holds, an architecture for the missing capabilities, the Claude Code
 connection + analysis playbook that works **today**, and a scoped plan for a
 CML-vs-EMF **backtest harness** (the follow-on). Every recommendation here was
@@ -43,9 +43,17 @@ legs an outside growth/quant service leans on.
 
 ## 2. The data we already pay for but don't use
 
-The engine holds keys for **MBOUM** and **MarketStack**, and ships a dormant
-**FinanceToolkit/FMP** adapter. Today all three are squeezed through a 2-method
+The engine holds keys for **MBOUM** and **MarketStack** (plus keyless **SEC
+EDGAR**). Today the keyed market providers are squeezed through a 2-method
 provider abstraction (`MarketDataProvider`: `get_quote` + `get_price_history`).
+
+> **FMP/FinanceToolkit is retired** (2026-06-17). An earlier draft of this plan
+> proposed an `FmpResearchData` impl over the FinanceToolkit adapter; that vendor
+> is no longer used and the `financials/` module + `[financials]` extra were
+> removed. The supported research sources are **MBOUM** (primary), **MarketStack**
+> (EOD + corporate actions), **SEC EDGAR** (keyless fundamentals/insider), and
+> other free/already-keyed feeds (FRED, etc.). Wherever this doc once said "FMP,"
+> read MBOUM + EDGAR.
 
 - **MBOUM** (`MBOUM_API_KEY`) — proxies Yahoo Finance and exposes a *rich*
   surface: `…/stock/modules` (statistics, key-statistics, financial-data,
@@ -61,12 +69,12 @@ provider abstraction (`MarketDataProvider`: `get_quote` + `get_price_history`).
   `…/splits`, `…/tickerinfo`, indices. Used only for `get_quote` +
   `get_price_history` (EOD). Its `dividends`/`splits` endpoints are what a
   total-return backtest needs.
-- **FMP via FinanceToolkit** (`[financials]` extra, *unreachable* — no call site
-  constructs a `Toolkit`) — standardized statements, ratios, **analyst estimates,
-  price-target consensus, grades/upgrades-downgrades**, DCF, 13F, insider,
-  Senate/Congress trades, screener. The `financials/` module (DuPont, Altman-Z,
-  DCF, VaR) is coded and tested but imported by nothing in the app/MCP/engine
-  path.
+- **SEC EDGAR** (keyless) — `score_asset` already fetches companyfacts (XBRL
+  income/balance/cashflow) internally to compute CROIC + F-Score, and the
+  `edgartools_wrapper` (coded, currently unimported) can read Form 4 / filings.
+  This is the keyless fallback for `fundamentals_statements` + `insider_activity`
+  — it answers with **zero API keys**, so those P0 surfaces don't depend on any
+  vendor at all.
 
 > ⚠️ **None of the MBOUM research endpoints above are exercised anywhere in the
 > repo.** The only proven MBOUM calls are `/quotes` and `/history`, and even the
@@ -86,23 +94,23 @@ brief and/or fixes the EMF score's own quality. `P1` = high-value buy-case leg.
 
 | Pri | Capability | Where the data lives | Why it matters |
 |-----|-----------|----------------------|----------------|
-| **P0** | **Fundamental statements as a tool** (revenue, margins, debt, FCF, EPS) | EDGAR (already fetched internally) · MBOUM `/financials` · FMP | `score_asset` consumes these (CROIC/F-Score) but never surfaces them. Lowest-cost P0 — EDGAR data is already in-process. |
-| **P0** | **Valuation** (P/E, P/S, EV/EBITDA, div yield, DCF) | `financials/` (coded, unreachable) · FMP DCF/ratios · MBOUM key-stats | `score_asset` answers "is it durable?" never "is it cheap?". The whole growth-leader debate is valuation/expectations. |
-| **P0** | **Analyst consensus** (EPS/rev estimates, price-target hi/lo/median, #analysts) | MBOUM `analyst-ratings`+`price-targets` · FMP estimates+consensus | The "expectations" leg and the natural complement to the confidence tier (durability vs. street expectations). Absent today. |
-| **P0** | **Populate ASAN Check 8 inputs** (market_cap, ROE, op-margin, rev-growth) | MBOUM financial-data/statistics · FMP key-metrics | These fields are **read** by Check 8 (`structural_advantage.py`) but **never produced** by `build_fundamentals`, so for most non-SaaS large caps Check 8 → insufficient_data, degrading the very tier the workflow anchors on. Fixing the score's own quality is P0. |
+| **P0** | **Fundamental statements as a tool** (revenue, margins, debt, FCF, EPS) | EDGAR (already fetched internally) · MBOUM `/financials` | `score_asset` consumes these (CROIC/F-Score) but never surfaces them. Lowest-cost P0 — EDGAR data is already in-process. |
+| **P0** | **Valuation** (P/E, P/S, EV/EBITDA, div yield, DCF) | MBOUM key-statistics/financial-data · ratios computed from EDGAR statements | `score_asset` answers "is it durable?" never "is it cheap?". The whole growth-leader debate is valuation/expectations. |
+| **P0** | **Analyst consensus** (EPS/rev estimates, price-target hi/lo/median, #analysts) | MBOUM `analyst-ratings`+`price-targets`+`recommendation-trend` | The "expectations" leg and the natural complement to the confidence tier (durability vs. street expectations). Absent today. |
+| **P0** | **Populate ASAN Check 8 inputs** (market_cap, ROE, op-margin, rev-growth) | MBOUM financial-data/statistics modules | These fields are **read** by Check 8 (`structural_advantage.py`) but **never produced** by `build_fundamentals`, so for most non-SaaS large caps Check 8 → insufficient_data, degrading the very tier the workflow anchors on. Fixing the score's own quality is P0. |
 | **P0** | **Real equity options chain** (strikes/expiries/OI/IV/greeks) | MBOUM `/v1/markets/options` | Current equity overlays are BS fictions on historical-stdev vol; a real chain also lets them use true IV. The quant/options heritage of outside services lives here. |
 | **P1** | **Equity IV / vol skew / IV-rank / term structure / unusual activity** | MBOUM `iv-rank-percentile`, etc.; skew/term-structure computable via existing `engine/pricing/{skew,option_chain}.py` | The single biggest options signal — and the analytics already exist (fed only by Deribit/crypto today). |
-| **P1** | **Analyst rating actions** (consensus grade, up/downgrade feed) | MBOUM `recommendation-trend`+`upgrade-downgrade-history` · FMP grades | Momentum-of-opinion; same source as P0 consensus, cheap to add alongside. |
-| **P1** | **Earnings calendar + surprise history** (beat/miss, next date) | MBOUM earnings module + `calendar/earnings` · FMP | Forward catalyst dates + beat/miss track record gate timing/conviction. |
-| **P1** | **Equity screener / batch EMF ranking** | MBOUM `/screener` · FMP screener · compute (batch `score_asset`) | Turns nexus from a one-ticker checker into a universe filter / idea-sourcer. |
+| **P1** | **Analyst rating actions** (consensus grade, up/downgrade feed) | MBOUM `recommendation-trend`+`upgrade-downgrade-history` | Momentum-of-opinion; same source as P0 consensus, cheap to add alongside. |
+| **P1** | **Earnings calendar + surprise history** (beat/miss, next date) | MBOUM earnings module + `calendar/earnings` | Forward catalyst dates + beat/miss track record gate timing/conviction. |
+| **P1** | **Equity screener / batch EMF ranking** | MBOUM `/screener` · compute (batch `score_asset`) | Turns nexus from a one-ticker checker into a universe filter / idea-sourcer. |
 | **P1** | **News pipeline + FinBERT sentiment** | MBOUM `/news` → `ai/sentiment/finbert_wrapper.py` (real but **unwired**) | Zero sentiment/news/catalyst signal today; the FinBERT classifier just needs a news source piped in. |
 | **P1** | **Richer quote** (day change/%, volume, mkt-cap, 52w, P/E, yield) | MBOUM `/quotes` envelope **already returns these; adapter discards them** | Cheapest possible win — the data already arrives and is thrown away. |
-| **P1** | **Company profile / metadata** (description, sector/industry, share count) | MBOUM profile · MarketStack tickerinfo · FMP profile+peers | Orientation + peer set; also supplies the share-count/market-cap Check 8 needs. |
-| **P2** | Institutional 13F + insider/Congress trades | MBOUM institutional-holdings/insider · FMP 13F/insider/Senate | Smart-money corroboration; not on the critical path. |
+| **P1** | **Company profile / metadata** (description, sector/industry, share count) | MBOUM profile · MarketStack tickerinfo | Orientation + peer set; also supplies the share-count/market-cap Check 8 needs. |
+| **P2** | Institutional 13F + insider/Congress trades | MBOUM institutional-holdings/insider modules · EDGAR Form 4/13F | Smart-money corroboration; not on the critical path. |
 | **P2** | Short interest (days-to-cover, % of float) | MBOUM statistics module (dedicated endpoint 404s) | Crowding/squeeze risk; one-field add. |
 | **P2** | Intraday / sub-daily history | MBOUM `/history` (1m..1h) — provider accepts `interval`, MCP hardcodes `1d` | Near-free unlock; low priority for a fundamentals brief. |
 | **P2** | Dividends / corporate actions | MarketStack `/dividends`+`/splits` · MBOUM | Total-return + income context; **required for a fair backtest** (see §6). |
-| **P2** | Non-XBRL fundamentals fallback (ETFs/foreign) | MBOUM/FMP/yfinance | Widens coverage beyond US-XBRL single stocks (already works). |
+| **P2** | Non-XBRL fundamentals fallback (ETFs/foreign) | MBOUM / yfinance | Widens coverage beyond US-XBRL single stocks (already works). |
 | **P2** | SEC filing text / Item 1A risk factors | EDGAR (`edgartools_wrapper.py`, coded, unimported) · MBOUM sec-filings | Qualitative deep-dive; heavier read-and-reason surface. |
 | **P2** | Technical indicators (RSI/MACD/SMA as values) | MBOUM `indicators/*` · compute from history | Hurst already covers trend persistence; convenience add. |
 | **P2** | Backtest harness (regime-conditioned / picks track-record) | compute (`planning/backtest` is `__init__`-only) | Needed to fair-score an outside service's calls — the follow-on; see §6. |
@@ -143,16 +151,20 @@ class ResearchDataProvider(Protocol):
 Concrete impls follow the existing `data/market/` adapter shape (sync `httpx` via
 `data/http.fetch_json`, `is_configured()` credential check, env-keyed):
 
-- **`MboumResearchData`** — primary; taps the unused MBOUM surface in §2.
-- **`FmpResearchData`** — analyst/estimates/13F/insider/screener depth via the
-  already-present-but-dormant `financials/adapter.from_finance_toolkit` (FMP),
-  lazy-imported behind the `[financials]` extra.
-- **`EdgarResearchData`** — **keyless** fundamentals + Form-4 fallback reusing
+- **`MboumResearchData`** — **primary** keyed impl; taps the unused MBOUM surface
+  in §2 (statistics, financials, analyst-ratings, price-targets, options chain,
+  screener, news, earnings, institutional/insider modules). This is the single
+  source for the analyst/estimates/options/screener legs (no second vendor — FMP
+  is retired).
+- **`EdgarResearchData`** — **keyless** fundamentals + Form-4/13F fallback reusing
   `data/edgar/{fundamentals,edgartools_wrapper}` so `fundamentals`/`insider`
-  still answer with zero keys.
+  still answer with **zero keys**. Also the source for the keyless P0 wins (§7).
+- **`MarketStackResearchData`** (optional) — corporate actions (`dividends`/
+  `splits`) + EOD where MBOUM is unavailable; mainly used by the backtest's
+  total-return adapter, not the live research tools.
 - **`CompositeResearchData`** / **`CachedResearchData`** — direct analogues of
-  `data/market/{composite,cache}.py` (ordered per-method fallback, raise-as-miss;
-  TTL buckets: fundamentals ~6h, analyst ~1h, options ~5m).
+  `data/market/{composite,cache}.py` (ordered per-method fallback EDGAR→MBOUM,
+  raise-as-miss; TTL buckets: fundamentals ~6h, analyst ~1h, options ~5m).
 
 ### 4.2 MCP tools + HTTP routes
 
@@ -333,15 +345,16 @@ blockers; feasibility: pass w/ cautions.** None are fatal, but three gates are
 **load-bearing and must clear in order.**
 
 ### Gate A — Vendor data-redistribution rights *(blocks the public surface)*
-nexus-core's whole point is a **public, keyless** API. Re-serving MBOUM-/FMP-
-**derived** research data (fundamentals, analyst consensus, price targets, 13F,
-options chains, news) to anonymous third parties is exactly the licensed data
-vendors gate — the current de-minimis last-price/OHLCV re-serve is a different
-risk class. **Before any research route ships publicly:** review MBOUM + FMP
-commercial ToS for downstream-redistribution rights and add an explicit
-data-redistribution clause to `attribution.md`/`NOTICE` — **or** gate the research
-routes to a **non-public** deployment. (FMP-via-FinanceToolkit changes the
-vendor-of-record, not the constraint.)
+nexus-core's whole point is a **public, keyless** API. Re-serving **MBOUM-derived**
+research data (fundamentals, analyst consensus, price targets, 13F, options chains,
+news) to anonymous third parties is exactly the licensed data vendors gate — the
+current de-minimis last-price/OHLCV re-serve is a different risk class. **Before any
+research route ships publicly:** review the **MBOUM** (and MarketStack) commercial
+ToS for downstream-redistribution rights and add an explicit data-redistribution
+clause to `attribution.md`/`NOTICE` — **or** gate the research routes to a
+**non-public** deployment. Note that the keyless **EDGAR** legs (fundamentals,
+Form 4/13F) are public-record data and carry no vendor-redistribution constraint —
+which is the other reason the EDGAR-only P0 wins can ship first.
 
 ### Gate B — Endpoint reality *(blocks implementation)*
 The MBOUM research endpoints are **assumed, not verified** (zero references in the
@@ -369,8 +382,8 @@ non-verdict tier; surface forward targets/estimates with **projection-flavored**
 caveat language; keep the `describe`/`llms.txt` "research" category strictly
 factual (no "comprehensive research / top picks" phrasing — route through 206(4)-1
 review like the website AI files); frame `screen_equities` output as **candidates,
-not a buy list**; cold backtest runs over many tickers × dates will stress MBOUM/
-FMP/MarketStack plan quotas — cost-estimate first.
+not a buy list**; cold backtest runs over many tickers × dates will stress the
+MBOUM/MarketStack plan quotas — cost-estimate first.
 
 ### Recommended order of work
 

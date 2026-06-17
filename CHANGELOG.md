@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Retired the FMP / FinanceToolkit path
+
+#### Removed
+
+- **`src/nexus_core/financials/` module + the `[financials]` extra +
+  `financetoolkit` dependency.** FMP (Financial Modeling Prep, reached via the
+  FinanceToolkit adapter) is no longer a supported data vendor. The module
+  (statements/ratios/performance/risk/models + the `from_finance_toolkit`
+  adapter) was unreachable — imported by nothing in the app / MCP / engine path —
+  so removal is behavior-neutral. Its three dedicated tests
+  (`test_financials_{models,ratios,performance_risk}.py`) were removed with it,
+  and `financials` was dropped from the `[all]` extra. The supported research
+  data sources are **MBOUM** (primary), **MarketStack** (EOD + corporate
+  actions), and keyless **SEC EDGAR** (fundamentals / Form 4 / 13F), plus free /
+  already-keyed feeds (FRED, etc.). Stale "FMP" mentions in `data/providers.py`,
+  `engine/scoring/emf/{fscore,perez}.py` comments, `CLAUDE.md`, `ROADMAP.md`, and
+  `docs/STOCK-RESEARCH-ENHANCEMENT.md` were updated to reflect the retirement.
+
 ### Docs — stock-idea analysis: capability review + enhancement scaffold (planning)
 
 #### Added

@@ -46,7 +46,7 @@ def _num(d: dict[str, Any], *keys: str) -> float:
     """Pull the first present numeric field from a statement row.
 
     Handles the pw-nexus convention where a value may be wrapped as
-    ``{"raw": <number>}`` (FMP/provider envelope). Returns ``0.0`` when no
+    ``{"raw": <number>}`` (provider envelope). Returns ``0.0`` when no
     key is present or convertible, matching the upstream ``_v`` helper.
     """
     for k in keys:

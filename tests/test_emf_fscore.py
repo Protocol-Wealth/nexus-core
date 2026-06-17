@@ -95,7 +95,7 @@ def test_check_computes_from_raw_when_no_precomputed() -> None:
 
 
 def test_provider_envelope_raw_values() -> None:
-    # Values may arrive wrapped as {"raw": n} (FMP/provider envelope).
+    # Values may arrive wrapped as {"raw": n} (provider envelope).
     fundamentals: dict[str, object] = {
         "income_statements": [
             {"netIncome": {"raw": 120.0}, "revenue": {"raw": 1100.0},
