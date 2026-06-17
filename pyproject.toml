@@ -104,11 +104,6 @@ serve = [
     "PyPortfolioOpt>=1.6.0",       # MIT — optimize_allocation planning tool
 ]
 
-# Financial statements + ratios + valuation models (FinanceToolkit, Yahoo Finance backend)
-financials = [
-    "financetoolkit>=2.0.7",       # MIT
-]
-
 # AI/ML for finance
 ai = [
     "finrl>=0.3.7",                # MIT (heavy: torch, gym)
@@ -155,7 +150,7 @@ dev = [
 
 # All capabilities (excluding dev)
 all = [
-    "nexus-core[optimization,risk,pricing,edgar,market,mcp,financials,ai,backtest,compliance,onchain,planning]",
+    "nexus-core[optimization,risk,pricing,edgar,market,mcp,ai,backtest,compliance,onchain,planning]",
 ]
 
 [project.urls]

@@ -39,7 +39,6 @@ nexus-core/
 │   │   ├── benchmarks.py     # base-100 + buy-and-hold hold-strategy compositions
 │   │   ├── optimization/     # PyPortfolioOpt + Riskfolio-Lib + Black-Litterman wrappers (extra)
 │   │   └── risk/             # empyrical/pyfolio wrappers (scaffold; extra)
-│   ├── financials/           # FinanceToolkit adapter — statements, ratios, performance, models, risk (extra)
 │   ├── data/
 │   │   ├── http.py           # shared sync httpx helpers
 │   │   ├── providers.py      # MarketDataProvider / MacroDataProvider protocols
@@ -170,7 +169,7 @@ external integrations degrade gracefully to `None`/empty/503 when their key is a
 - **One concept per file.** `snake_case.py` modules. Modules ≤ ~300 LOC where possible; long modules signal a missing split.
 - **Sync handlers + sync `httpx`.** REST handlers are sync `def` on purpose — providers block, so FastAPI's threadpool is the right execution model. Only DB code (`asyncpg`) is `async`.
 - **pydantic v2 for boundary validation** (`BaseModel`, `ConfigDict`, `Field`). Don't introduce dataclasses where pydantic models would also enforce runtime types.
-- **Heavy deps are lazy-imported** inside functions (PyPortfolioOpt, Riskfolio, FinanceToolkit, torch). The extras system is the whole point — keep heavy imports out of the core import path (ruff `PLC0415` is intentionally ignored for this).
+- **Heavy deps are lazy-imported** inside functions (PyPortfolioOpt, Riskfolio, torch). The extras system is the whole point — keep heavy imports out of the core import path (ruff `PLC0415` is intentionally ignored for this).
 - **Tests under `tests/test_<module>.py`** matching source file names. Hermetic — no network calls, no live data, no API keys, no real adopter credentials. Tests use `create_app(enable_mcp=False, market=<fake>)` to exercise the REST API without upstreams.
 - **Stubs in `examples/`.** Example scripts must run without network credentials.
 - **License-name comment on every new dep** in `pyproject.toml` (e.g. `"yfinance>=1.4.0",  # Apache 2.0`). The license-compliance workflow fails the build if a forbidden license sneaks in.
