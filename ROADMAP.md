@@ -200,6 +200,30 @@ real *equity* options chains + IV (Tradier) and IV-rank to replace the theoretic
 the 8-check); `defi_yields` / `defi_risk`; a `resolve_symbol` resolver; and structured
 provenance/versioning (`framework_version`) on score outputs for Rule 17a-4 reproducibility.
 
+**Equity-research vertical — full plan in [`docs/STOCK-RESEARCH-ENHANCEMENT.md`](docs/STOCK-RESEARCH-ENHANCEMENT.md).**
+Today an MCP client can run a stock idea through the regime + EMF durability lens
+(`current_regime` + `score_asset` + price), but nothing else — no fundamentals
+statements, valuation, analyst consensus, forward estimates, real equity options
+IV/skew (only crypto/Deribit has them), screener, ownership flows, or news. The
+keys for it are already held (the rich **MBOUM** surface is called only for
+quotes/history; **MarketStack** only for EOD; the **FMP/FinanceToolkit** adapter is
+coded but unreachable). The plan adds a sibling `ResearchDataProvider` protocol
+(modeled on `MacroDataProvider`) + keyed MBOUM/FMP + keyless-EDGAR impls, a set of
+read-only research MCP tools + REST routes, and a composite `stock_research_dossier`
+that fuses regime + score + the new data — reusing the existing options engine
+(generalized side/settlement-agnostic) rather than reimplementing it. **Three gates
+are load-bearing:** (A) MBOUM/FMP **data-redistribution rights** must be cleared
+before any research data ships on the public surface; (B) the MBOUM research
+endpoints are **unverified** — a live-key probe is task #0; (C) the CML-vs-EMF
+**backtest harness** (a future `src/nexus_core/research/` subpackage behind a
+`[research]` extra) is SEC-Marketing-Rule-regulated performance/comparison content
+and needs a hard code-enforced off-the-public-surface boundary + CCO sign-off +
+copyright review **before it is built**. The keyless wins (surfacing the
+already-fetched EDGAR fundamentals; fixing ASAN Check 8's missing
+market-cap/ROE/op-margin/rev-growth inputs) clear those gates on their own and come
+first. The gate-free Claude Code connection + reference agent
+([`examples/stock_research_agent.py`](examples/stock_research_agent.py)) ship today.
+
 ---
 
 Apache-2.0 · USPTO #64/034,229 (defensive) · OIN member. New work preserves
