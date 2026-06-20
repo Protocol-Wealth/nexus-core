@@ -47,9 +47,10 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "(future + present value), and the level monthly contribution that would "
         "fully fund it — plus a present-value-weighted overall funded percentage. "
         "Pass `goals` (each `{id, kind?, targetAmount, yearsToGoal, currentAssets?, "
-        "monthlyContribution?, fundingYears?, inflationRate?, expectedReturn?}`) + "
-        "optional `defaultInflationRate` / `defaultExpectedReturn`. Identity-free "
-        "(no labels). Illustration only, not advice. JSON request object in `body`."
+        "monthlyContribution?, priority?, fundingYears?, inflationRate?, expectedReturn?}`) + "
+        "optional `defaultInflationRate` / `defaultExpectedReturn` and optional "
+        "`sharedFundingPool` for priority-ordered shared-resource allocation. "
+        "Identity-free (no labels). Illustration only, not advice. JSON request object in `body`."
     ),
     "project_cash_flow": (
         "Deterministic year-by-year cash-flow + net-worth projection: from today "
