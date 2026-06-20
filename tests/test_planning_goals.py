@@ -44,6 +44,7 @@ def test_single_goal_valid_structure() -> None:
     assert 0.0 <= g["fundedPct"] <= 100.0
     assert r["aggregate"]["goalCount"] == 1
     assert r["onTrackThreshold"] == pytest.approx(0.85)
+    assert "priorityAllocation" not in r
 
 
 def test_future_cost_inflates_present_target() -> None:
@@ -184,6 +185,143 @@ def test_aggregate_present_value_rollup() -> None:
     assert agg["underfundedCount"] == 2
 
 
+def test_priority_shared_pool_allocates_current_assets_without_double_counting() -> None:
+    r = analyze_goals(
+        goals=[
+            _goal(
+                id="low",
+                priority=2,
+                target_amount=100_000.0,
+                years_to_goal=5,
+                inflation_rate=0.0,
+                expected_return=0.0,
+            ),
+            _goal(
+                id="high",
+                priority=1,
+                target_amount=100_000.0,
+                years_to_goal=5,
+                inflation_rate=0.0,
+                expected_return=0.0,
+            ),
+        ],
+        shared_funding_pool={"current_assets": 150_000.0},
+    )
+
+    allocation = r["priorityAllocation"]
+    assert allocation["mode"] == "priority_ordered_shared_pool"
+    assert allocation["order"] == [
+        {"id": "high", "priority": 1, "inputOrder": 1},
+        {"id": "low", "priority": 2, "inputOrder": 0},
+    ]
+    assert allocation["sharedPool"]["allocatedCurrentAssets"] == pytest.approx(150_000.0)
+    assert allocation["sharedPool"]["unallocatedCurrentAssets"] == pytest.approx(0.0)
+
+    by_id = {row["id"]: row for row in allocation["goals"]}
+    assert by_id["high"]["fundedPctAfterSharedAllocation"] == pytest.approx(100.0)
+    assert by_id["high"]["bindingConstraint"]["code"] == "none"
+    assert by_id["low"]["fundedPctAfterSharedAllocation"] == pytest.approx(50.0)
+    assert by_id["low"]["shortfallFutureAfterSharedAllocation"] == pytest.approx(50_000.0)
+    assert by_id["low"]["bindingConstraint"]["code"] == "shared_current_assets"
+
+
+def test_priority_shared_pool_names_monthly_savings_as_binding_constraint() -> None:
+    r = analyze_goals(
+        goals=[
+            _goal(
+                id="a",
+                priority=1,
+                target_amount=12_000.0,
+                years_to_goal=1,
+                inflation_rate=0.0,
+                expected_return=0.0,
+            ),
+            _goal(
+                id="b",
+                priority=2,
+                target_amount=12_000.0,
+                years_to_goal=1,
+                inflation_rate=0.0,
+                expected_return=0.0,
+            ),
+        ],
+        shared_funding_pool={"monthly_contribution": 1_500.0},
+    )
+
+    by_id = {row["id"]: row for row in r["priorityAllocation"]["goals"]}
+    assert by_id["a"]["allocatedMonthlyContribution"] == pytest.approx(1_000.0)
+    assert by_id["a"]["bindingConstraint"]["code"] == "none"
+    assert by_id["b"]["allocatedMonthlyContribution"] == pytest.approx(500.0)
+    assert by_id["b"]["fundedPctAfterSharedAllocation"] == pytest.approx(50.0)
+    assert by_id["b"]["bindingConstraint"]["code"] == "shared_monthly_contribution"
+    assert r["priorityAllocation"]["summary"]["bindingConstraints"] == {
+        "none": 1,
+        "shared_monthly_contribution": 1,
+    }
+
+
+def test_priority_shared_pool_names_current_assets_when_exhausted_before_goal() -> None:
+    r = analyze_goals(
+        goals=[
+            _goal(
+                id="a",
+                priority=1,
+                target_amount=100_000.0,
+                years_to_goal=5,
+                inflation_rate=0.0,
+                expected_return=0.0,
+            ),
+            _goal(
+                id="b",
+                priority=2,
+                target_amount=100_000.0,
+                years_to_goal=5,
+                inflation_rate=0.0,
+                expected_return=0.0,
+            ),
+        ],
+        shared_funding_pool={"current_assets": 100_000.0},
+    )
+
+    by_id = {row["id"]: row for row in r["priorityAllocation"]["goals"]}
+    assert by_id["a"]["allocatedCurrentAssets"] == pytest.approx(100_000.0)
+    assert by_id["a"]["bindingConstraint"]["code"] == "none"
+    assert by_id["b"]["allocatedCurrentAssets"] == pytest.approx(0.0)
+    assert by_id["b"]["fundedPctAfterSharedAllocation"] == pytest.approx(0.0)
+    assert by_id["b"]["bindingConstraint"]["code"] == "shared_current_assets"
+
+
+def test_priority_shared_pool_names_monthly_savings_when_exhausted_before_goal() -> None:
+    r = analyze_goals(
+        goals=[
+            _goal(
+                id="a",
+                priority=1,
+                target_amount=12_000.0,
+                years_to_goal=1,
+                inflation_rate=0.0,
+                expected_return=0.0,
+            ),
+            _goal(
+                id="b",
+                priority=2,
+                target_amount=12_000.0,
+                years_to_goal=1,
+                inflation_rate=0.0,
+                expected_return=0.0,
+            ),
+        ],
+        shared_funding_pool={"monthly_contribution": 1_000.0},
+    )
+
+    by_id = {row["id"]: row for row in r["priorityAllocation"]["goals"]}
+    assert by_id["a"]["allocatedMonthlyContribution"] == pytest.approx(1_000.0)
+    assert by_id["a"]["bindingConstraint"]["code"] == "none"
+    assert by_id["b"]["allocatedMonthlyContribution"] == pytest.approx(0.0)
+    assert by_id["b"]["fundedPctAfterSharedAllocation"] == pytest.approx(0.0)
+    assert by_id["b"]["bindingConstraint"]["code"] == "shared_monthly_contribution"
+
+
 def test_empty_goals_is_a_valid_noop() -> None:
     r = analyze_goals(goals=[])
     assert r["goals"] == []
@@ -202,6 +340,7 @@ def test_determinism() -> None:
         {"id": "g", "target_amount": -1.0, "years_to_goal": 5},
         {"id": "g", "target_amount": 100.0, "years_to_goal": -1},
         {"id": "g", "target_amount": 100.0, "years_to_goal": 5, "funding_years": 0},
+        {"id": "g", "target_amount": 100.0, "years_to_goal": 5, "priority": 0},
         {"id": "", "target_amount": 100.0, "years_to_goal": 5},
         {"id": "g", "target_amount": 100.0, "years_to_goal": 5, "current_assets": -5.0},
         {"id": "g", "target_amount": 100.0, "years_to_goal": 5, "expected_return": -1.0},
@@ -215,3 +354,8 @@ def test_invalid_goal_raises(bad: dict[str, Any]) -> None:
 def test_duplicate_id_raises() -> None:
     with pytest.raises(ValueError, match="duplicate goal id"):
         analyze_goals(goals=[_goal(id="dup"), _goal(id="dup")])
+
+
+def test_invalid_shared_pool_raises() -> None:
+    with pytest.raises(ValueError, match="shared_funding_pool.current_assets"):
+        analyze_goals(goals=[_goal()], shared_funding_pool={"current_assets": -1})

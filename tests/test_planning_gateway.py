@@ -883,6 +883,7 @@ def test_analyze_goals_happy_path() -> None:
             {
                 "id": "college-1",
                 "kind": "education",
+                "priority": 1,
                 "targetAmount": 200_000,
                 "yearsToGoal": 10,
                 "currentAssets": 40_000,
@@ -894,10 +895,12 @@ def test_analyze_goals_happy_path() -> None:
             {
                 "id": "home-1",
                 "kind": "home",
+                "priority": 2,
                 "targetAmount": 150_000,
                 "yearsToGoal": 5,
             },
         ],
+        "sharedFundingPool": {"currentAssets": 50_000, "monthlyContribution": 250},
     }
     r = _client().post("/mcp/tools/analyze_goals", json=payload)
     assert r.status_code == 200, r.text
@@ -906,11 +909,19 @@ def test_analyze_goals_happy_path() -> None:
     assert len(body["goals"]) == 2
     first = body["goals"][0]
     assert first["id"] == "college-1"  # opaque id echoed; no label in the contract
+    assert first["priority"] == 1
     assert first["fundingYears"] == 4
     assert 0.0 <= first["fundedPct"] <= 100.0
     assert first["status"] in {"funded", "on_track", "underfunded"}
     assert body["aggregate"]["goalCount"] == 2
     assert 0.0 <= body["aggregate"]["overallFundedPct"] <= 100.0
+    assert body["priorityAllocation"]["mode"] == "priority_ordered_shared_pool"
+    assert body["priorityAllocation"]["order"][0] == {
+        "id": "college-1",
+        "priority": 1,
+        "inputOrder": 0,
+    }
+    assert body["priorityAllocation"]["summary"]["goalCount"] == 2
 
 
 def test_analyze_goals_bad_target_400() -> None:

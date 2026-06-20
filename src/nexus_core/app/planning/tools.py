@@ -355,6 +355,7 @@ _GOAL_FIELD_MAP = {
     "yearsToGoal": "years_to_goal",
     "currentAssets": "current_assets",
     "monthlyContribution": "monthly_contribution",
+    "priority": "priority",
     "fundingYears": "funding_years",
     "inflationRate": "inflation_rate",
     "expectedReturn": "expected_return",
@@ -389,12 +390,25 @@ def analyze_goals_tool(body: dict[str, Any]) -> dict[str, Any]:
     default_return = body.get("defaultExpectedReturn", 0.05)
     if isinstance(default_return, bool) or not isinstance(default_return, (int, float)):
         raise PlanningInputError("defaultExpectedReturn must be a number or omitted")
+    shared_pool = body.get("sharedFundingPool")
+    translated_shared_pool: dict[str, Any] | None = None
+    if shared_pool is not None:
+        if not isinstance(shared_pool, dict):
+            raise PlanningInputError("sharedFundingPool must be an object")
+        translated_shared_pool = {}
+        for wire_key, engine_key in (
+            ("currentAssets", "current_assets"),
+            ("monthlyContribution", "monthly_contribution"),
+        ):
+            if wire_key in shared_pool and shared_pool[wire_key] is not None:
+                translated_shared_pool[engine_key] = shared_pool[wire_key]
 
     try:
         return analyze_goals(
             goals=goals,
             default_inflation_rate=float(default_inflation),
             default_expected_return=float(default_return),
+            shared_funding_pool=translated_shared_pool,
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
