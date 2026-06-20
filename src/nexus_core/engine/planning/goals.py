@@ -194,7 +194,7 @@ def _analyze_one_goal(
         "fundedRatio": round(funded_ratio, 4),
         "fundedPct": round(funded_pct, 1),
         "status": status,
-        "onTrack": funded_ratio >= 1.0,
+        "onTrack": funded_ratio >= _ON_TRACK_RATIO,
         "shortfallFuture": round(shortfall_future, 2),
         "surplusFuture": round(surplus_future, 2),
         "shortfallPresent": round(shortfall_present, 2),

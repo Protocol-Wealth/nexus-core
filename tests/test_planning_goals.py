@@ -124,11 +124,29 @@ def test_status_bands() -> None:
     # underfunded (<85%): assets far below need
     under = analyze_goals(goals=[_goal(current_assets=10_000.0)])["goals"][0]
     assert under["status"] == "underfunded"
+    assert under["onTrack"] is False
+    # on-track (>=85% and <100%): above the exposed threshold but not fully funded
+    on_track_result = analyze_goals(
+        goals=[
+            _goal(
+                current_assets=25_000.0,
+                monthly_contribution=500.0,
+                inflation_rate=0.03,
+                expected_return=0.06,
+            )
+        ]
+    )
+    on_track = on_track_result["goals"][0]
+    assert on_track["fundedRatio"] > on_track_result["onTrackThreshold"]
+    assert on_track["fundedRatio"] < 1.0
+    assert on_track["status"] == "on_track"
+    assert on_track["onTrack"] is True
     # overfunded (>100%): assets above need → funded + a surplus
     over = analyze_goals(
         goals=[_goal(current_assets=300_000.0, inflation_rate=0.02, expected_return=0.06)]
     )["goals"][0]
     assert over["status"] == "funded"
+    assert over["onTrack"] is True
     assert over["fundedRatio"] > 1.0
     assert over["fundedPct"] == 100.0  # clamped for the bar
     assert over["surplusFuture"] > 0.0
