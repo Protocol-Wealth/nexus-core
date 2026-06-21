@@ -3,6 +3,9 @@
 > Repo: `Protocol-Wealth/nexus-core` · License: Apache 2.0 · Patent Pending: USPTO #64/034,229 · OIN member.
 > Open-source extraction of the [Protocol Wealth research engine](https://nexusmcp.site); nothing in this repo is client-specific or proprietary to PW.
 
+**Current state (2026-06-21 — goal engine reconciliation):**
+- **The prior dirty `goals.py` work is merged on main via PR #174, and PR #175 adds priority/shared-pool allocation.** `analyze_goals` is now the deterministic per-goal funding foundation plus the first shared-pool priority allocator. Future L1 Goal Graph work should extend this implementation rather than build beside it: persisted goal-analysis artifacts, solve-for, temporal waterfall behavior, and richer assumption/effective-input echoes belong on top of the existing tested goal logic. Keep client identity, advisor review, audit ledger, and intake conversion in pw-api/PWOS, not in nexus-core.
+
 ## What This Is
 
 Python 3.12 package — a regime-adaptive financial-analysis + DeFi/market-data engine. It serves a **public, read-only HTTP API** (FastAPI) with an **MCP-over-HTTP transport** mounted at `/mcp`, so any MCP-compatible AI client (Claude, GPT, Gemini) can call regime-aware analysis without re-implementing financial domain logic. No account, no API key, no auth.
