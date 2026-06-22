@@ -50,7 +50,7 @@ dependencies = [
     # pandas-3 support.
     "pandas>=3.0.3,<4.0",
     "numpy>=2.4.6",
-    "scipy>=1.17.1",
+    "scipy>=1.18.0",
 ]
 
 # ─── Optional dependencies (install with extras) ────────────────────
@@ -135,7 +135,7 @@ onchain = [
 
 # Planning / retirement simulation
 planning = [
-    "scipy>=1.17.1",               # already in core but listed for clarity
+    "scipy>=1.18.0",               # already in core but listed for clarity
 ]
 
 # Development tools
