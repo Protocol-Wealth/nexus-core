@@ -108,7 +108,7 @@ serve = [
 ai = [
     "finrl>=0.3.7",                # MIT (heavy: torch, gym)
     "transformers>=5.12.1",        # Apache 2.0 (for FinBERT)
-    "torch>=2.12.0",                # BSD-3
+    "torch>=2.12.1",                # BSD-3
 ]
 
 # Backtesting
