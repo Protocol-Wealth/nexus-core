@@ -107,7 +107,7 @@ serve = [
 # AI/ML for finance
 ai = [
     "finrl>=0.3.7",                # MIT (heavy: torch, gym)
-    "transformers>=5.12.0",        # Apache 2.0 (for FinBERT)
+    "transformers>=5.12.1",        # Apache 2.0 (for FinBERT)
     "torch>=2.12.0",                # BSD-3
 ]
 
