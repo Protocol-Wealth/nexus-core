@@ -229,6 +229,54 @@ def test_guardrails_freeze_after_loss_toggle_changes_spending() -> None:
     assert frozen["spendingByYear"]["p50"] != unfrozen["spendingByYear"]["p50"]
 
 
+def test_guardrails_credit_pre_decumulation_income_surplus() -> None:
+    # A guaranteed-income SURPLUS before the spend ramp is a negative net draw
+    # (a portfolio inflow). Enabling guardrails must NOT drop it: the static and
+    # guardrail runs match through the surplus years (the rails only engage at
+    # the first positive draw). Here years 0-2 are a -$50k/yr surplus inflow.
+    surplus = [-50_000.0, -50_000.0, -50_000.0] + [80_000 * (1.025**y) for y in range(17)]
+    kw: dict[str, Any] = {
+        "years": 20,
+        "current_age": 65,
+        "initial_balance": 1_000_000.0,
+        "net_spend_by_year": surplus,
+        "return_model": "multivariate_normal",
+        "means": [0.06, 0.03],
+        "paths": 3000,
+        "seed": 909,
+        "regime_seed": 909,
+    }
+    static = _run(**kw)
+    dynamic = _run(**kw, guardrails=GuardrailParams())
+    # The surplus inflow is credited under guardrails (median balance climbs over
+    # the inflow years), not dropped — and the surplus years show zero withdrawal.
+    assert dynamic["medianBalanceByYear"][2] > dynamic["medianBalanceByYear"][0]
+    assert dynamic["spendingByYear"]["p50"][0] == 0.0
+    # The guardrail run isn't penalized vs static for the surplus phase (the bug
+    # was guardrails zeroing the inflow → a spurious terminal shortfall).
+    assert dynamic["medianBalanceByYear"][2] == static["medianBalanceByYear"][2]
+
+
+def test_guardrails_no_positive_draw_ever_is_pure_inflow() -> None:
+    # Income always exceeds spend ⇒ every net draw is negative ⇒ gk_start < 0 ⇒
+    # no withdrawal rule ever engages; guardrails == static (pure inflow growth).
+    inflow_only = [-20_000.0] * 15
+    kw: dict[str, Any] = {
+        "years": 15,
+        "current_age": 70,
+        "initial_balance": 800_000.0,
+        "net_spend_by_year": inflow_only,
+        "return_model": "multivariate_normal",
+        "means": [0.05, 0.03],
+        "paths": 2000,
+        "seed": 313,
+        "regime_seed": 313,
+    }
+    assert _run(**kw)["medianBalanceByYear"] == _run(**kw, guardrails=GuardrailParams())[
+        "medianBalanceByYear"
+    ]
+
+
 def test_guardrails_respect_an_accumulation_phase() -> None:
     # retirementAge > currentAge ⇒ leading zero net-spend years; the guardrails
     # start at the first positive draw, and accumulation years spend nothing.

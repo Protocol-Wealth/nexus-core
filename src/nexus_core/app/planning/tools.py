@@ -1266,6 +1266,8 @@ def _parse_guardrails(body: dict[str, Any], *, spend_cola: float) -> GuardrailPa
         raise PlanningInputError("guardrails.band must be in (0, 1)")
     if not 0.0 <= raise_pct < 1.0 or not 0.0 <= cut < 1.0:
         raise PlanningInputError("guardrails.raise and guardrails.cut must be in [0, 1)")
+    if not math.isfinite(inflation):  # NaN/inf would poison the spending bands
+        raise PlanningInputError("guardrails.inflation must be finite")
     if inflation < 0.0:
         raise PlanningInputError("guardrails.inflation must be non-negative")
     freeze = raw.get("freezeAfterLoss", True)

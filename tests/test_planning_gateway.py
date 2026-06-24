@@ -303,6 +303,7 @@ def test_monte_carlo_invalid_guardrails_return_400() -> None:
         ({"rule": "vpw"}, "guyton_klinger"),
         ({"band": 1.5}, "band must be in"),
         ({"cut": -0.1}, "raise and guardrails.cut"),
+        ({"inflation": float("nan")}, "inflation must be finite"),
         ({"preservationFinalYears": -2}, "preservationFinalYears"),
         ({"freezeAfterLoss": "yes"}, "freezeAfterLoss"),
     ):

@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   cuts/raises are visible), and `guardrailActivity` (`pathsWithCut` /
   `pathsWithRaise` + the band/cut/raise echo). Omitting `guardrails` is
   **byte-identical** to the prior static-withdrawal behavior (no new fields).
-  `mypy --strict` + `ruff` clean; +12 tests (engine + gateway).
+  `mypy --strict` + `ruff` clean; +13 tests (engine + gateway).
 
 ### Retired the FMP / FinanceToolkit path
 

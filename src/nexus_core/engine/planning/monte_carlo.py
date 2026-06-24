@@ -234,8 +234,13 @@ def monte_carlo_decumulation(
     for year in range(years):
         if guardrails is None:
             this_w: float | np.ndarray = net[year]
-        elif year < gk_start:  # accumulation (or no decumulation at all)
-            this_w = 0.0
+        elif gk_start < 0 or year < gk_start:
+            # No decumulation yet — or none at all (gk_start < 0). net[year] is
+            # <= 0 here by construction (gk_start is the first POSITIVE draw), so
+            # this carries accumulation zeros AND any guaranteed-income surplus as
+            # a portfolio inflow — exactly the static draw — never a positive
+            # withdrawal before the rails engage.
+            this_w = net[year]
         elif year == gk_start:  # capture each path's initial withdrawal rate
             withdrawal = np.full(paths, float(net[gk_start]))
             initial_rate = withdrawal / np.maximum(balance, 1e-9)
