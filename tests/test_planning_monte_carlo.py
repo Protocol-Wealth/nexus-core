@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from nexus_core.engine.planning import monte_carlo_decumulation
+from nexus_core.engine.planning import GuardrailParams, monte_carlo_decumulation
 from nexus_core.engine.planning.regime import GENERIC_REGIMES
 
 _MODELS = (
@@ -142,3 +142,107 @@ def test_regime_summary_only_for_regime_aware_models() -> None:
 def test_emf_starts_path_at_current_regime() -> None:
     summary = _run(return_model="emf_regime", current_regime="crisis")["regimePathSummary"]
     assert summary[0] == "crisis"
+
+
+# ── Guyton-Klinger dynamic withdrawals (guardrails) ──────────────────────────
+
+
+def _stressed(**overrides: Any) -> dict[str, Any]:
+    # A stressed 6% initial withdrawal, no accumulation, deterministic MVN model:
+    # static spending runs the portfolio down; guardrails should cut to preserve it.
+    base: dict[str, Any] = {
+        "years": 30,
+        "current_age": 65,
+        "initial_balance": 1_000_000.0,
+        "net_spend_by_year": [60_000 * (1.025**y) for y in range(30)],
+        "means": [0.05, 0.03],
+        "vols": [0.16, 0.05],
+        "return_model": "multivariate_normal",
+        "paths": 4000,
+        "seed": 4242,
+        "regime_seed": 4242,
+    }
+    base.update(overrides)
+    return _run(**base)
+
+
+def test_guardrails_absent_is_unchanged() -> None:
+    # Omitting guardrails (or passing None) is byte-identical + carries no GK fields.
+    static = _stressed()
+    explicit_none = _stressed(guardrails=None)
+    assert static == explicit_none
+    assert "withdrawalRule" not in static
+    assert "spendingByYear" not in static
+    assert "guardrailActivity" not in static
+
+
+def test_guardrails_add_spending_and_activity_fields() -> None:
+    r = _stressed(guardrails=GuardrailParams())
+    assert r["withdrawalRule"] == "guyton_klinger"
+    spend = r["spendingByYear"]
+    assert set(spend) == {"p10", "p50", "p90"}
+    assert len(spend["p10"]) == 30
+    activity = r["guardrailActivity"]
+    assert set(activity) == {"pathsWithCut", "pathsWithRaise", "band", "cut", "raise"}
+    assert 0.0 <= activity["pathsWithCut"] <= 1.0
+    assert 0.0 <= activity["pathsWithRaise"] <= 1.0
+
+
+def test_guardrails_cut_spending_in_a_stressed_plan() -> None:
+    # Under a stressed 6% draw, the capital-preservation rail binds on many paths,
+    # and the low-spend (p10) band falls below the year-0 net draw of $60k.
+    r = _stressed(guardrails=GuardrailParams())
+    assert r["guardrailActivity"]["pathsWithCut"] > 0.0
+    assert min(r["spendingByYear"]["p10"]) < 60_000.0
+
+
+def test_guardrails_improve_success_vs_static_plan() -> None:
+    # The headline of GK: cutting spending in bad markets preserves the portfolio,
+    # so dynamic withdrawals fail less often than the same base spend held static.
+    static = _stressed()
+    dynamic = _stressed(guardrails=GuardrailParams())
+    assert dynamic["successProbability"] > static["successProbability"]
+
+
+def test_prosperity_rule_raises_spending_when_the_plan_is_flush() -> None:
+    # A conservative 3% draw with strong returns trips the prosperity rail upward,
+    # so the high-spend (p90) band rises above the year-0 net draw of $30k.
+    flush = _stressed(
+        net_spend_by_year=[30_000 * (1.025**y) for y in range(30)],
+        means=[0.09, 0.04],
+        guardrails=GuardrailParams(),
+    )
+    assert flush["guardrailActivity"]["pathsWithRaise"] > 0.0
+    assert max(flush["spendingByYear"]["p90"]) > 30_000.0
+
+
+def test_guardrails_determinism_same_seed() -> None:
+    assert _stressed(guardrails=GuardrailParams()) == _stressed(guardrails=GuardrailParams())
+
+
+def test_guardrails_freeze_after_loss_toggle_changes_spending() -> None:
+    # The post-loss inflation freeze is load-bearing: toggling it produces a
+    # materially different median spend path (freeze-off spends faster early,
+    # which trips more capital-preservation cuts later — a real GK dynamic).
+    frozen = _stressed(guardrails=GuardrailParams(freeze_after_loss=True))
+    unfrozen = _stressed(guardrails=GuardrailParams(freeze_after_loss=False))
+    assert frozen["spendingByYear"]["p50"] != unfrozen["spendingByYear"]["p50"]
+
+
+def test_guardrails_respect_an_accumulation_phase() -> None:
+    # retirementAge > currentAge ⇒ leading zero net-spend years; the guardrails
+    # start at the first positive draw, and accumulation years spend nothing.
+    r = _run(
+        years=20,
+        current_age=55,
+        initial_balance=1_000_000.0,
+        net_spend_by_year=[0.0] * 5 + [70_000 * (1.025**y) for y in range(15)],
+        return_model="multivariate_normal",
+        means=[0.06, 0.03],
+        paths=2000,
+        seed=77,
+        regime_seed=77,
+        guardrails=GuardrailParams(),
+    )
+    assert r["spendingByYear"]["p50"][0] == 0.0  # accumulation: no withdrawal
+    assert r["spendingByYear"]["p50"][5] > 0.0  # decumulation has begun

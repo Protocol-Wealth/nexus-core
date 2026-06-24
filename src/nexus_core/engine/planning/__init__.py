@@ -24,7 +24,7 @@ from .fire import fire
 from .glide_path import GlidePathShape, compute_glide_path
 from .goals import GOAL_KINDS, analyze_goals
 from .irmaa import irmaa_headroom
-from .monte_carlo import monte_carlo_decumulation
+from .monte_carlo import GuardrailParams, monte_carlo_decumulation
 from .rebalance import rebalance
 from .regime_swr import regime_conditioned_swr
 from .result_schema import roth_conversion_analysis_schema
@@ -65,6 +65,7 @@ __all__ = [
     "analyze_roth_conversion",
     "bracket_headroom",
     "compute_glide_path",
+    "GuardrailParams",
     "correlation_matrix",
     "fire",
     "irmaa_headroom",
