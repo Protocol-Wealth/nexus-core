@@ -36,7 +36,8 @@ from .scoring import build_scoring_context, build_scoring_framework
 _PLANNING_TOOL_DESCRIPTIONS = {
     "monte_carlo_decumulation": (
         "Monte Carlo retirement decumulation simulation across return models "
-        "(incl. live-regime-aware), with optional spendSchedule shocks and "
+        "(incl. live-regime-aware), with optional spendSchedule shocks, optional "
+        "Guyton-Klinger dynamic-withdrawal guardrails (pass `guardrails`), and "
         "depletion-age diagnostics. Pass the planning request as a JSON object in `body`."
     ),
     "analyze_goals": (

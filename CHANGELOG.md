@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Guyton-Klinger dynamic withdrawals (decumulation guardrails)
+
+#### Added
+
+- **`monte_carlo_decumulation` now accepts an optional `guardrails` config**
+  selecting Guyton-Klinger dynamic withdrawals — a path-dependent withdrawal
+  rule that replaces the static `net_spend_by_year` schedule from the first
+  decumulation year onward. The three rules run vectorized across paths against
+  each path's own initial withdrawal rate (captured when decumulation begins):
+  the **withdrawal rule** raises the prior draw by `inflation` each year but
+  freezes that raise after a down year when the rate is already elevated
+  (`freezeAfterLoss`); the **capital-preservation rule** cuts the draw by `cut`
+  (default 10%) when the rate rises more than `band` (default 20%) above the
+  initial rate (suspended in the final `preservationFinalYears`, default 15);
+  the **prosperity rule** raises the draw by `raise` (default 10%) when the rate
+  falls more than `band` below the initial rate. New `GuardrailParams` dataclass
+  in `engine/planning/monte_carlo.py`; gateway parsing + validation in
+  `app/planning/tools.py` (the `guardrails` body field, `rule: "guyton_klinger"`).
+- **New response fields when `guardrails` is supplied** — `withdrawalRule`,
+  `spendingByYear` (p10/p50/p90 per-year realized-spend bands, so the dynamic
+  cuts/raises are visible), and `guardrailActivity` (`pathsWithCut` /
+  `pathsWithRaise` + the band/cut/raise echo). Omitting `guardrails` is
+  **byte-identical** to the prior static-withdrawal behavior (no new fields).
+  `mypy --strict` + `ruff` clean; +13 tests (engine + gateway).
+
 ### Retired the FMP / FinanceToolkit path
 
 #### Removed

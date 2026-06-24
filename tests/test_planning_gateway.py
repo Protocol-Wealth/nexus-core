@@ -272,6 +272,47 @@ def test_monte_carlo_invalid_spend_schedule_returns_400() -> None:
         )
 
 
+def test_monte_carlo_guardrails_end_to_end() -> None:
+    # A guardrails request returns the dynamic-withdrawal fields end-to-end.
+    r = _client().post(
+        "/mcp/tools/monte_carlo_decumulation",
+        json={**_MC_PAYLOAD, "guardrails": {"rule": "guyton_klinger"}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["withdrawalRule"] == "guyton_klinger"
+    assert set(body["spendingByYear"]) == {"p10", "p50", "p90"}
+    assert len(body["spendingByYear"]["p50"]) == 50
+    assert set(body["guardrailActivity"]) == {
+        "pathsWithCut",
+        "pathsWithRaise",
+        "band",
+        "cut",
+        "raise",
+    }
+
+
+def test_monte_carlo_without_guardrails_omits_the_dynamic_fields() -> None:
+    body = _client().post("/mcp/tools/monte_carlo_decumulation", json=_MC_PAYLOAD).json()
+    assert "withdrawalRule" not in body
+    assert "spendingByYear" not in body
+
+
+def test_monte_carlo_invalid_guardrails_return_400() -> None:
+    for bad, match in (
+        ({"rule": "vpw"}, "guyton_klinger"),
+        ({"band": 1.5}, "band must be in"),
+        ({"cut": -0.1}, "raise and guardrails.cut"),
+        ({"inflation": float("nan")}, "inflation must be finite"),
+        ({"preservationFinalYears": -2}, "preservationFinalYears"),
+        ({"freezeAfterLoss": "yes"}, "freezeAfterLoss"),
+    ):
+        with pytest.raises(PlanningInputError, match=match):
+            _monte_carlo_decumulation_tool(
+                {**_MC_PAYLOAD, "guardrails": bad}, _FakeMarket(), _FakeRegimeEngine()
+            )
+
+
 def test_monte_carlo_too_many_asset_classes_returns_400() -> None:
     # SECURITY-AUDIT-2026-06-09 H8: the public, unauthenticated monte_carlo
     # surface allocated a (paths, years, n_assets) array + ran O(n^2)/O(n^3)

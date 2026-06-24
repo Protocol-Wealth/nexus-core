@@ -28,6 +28,7 @@ from ...data.providers import MarketDataProvider
 from ...disclaimers import FULL
 from ...engine.planning import (
     GlidePathShape,
+    GuardrailParams,
     InfeasiblePlanError,
     analyze_goals,
     analyze_roth_conversion,
@@ -1244,6 +1245,47 @@ def _build_correlation(
     ]
 
 
+def _parse_guardrails(body: dict[str, Any], *, spend_cola: float) -> GuardrailParams | None:
+    """Parse the optional Guyton-Klinger guardrail config; None ⇒ static withdrawal.
+
+    Inflation defaults to the plan's ``spendColaRate`` so a guardrail run inflates
+    at the same rate the static plan would, absent an explicit override.
+    """
+    raw = body.get("guardrails")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise PlanningInputError("guardrails must be an object or null")
+    if raw.get("rule", "guyton_klinger") != "guyton_klinger":
+        raise PlanningInputError("guardrails.rule must be 'guyton_klinger'")
+    inflation = _opt_num(raw, "inflation", spend_cola)
+    band = _opt_num(raw, "band", 0.20)
+    raise_pct = _opt_num(raw, "raise", 0.10)
+    cut = _opt_num(raw, "cut", 0.10)
+    if not 0.0 < band < 1.0:
+        raise PlanningInputError("guardrails.band must be in (0, 1)")
+    if not 0.0 <= raise_pct < 1.0 or not 0.0 <= cut < 1.0:
+        raise PlanningInputError("guardrails.raise and guardrails.cut must be in [0, 1)")
+    if not math.isfinite(inflation):  # NaN/inf would poison the spending bands
+        raise PlanningInputError("guardrails.inflation must be finite")
+    if inflation < 0.0:
+        raise PlanningInputError("guardrails.inflation must be non-negative")
+    freeze = raw.get("freezeAfterLoss", True)
+    if not isinstance(freeze, bool):
+        raise PlanningInputError("guardrails.freezeAfterLoss must be a boolean")
+    final_years = raw.get("preservationFinalYears", 15)
+    if isinstance(final_years, bool) or not isinstance(final_years, int) or final_years < 0:
+        raise PlanningInputError("guardrails.preservationFinalYears must be a non-negative integer")
+    return GuardrailParams(
+        inflation=inflation,
+        band=band,
+        raise_pct=raise_pct,
+        cut=cut,
+        freeze_after_loss=freeze,
+        preservation_final_years=final_years,
+    )
+
+
 def _monte_carlo_decumulation_tool(
     body: dict[str, Any], market: MarketDataProvider, regime_engine: RegimeEngine
 ) -> dict[str, Any]:
@@ -1300,6 +1342,7 @@ def _monte_carlo_decumulation_tool(
         spend_cola=float(spend_cola),
         body=body,
     )
+    guardrails = _parse_guardrails(body, spend_cola=float(spend_cola))
 
     paths = body.get("paths", 10000)
     if isinstance(paths, bool) or not isinstance(paths, int) or not 1 <= paths <= _MC_MAX_PATHS:
@@ -1334,6 +1377,7 @@ def _monte_carlo_decumulation_tool(
         regime_seed=regime_seed,
         current_regime=current_regime,
         current_age=current_age,
+        guardrails=guardrails,
     )
 
 
