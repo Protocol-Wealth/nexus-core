@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from types import SimpleNamespace
 from typing import Any
 
@@ -13,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
 from nexus_core.app.planning import CONTRACT_VERSION, build_planning_router
+from nexus_core.app.planning import gateway as planning_gateway
 from nexus_core.app.planning.contract import PlanningInputError
 from nexus_core.app.planning.tools import _monte_carlo_decumulation_tool
 from nexus_core.data.providers import PriceBar
@@ -61,6 +64,38 @@ def _client(*, cors: bool = False) -> TestClient:
         build_planning_router(market=_FakeMarket(), regime_engine=_FakeRegimeEngine())
     )
     return TestClient(app)
+
+
+def test_internal_engine_error_logs_without_traceback(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    class _Request:
+        async def json(self) -> dict[str, Any]:
+            return {"contractVersion": "0.1.0"}
+
+    def _boom(_body: dict[str, Any]) -> dict[str, Any]:
+        raise RuntimeError("sensitive stack detail")
+
+    monkeypatch.setattr(
+        planning_gateway,
+        "build_tool_handlers",
+        lambda *, market, regime_engine: {"explode": _boom},
+    )
+    router = planning_gateway.build_planning_router(
+        market=_FakeMarket(), regime_engine=_FakeRegimeEngine()
+    )
+    endpoint = next(route.endpoint for route in router.routes if route.path == "/mcp/tools/{tool_id}")
+
+    with caplog.at_level(logging.WARNING, logger=planning_gateway.__name__):
+        response = asyncio.run(endpoint("explode", _Request()))
+
+    assert response.status_code == 500
+    assert response.body == b"internal planning engine error"
+    records = [record for record in caplog.records if record.name == planning_gateway.__name__]
+    assert len(records) == 1
+    assert records[0].exc_info is None
+    assert "sensitive stack detail" not in records[0].getMessage()
+    assert "explode" in records[0].getMessage()
 
 
 _GLIDE: dict[str, Any] = {

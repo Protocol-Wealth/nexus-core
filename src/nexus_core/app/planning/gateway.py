@@ -91,8 +91,8 @@ def build_planning_router(
             return _error(400, str(exc))
         except PlanningInfeasibleError as exc:
             return _error(422, str(exc))
-        except Exception:  # defensive: log server-side, never leak internals to the client
-            logger.exception("planning tool %r raised", tool_id)
+        except Exception:  # defensive: never log or return traceback details from the public gateway
+            logger.warning("planning tool %r failed with an internal engine error", tool_id)
             return _error(500, "internal planning engine error")
 
         payload.setdefault("contractVersion", CONTRACT_VERSION)
