@@ -88,9 +88,9 @@ def build_planning_router(
         try:
             payload = handler(body)
         except PlanningInputError as exc:
-            return _error(400, str(exc))
+            return _error(400, exc.public_message)
         except PlanningInfeasibleError as exc:
-            return _error(422, str(exc))
+            return _error(422, exc.public_message)
         except Exception:  # defensive: never log or return traceback details from the public gateway
             logger.warning("planning tool %r failed with an internal engine error", tool_id)
             return _error(500, "internal planning engine error")

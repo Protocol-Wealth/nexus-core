@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from nexus_core.app.planning import CONTRACT_VERSION, build_planning_router
 from nexus_core.app.planning import gateway as planning_gateway
-from nexus_core.app.planning.contract import PlanningInputError
+from nexus_core.app.planning.contract import PlanningInfeasibleError, PlanningInputError
 from nexus_core.app.planning.tools import _monte_carlo_decumulation_tool
 from nexus_core.data.providers import PriceBar
 
@@ -64,6 +64,44 @@ def _client(*, cors: bool = False) -> TestClient:
         build_planning_router(market=_FakeMarket(), regime_engine=_FakeRegimeEngine())
     )
     return TestClient(app)
+
+
+def test_planning_error_public_messages_are_sanitized() -> None:
+    assert PlanningInputError("  field 'age' must be a number  ").public_message == (
+        "field 'age' must be a number"
+    )
+    assert PlanningInputError(
+        "Traceback (most recent call last):\n  File \"engine.py\", line 1"
+    ).public_message == "invalid planning request"
+    assert PlanningInfeasibleError(
+        "Traceback (most recent call last):\n  File \"solver.py\", line 1"
+    ).public_message == "planning request infeasible"
+
+
+def test_planning_input_error_response_uses_public_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Request:
+        async def json(self) -> dict[str, Any]:
+            return {"contractVersion": "0.1.0"}
+
+    def _bad_input(_body: dict[str, Any]) -> dict[str, Any]:
+        raise PlanningInputError("Traceback (most recent call last):\n  File \"engine.py\"")
+
+    monkeypatch.setattr(
+        planning_gateway,
+        "build_tool_handlers",
+        lambda *, market, regime_engine: {"bad_input": _bad_input},
+    )
+    router = planning_gateway.build_planning_router(
+        market=_FakeMarket(), regime_engine=_FakeRegimeEngine()
+    )
+    endpoint = next(route.endpoint for route in router.routes if route.path == "/mcp/tools/{tool_id}")
+
+    response = asyncio.run(endpoint("bad_input", _Request()))
+
+    assert response.status_code == 400
+    assert response.body == b"invalid planning request"
 
 
 def test_internal_engine_error_logs_without_traceback(

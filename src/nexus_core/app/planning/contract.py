@@ -11,8 +11,8 @@ Defines the versioned contract shared with the pwplan-core consumer:
   shaped key anywhere in a request body is rejected fail-closed.
 - Error types — :class:`PlanningInputError` (HTTP 400, malformed/invalid input)
   and :class:`PlanningInfeasibleError` (HTTP 422, a well-formed but unsatisfiable
-  plan). Their messages are surfaced verbatim in the consumer's UI, so they are
-  written to be human-readable.
+  plan). Their ``public_message`` values are surfaced in the consumer's UI, so
+  they are written to be human-readable and defensively sanitized.
 """
 
 from __future__ import annotations
@@ -21,6 +21,13 @@ from typing import Any
 
 #: The planning contract version. Bump on any breaking request/response change.
 CONTRACT_VERSION = "0.1.0"
+
+_MAX_PUBLIC_ERROR_CHARS = 500
+_TRACEBACK_MARKERS = (
+    "Traceback (most recent call last):",
+    "\n  File ",
+    "\n    ",
+)
 
 #: Identity-shaped keys the engine refuses (case-insensitive, separators ignored).
 #: Planning is done on age, not date of birth; no name, contact, or government id
@@ -43,12 +50,33 @@ IDENTITY_KEYS: frozenset[str] = frozenset(
 )
 
 
+def _public_error_message(message: object, *, fallback: str) -> str:
+    if not isinstance(message, str):
+        return fallback
+    if any(marker in message for marker in _TRACEBACK_MARKERS):
+        return fallback
+    text = " ".join(message.split()).strip()
+    if not text:
+        return fallback
+    if len(text) > _MAX_PUBLIC_ERROR_CHARS:
+        return f"{text[: _MAX_PUBLIC_ERROR_CHARS - 3].rstrip()}..."
+    return text
+
+
 class PlanningInputError(Exception):
     """A malformed or invalid request (maps to HTTP 400)."""
+
+    def __init__(self, message: str) -> None:
+        self.public_message = _public_error_message(message, fallback="invalid planning request")
+        super().__init__(self.public_message)
 
 
 class PlanningInfeasibleError(Exception):
     """A well-formed request whose plan cannot be satisfied (maps to HTTP 422)."""
+
+    def __init__(self, message: str) -> None:
+        self.public_message = _public_error_message(message, fallback="planning request infeasible")
+        super().__init__(self.public_message)
 
 
 def find_identity_keys(payload: Any) -> list[str]:
