@@ -40,7 +40,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "httpx>=0.28.1",
     "structlog>=26.1.0",
-    "redis>=8.0.0",
+    "redis>=8.0.1",
     "asyncpg>=0.31.0",
     # alphalens-reloaded (the [backtest] extra) caps pandas<3.0 — pandas 3.0
     # broke it and there is no pandas-3-compatible release — so the whole
