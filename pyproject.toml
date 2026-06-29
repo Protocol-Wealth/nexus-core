@@ -78,7 +78,7 @@ pricing = [
 
 # SEC EDGAR integration
 edgar = [
-    "edgartools>=5.39.0",          # MIT — built-in MCP server
+    "edgartools>=5.40.0",          # MIT — built-in MCP server
     "arelle-release>=2.41.6",      # Apache 2.0 (XBRL validation)
     "sec-parser>=0.58.1",           # MIT
     "sec-edgar-downloader>=5.1.0", # MIT
