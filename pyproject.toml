@@ -86,7 +86,7 @@ edgar = [
 
 # Market data
 market = [
-    "yfinance>=1.4.1",            # Apache 2.0
+    "yfinance>=1.5.1",            # Apache 2.0
 ]
 
 # Model Context Protocol server (MCP-over-HTTP transport)
