@@ -14,7 +14,8 @@ guarantees, no marketing.
 
 The current production surface. Python 3.12 · FastAPI · FastMCP · sync
 `httpx` · `asyncpg` · `mypy --strict` · `ruff`. CI-gated test suite. Public,
-read-only, no auth, no client data. Every external integration degrades
+read-only, no account/API key, no client data. Remote MCP may use transparent
+OAuth with no login. Every external integration degrades
 gracefully to `None` / empty / `503` when its key is absent.
 
 ### Regime & scoring
@@ -71,12 +72,15 @@ gracefully to `None` / empty / `503` when its key is absent.
   (EVM `eth_getBalance` + Solana `getBalance`).
 - **`GET /api/vaults`, `/api/vaults/chains`** — DeFi vault discovery
   (vaults.fyi v2).
-- **`GET /api/lp/chains`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics`,
+- **`GET /api/lp/chains`, `/api/lp/uniswap-v3/{chain}/positions?owner=`,
+  `/api/lp/uniswap-v3/{chain}/{token_id}/analytics`,
   `/api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark`** — Uniswap V3 position
-  analytics across **ethereum, base, optimism, polygon**: value, in-range
-  status, **exact** impermanent-loss-vs-HODL, fee-APR estimate, uncollected
-  fees (RPC `tokensOwed` via Tatum), and Merkl reward APR rolled into total
-  APR. `vs-benchmark` adds hold-strategy benchmark returns over a window —
+  analytics across **ethereum, base, optimism, polygon**. `positions?owner=`
+  enumerates open positions an address owns (token units, no USD). By-token
+  analytics add value, in-range status, **exact** impermanent-loss-vs-HODL,
+  fee-APR estimate, uncollected fees (RPC `tokensOwed` via Tatum), and Merkl
+  reward APR rolled into total APR. `vs-benchmark` adds hold-strategy benchmark
+  returns over a window —
   the "was LPing worth it?" comparison. Pure CLMM math in
   `engine/lp/uniswap_v3.py` (tick math, `get_amounts_for_liquidity`, exact IL)
   is protocol-agnostic and reused across chains. USD prices are required query
@@ -98,11 +102,12 @@ gracefully to `None` / empty / `503` when its key is absent.
 - **`GET /api/usage`** — provider usage / quota report.
 - **`POST /mcp`** — MCP-over-HTTP transport (FastMCP, also `nexus-core mcp` over
   stdio) exposing the above as tools, plus `health` / `describe` / `get_quotes`
-  and the 16 planning tools. `GET /mcp/tools` + `POST /mcp/tools/{id}` are the
-  REST planning gateway (contractVersion `0.1.0`) for the pwplan-core shell. (The
-  3 composite Roth/IRMAA tools — `analyze_roth_conversion`, `sequence_conversions`,
-  `irmaa_headroom`, PlanningContract v1.0.0 — are merged to main + share this path,
-  but are not in the live deployment yet; see Next.)
+  and the 23 planning tools. `GET /mcp/tools` + `POST /mcp/tools/{id}` are the
+  REST planning gateway (contractVersion `0.1.0`) for the pwplan-core shell.
+  The same 23-tool handler set serves native MCP and REST, including
+  `analyze_goals`, `project_cash_flow`, `optimize_allocation`,
+  `build_planning_report`, and the Roth/IRMAA tools
+  `analyze_roth_conversion`, `sequence_conversions`, and `irmaa_headroom`.
 - **Persistence** — private Cloud SQL (`nexus-marketdata`, POSTGRES_16,
   private-IP-only on `pwllc-prod-vpc`, backups + deletion protection).
   Reached over Direct VPC egress; `asyncpg` (`data/db.py`, `data/snapshots.py`).
@@ -123,6 +128,9 @@ gracefully to `None` / empty / `503` when its key is absent.
   `score_asset` emits `NOT APPLICABLE` (not a verdict) on insufficient coverage.
 - **MCP ergonomics** — `readOnlyHint` annotations; `health` (per-upstream status)
   + `describe` (catalog + symbology) tools; `get_quotes` batch; native planning tools.
+- **Transparent MCP OAuth** — anonymous OAuth 2.1 / PKCE / Dynamic Client
+  Registration flow for remote MCP clients, backed by stateless HMAC-signed tokens
+  when `MCP_OAUTH_SIGNING_KEY` is set.
 - **Data provenance** — quotes/FRED carry `as_of` / `source` / `market_status`.
 - **Regime signals** — `breadth` (% sectors > 200DMA) + `precious_metals_signal`.
 - **Agent/discovery** — `/llms.txt`, `AGENTS.md`, `/.well-known/security.txt`,
@@ -134,16 +142,16 @@ gracefully to `None` / empty / `503` when its key is absent.
 
 Prioritized. Top item first.
 
-**Composite Roth/IRMAA planning tools — LIVE** (`analyze_roth_conversion`,
-`sequence_conversions`, `irmaa_headroom`, **PlanningContract v1.1.0**) on `nexusmcp.site`
-since rev `nexus-core-00048` (2026-06-04), verified by a production POST. The prior v2
-follow-ons all shipped in v1.1.0 (additive, backward-compatible over v1.0.0): the **ACA
-premium-tax-credit cliff** as a flag-with-magnitude estimate via an injected
-`AcaSituation` (`YearAnalysis.aca`); **employer-plan (401k/403b) balances**
-(`accounts.employer_plan_aggregate`, folded into the do-nothing RMD drag); and explicit
-**survivor-year filing transitions** (`DoNothingProjection.survivor_first_year_rmd_marginal_rate`).
+**Public-safe planning/report analytics extraction — open issue #197.** Decide
+which generic, PII-free analytics from private PWOS producer work belong in
+nexus-core as educational substrate: allocation decomposition, diversification
+readiness, index-proxy replay/backtest boundaries, model-portfolio context,
+education-reference context, source-quality signals, and report-input coverage.
+Keep report production, artifact receipts, client context, suitability, and
+private workflow state out unless deliberately generalized.
 
-**Next planning build — assumptions provenance (decided 2026-06-04).** Tag every
+**Next planning build — assumptions provenance (open issue #198; decided
+2026-06-04).** Tag every
 reference assumption with its origin + freshness: add a `source` (where the figure came
 from — e.g. the IRS Rev. Proc. / CMS notice + citation) and a `last_verified` date to
 each `reference_*` table factory (`engine/planning/tables.py`), surface them in the
@@ -153,6 +161,8 @@ caller-injected tables (`*_source = caller_provided`); this adds the provenance 
 last-analyzed metadata on the reference path. **Firm-wide standard: every assumption
 marks where it came from and when it was last analyzed** (additive — a v1.2.0 minor on
 the `snapshot` shape).
+
+**LP/indexer expansion and data quality — open issue #199.**
 
 1. **Aerodrome Slipstream — full coverage via Envio.** The on-chain RPC path
    is **live** today: `GET /api/lp/aerodrome/{token_id}/analytics` reads Base
@@ -187,20 +197,20 @@ the `snapshot` shape).
    way benchmarks are already snapshotted daily, enabling historical PnL/IL
    series.
 
-Crypto-options follow-ups (the overwriting suite above is shipped; these deepen it):
+Crypto-options follow-ups — open issue #200 (the overwriting suite above is shipped; these deepen it):
 put-side skew / risk-reversal (downside vol vs the call wing); coin-denominated
 collar laddering; IV-rank/percentile context on the term structure; and an optional
 config surface for the `regime_overlay` delta multipliers (the `defensiveness` knob
 is the per-request version today). The pwdemo.com browser + chat surface that drives
 these tools is built/iterated in the separate **pw-demo** repo, not here.
 
-Agent/analytics capability ideas (from the consumer-diagnostic roadmap, not yet built):
+Agent/analytics capability ideas — open issue #201 (from the consumer-diagnostic roadmap, not yet built):
 real *equity* options chains + IV (Tradier) and IV-rank to replace the theoretical σ
 (crypto already uses live Deribit IV); `score_portfolio` (sleeve-level aggregate of
 the 8-check); `defi_yields` / `defi_risk`; a `resolve_symbol` resolver; and structured
 provenance/versioning (`framework_version`) on score outputs for Rule 17a-4 reproducibility.
 
-**Equity-research vertical — full plan in [`docs/STOCK-RESEARCH-ENHANCEMENT.md`](docs/STOCK-RESEARCH-ENHANCEMENT.md).**
+**Equity-research vertical — open issue #203; full plan in [`docs/STOCK-RESEARCH-ENHANCEMENT.md`](docs/STOCK-RESEARCH-ENHANCEMENT.md).**
 Today an MCP client can run a stock idea through the regime + EMF durability lens
 (`current_regime` + `score_asset` + price), but nothing else — no fundamentals
 statements, valuation, analyst consensus, forward estimates, real equity options
@@ -228,5 +238,5 @@ first. The gate-free Claude Code connection + reference agent
 ---
 
 Apache-2.0 · USPTO #64/034,229 (defensive) · OIN member. New work preserves
-the public-surface contract: no auth added to read endpoints, no public write
-routes, no client data, no breaking changes to existing response shapes.
+the public-surface contract: no account/API-key gate on REST endpoints, no public
+write routes, no client data, no breaking changes to existing response shapes.

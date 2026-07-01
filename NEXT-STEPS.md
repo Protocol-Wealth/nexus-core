@@ -6,14 +6,15 @@ A hand-off for new contributors (interns). Read this with
 [`ROADMAP.md`](ROADMAP.md) (what's live vs next). This file is the **prioritized
 to-do list**; keep it current as you finish items.
 
-_Last updated: 2026-06-02. Live deployment: revision `nexus-core-00045-mdl` at
-[nexusmcp.site](https://nexusmcp.site)._
+_Last updated: 2026-07-01. Live deployment: [nexusmcp.site](https://nexusmcp.site)
+health verified `{"status":"ok","service":"nexus-core","version":"0.1.0"}`._
 
 ## Orient yourself in 5 minutes
 
 - **What this is:** the open, read-only public surface of the Protocol Wealth
-  research engine — a REST API + an MCP server, no auth, no client data. Deployed
-  to Cloud Run at `nexusmcp.site`.
+  research engine — a REST API + an MCP server, no account/API key and no client
+  data. Remote MCP clients may use transparent OAuth with no user login.
+  Deployed to Cloud Run at `nexusmcp.site`.
 - **Three sibling repos:** `nexus-core` (this — the engine + public API/MCP),
   `pwplan-core` (a thin PII-free **planning** UI that calls this engine's planning
   tools), and `pw-demo` (the public **demo site** at pwdemo.com — browser + chat
@@ -56,29 +57,40 @@ rate-limited (~60/min/IP), so pace the calls.
 
 ## Prioritized next tasks
 
-### Crypto-options (the active track — deepen the shipped overwriting suite)
+### Public-safe planning/report analytics extraction (#197)
+
+The active next track is GitHub issue #197: decide which generic, PII-free
+analytics from private PWOS producer work belong in nexus-core as educational
+substrate. Candidate work includes allocation decomposition, diversification
+readiness, index-proxy replay/backtest boundaries, model-portfolio context,
+education-reference context, source-quality signals, and report-input coverage.
+Keep report production, artifact receipts, client context, suitability, and
+private workflow state out unless deliberately generalized.
+
+### Planning assumptions provenance (#198)
+
+Add source and last-verified metadata to reference planning assumptions and echo
+it in planning outputs.
+
+### Crypto-options follow-ups (#200)
 
 The covered-call **overwriting + hedge suite** is live (see ROADMAP § Options).
-Engine: `engine/pricing/{crypto_overlays,option_chain,overwrite,options_book,regime_overlay,skew}.py`.
-Good next pieces, each a small PR (engine fn → REST route in `app/options.py` →
-MCP tool in `mcp/server/app.py` → hand-computed tests → docs):
+Remaining small PRs: put-side skew / risk-reversal, coin-denominated collar
+laddering, IV-rank / percentile context, and config surface for
+`regime_overlay` delta multipliers.
 
-1. **Put-side skew / risk-reversal.** `vol_skew` covers the call wing; add the put
-   wing + the 25Δ risk-reversal (`IV(25Δ put) − IV(25Δ call)`) — the standard
-   crypto skew signal. Mirror `engine/pricing/skew.py`.
-2. **Coin-denominated collar laddering.** Extend `overwrite.covered_call_ladder`'s
-   pattern to collars (put floor + financing call across tenors).
-3. **IV-rank / percentile context** on `iv_term_structure` (where today's IV sits
-   vs its own recent range) — needs a short history source or a snapshot.
-4. **Config surface for the `regime_overlay` delta multipliers.** The
-   `defensiveness` scalar is the per-request knob today; a server default
-   (env-driven) would let the house view be set once.
+### Platform (#199; see ROADMAP § Next for detail)
 
-### Platform (see ROADMAP § Next for detail)
+Aerodrome Slipstream full coverage via Envio, Base subgraph data-quality,
+subgraph health-gate, Uniswap V4, Solana CLMM, persisted LP PnL history.
 
-Aerodrome Slipstream full coverage via Envio (#1), Arbitrum Uniswap V3 subgraph,
-Base subgraph data-quality, subgraph health-gate, Uniswap V4, Solana CLMM,
-persisted LP PnL history.
+### Additional tracked backlog
+
+- #201 agent analytics capabilities: equity options IV, `score_portfolio`,
+  DeFi yield/risk, symbol resolver, score provenance/versioning.
+- #202 governance/tooling cleanup: EMF numbering, display-only signal decision,
+  and possible `ruff format` gate.
+- #203 equity-research vertical gates and public-safe buildout.
 
 ## In flight elsewhere (track, don't duplicate)
 

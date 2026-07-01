@@ -33,19 +33,18 @@ layer, which is pydantic-free by design; runtime validation lives in
 gateway already performs.
 
 Versioning note: this is the **case contract** (``PLANNING_CONTRACT_VERSION``,
-v1.0.0) — the structured Roth/IRMAA case object. It is distinct from, and
-coexists with, the per-tool gateway envelope version in
-``app/planning/contract.py`` (``CONTRACT_VERSION``, the 20 single-purpose
-planning tools). The two version on independent timelines.
+v1.1.0) — the structured Roth/IRMAA case object. It is distinct from, and
+coexists with, the planning-tool gateway envelope version in
+``app/planning/contract.py`` (``CONTRACT_VERSION``). The two version on
+independent timelines.
 
 v1 scope (documented exclusions — adding any of these is a MAJOR bump):
-- Only IRA-class pre-tax money via ``trad_ira_aggregate``. Employer-plan
-  balances (401(k)/403(b)) are out of scope: their still-working RMD exception
-  and separate pro-rata treatment differ, so they are not folded into the
-  aggregate.
-- No explicit deceased-spouse / survivor-year flag. Survivor-filing compression
-  is modelled only as a *rationale* (and reachable by analysing an ``mfs``/
-  ``single`` case), not as a future-dated transition input.
+- IRA-class pre-tax money is modelled via ``trad_ira_aggregate``.
+  ``employer_plan_aggregate`` is included only for future RMD drag; direct
+  employer-plan conversions, still-working RMD exceptions, plan loans, and
+  separate pro-rata treatment remain out of scope.
+- Survivor-filing compression is reported as an output scenario, but there is no
+  future-dated deceased-spouse / survivor-year transition input.
 - No inherited-IRA 10-year-drain modelling (the SECURE-Act heir arbitrage is a
   narrative ``purpose`` framing, not a modelled cash flow).
 

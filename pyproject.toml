@@ -40,7 +40,6 @@ dependencies = [
     "pydantic>=2.13.4",
     "httpx>=0.28.1",
     "structlog>=26.1.0",
-    "redis>=8.0.1",
     "asyncpg>=0.31.0",
     # alphalens-reloaded (the [backtest] extra) caps pandas<3.0 — pandas 3.0
     # broke it and there is no pandas-3-compatible release — so the whole
@@ -48,7 +47,7 @@ dependencies = [
     # The core engine uses no pandas-3-only API (verified), so this is a no-op
     # for the deployed surface. Lift the cap if/when alphalens-reloaded ships
     # pandas-3 support.
-    "pandas>=3.0.4,<4.0",
+    "pandas>=2.2,<3.0",
     "numpy>=2.5.0",
     "scipy>=1.18.0",
 ]
@@ -185,7 +184,7 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "PL"]
 #       with many threshold comparisons is inherently branchy)
 #   PLR2004 - magic values (thresholds are explicit on purpose)
 #   UP042 - StrEnum is 3.11+ only; str + Enum works on all supported versions
-#   PLC0415 - optional heavy deps (PyPortfolioOpt, Riskfolio, FinanceToolkit) are
+#   PLC0415 - optional heavy deps (PyPortfolioOpt, Riskfolio, torch, QuantLib) are
 #       lazy-imported inside functions on purpose, to keep them out of the core
 #       import path; the extras system is the whole point. Top-level imports would
 #       force the heavy deps on every `import nexus_core`.

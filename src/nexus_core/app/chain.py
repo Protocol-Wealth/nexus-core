@@ -8,9 +8,9 @@ address to its native-coin balance on a given chain via Tatum's RPC gateways;
 
 This is **anonymous public on-chain data** — input is a chain + address, output
 is a native balance. Nothing links an address to a person, name, or client
-record; there is no account, no auth, no stored identity. Complements
-``/api/wallet`` (DeBank EVM token portfolios) with native balances across chains
-DeBank does not cover (incl. Solana).
+record; there is no account, no caller API key, and no stored identity.
+Complements ``/api/wallet`` (DeBank EVM token portfolios) with native balances
+across chains DeBank does not cover (incl. Solana).
 """
 
 from __future__ import annotations

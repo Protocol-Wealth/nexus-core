@@ -62,6 +62,7 @@ python examples/mcp_server.py
 # ANTHROPIC_API_KEY; no nexus-core install needed — they call the public server)
 python examples/planning_agent.py
 python examples/crypto_options_agent.py
+python examples/roth_irmaa_agent.py
 python examples/stock_research_agent.py
 ```
 

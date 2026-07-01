@@ -16,7 +16,8 @@ Composes anonymous public sources:
 - CoinGecko (keyless) — hold-strategy benchmark returns (vs-benchmark only)
 
 **Anonymous public on-chain data** — input is a chain + NFT tokenId, output is
-position math. No identity or client linkage, no auth, no stored state.
+position math. No identity or client linkage, no caller API key, no stored
+state.
 
 USD prices are **required** query params: the math is exact given prices, and
 nexus-core has no ERC-20-address → USD path yet (auto-pricing is future work).

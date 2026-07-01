@@ -37,6 +37,8 @@ nexus-core snapshot  # daily benchmark snapshot (Cloud Run Job entrypoint)
 
 No env vars are required; every external integration degrades to `None`/empty/`503`
 when its key is absent. A free `FRED_API_KEY` sharpens the macro signals.
+`MCP_OAUTH_SIGNING_KEY` is optional and only enables the hosted transparent-OAuth
+flow for remote MCP clients; omit it for local open `/mcp`.
 
 ## Project layout
 

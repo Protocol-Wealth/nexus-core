@@ -8,8 +8,8 @@ handshake the consumer can poll).
 
 Contract behaviour (see :mod:`.contract`):
 
-- **Public, no auth.** Browser-callable; CORS + preflight are handled by the
-  app-level CORS middleware.
+- **Public, no account/API key.** Browser-callable; CORS + preflight are handled
+  by the app-level CORS middleware.
 - **PII-free.** Any identity-shaped key in the body is rejected ``400``.
 - **Versioned.** Every successful response echoes ``contractVersion``.
 - **Human-readable errors.** Error bodies are plain text shown verbatim in the

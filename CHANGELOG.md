@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Docs/status and dependency hygiene
+
+#### Changed
+
+- Reconciled root docs and source-rendered public copy (`README.md`, `CLAUDE.md`,
+  `CURRENT-STATE.md`, `ROADMAP.md`, `AUDIT.md`, `DEPLOY.md`, `/llms.txt`, and
+  `/mcp-guide`) with the live 2026-07-01 surface: 23 planning tools,
+  transparent MCP OAuth, public PII-free planning math, no open PRs, and
+  issue-linked outstanding work.
+- Restored `pyproject.toml` to the documented `pandas>=2.2,<3.0` boundary so the
+  `[backtest]`/`[all]` extras remain compatible with `alphalens-reloaded`.
+- Removed the unused core `redis` runtime dependency and the stale
+  `requirements-serve.lock` entry; the in-process rate limiter still documents
+  Redis only as a future shared-store option.
+- Cleaned current NOTICE / third-party license attribution so retired
+  FinanceToolkit and Ethereum-ETL references remain only in historical
+  changelog/planning context, not in active dependency notices.
+- Refreshed secondary contributor/security/example/test docs so the local gate,
+  canonical status docs, and vulnerability-reporting path match the current
+  repo posture.
+- Created GitHub tracking issues #198-#203 and linked outstanding/future-build
+  roadmap lanes from the status docs. #197 remains the public-safe
+  planning/report extraction tracker.
+
 ### Guyton-Klinger dynamic withdrawals (decumulation guardrails)
 
 #### Added
@@ -58,7 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   production tool) for evaluating an individual stock idea via Claude Code /
   Claude.ai over `nexusmcp.site/mcp`. Reviews what the MCP surface does today
   (regime + 8-check `score_asset` + price only), a prioritized **gap matrix**
-  against the **already-held MBOUM / MarketStack / FMP-FinanceToolkit** data
+  against the **already-held MBOUM / MarketStack / SEC EDGAR** data
   (the rich MBOUM research surface is called only for quotes/history), an
   **architecture** for an equity-research vertical (a sibling `ResearchDataProvider`
   protocol modeled on `MacroDataProvider`; read-only `analyst_consensus` /
@@ -69,7 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   not a route-layer reimplementation), the Claude Code connection + analysis
   playbook that work today, and the scoped CML-vs-EMF **backtest harness** (a future
   `src/nexus_core/research/` subpackage). Documents three **load-bearing gates**:
-  (A) MBOUM/FMP data-redistribution rights before any research data ships publicly;
+  (A) MBOUM data-redistribution rights before any research data ships publicly;
   (B) the MBOUM research endpoints are unverified — a live-key probe is task #0;
   (C) the backtest is SEC-Marketing-Rule-regulated performance/comparison content
   needing a hard off-the-public-surface boundary + CCO sign-off + copyright review

@@ -19,6 +19,9 @@ Adopters are responsible for adding their own PII controls, access control, inpu
 
 Provided as-is under Apache-2.0. Educational use only — nothing here is investment advice.
 
+Current live status is tracked in [CURRENT-STATE.md](CURRENT-STATE.md). Future
+work is issue-linked in [ROADMAP.md](ROADMAP.md) and GitHub Issues.
+
 ## What This Is
 
 Nexus Core is the open source foundation of the [Protocol Wealth research engine](https://nexusmcp.site) — a regime-aware financial-analysis and DeFi/market-data engine that exposes its capabilities as a public, read-only REST API and as MCP (Model Context Protocol) tools. Any MCP-compatible AI client (Claude, GPT, Gemini) can access regime-aware analysis without implementing financial domain logic. It is built on FastAPI + FastMCP (Python 3.12, sync `httpx`, `asyncpg`), runs `mypy --strict` + `ruff`, and is deployed on Google Cloud Run behind Cloudflare at [nexusmcp.site](https://nexusmcp.site).
@@ -27,7 +30,7 @@ Built and tested in production by an SEC-registered RIA (Protocol Wealth LLC, CR
 
 ## Public API
 
-The deployed surface is public, read-only, and carries no client data and no authentication. Every external integration degrades gracefully — to `None`, an empty result, or `503` — when its API key is absent.
+The deployed surface is public, read-only, and carries no client data. No account or API key is required; remote MCP clients may complete a transparent OAuth handshake with no login. Every external integration degrades gracefully — to `None`, an empty result, or `503` — when its API key is absent.
 
 ### Meta
 
@@ -40,7 +43,7 @@ The deployed surface is public, read-only, and carries no client data and no aut
 | `GET /mcp-guide` · `GET /llms.txt` | MCP client setup guide · agent site map (llmstxt.org) |
 | `GET /.well-known/security.txt` | RFC 9116 disclosure pointer |
 | `GET /api/usage` | Provider usage / quota report |
-| `POST /mcp` | Model Context Protocol over HTTP (FastMCP, also stdio). `tools/list` = research tools + `health`/`describe`/`get_quotes` + 23 planning tools (incl. `analyze_goals`, `optimize_allocation`, `build_planning_report`, and the composite Roth/IRMAA trio); all read-only |
+| `POST /mcp` | Model Context Protocol over HTTP (FastMCP, also stdio). `tools/list` = research tools + `health`/`describe`/`get_quotes` + 23 planning tools (incl. `analyze_goals`, `project_cash_flow`, `optimize_allocation`, `build_planning_report`, and the composite Roth/IRMAA trio); all read-only |
 | `GET /mcp/tools` · `POST /mcp/tools/{id}` | Planning REST gateway (pwplan-core, contractVersion `0.1.0`, PII-free) |
 
 ### Regime & Scoring
@@ -100,6 +103,7 @@ The deployed surface is public, read-only, and carries no client data and no aut
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/lp/chains` | Chains/versions with LP analytics |
+| `GET /api/lp/uniswap-v3/{chain}/positions?owner=` | Open Uniswap V3 positions owned by a public EVM address (token units, no USD valuation) |
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/analytics` | Position value, in-range status, exact impermanent-loss-vs-HODL, fee-APR estimate, uncollected fees, Merkl reward APR → total APR (USD prices required as query params) |
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` | Position return vs. hold-strategy benchmark returns over a window (USD prices required as query params) |
 | `GET /api/lp/aerodrome/{token_id}/analytics` | Aerodrome Slipstream position on **Base**, read on-chain (RPC) — value, in-range, token amounts, uncollected fees (USD prices required as query params). IL, fee APR, and AERO gauge APR are not available in on-chain-only mode (reported null/zero) |
@@ -134,6 +138,8 @@ Nexus Core (FastAPI + FastMCP)
 │       (protocol-agnostic — reused across ethereum/base/optimism/polygon)
 ├── Benchmarks (engine/benchmarks.py)
 │   └── Base-100 buy-and-hold compositions
+├── Planning (engine/planning)
+│   └── PII-free retirement/planning math: Monte Carlo, goals, cash flow, Roth/IRMAA
 ├── Data Clients (data/)
 │   ├── market/   yfinance, MBOUM, MarketStack, CoinGecko + cache + composite
 │   ├── macro/    FRED, EIA, BEA, Treasury
@@ -197,7 +203,7 @@ Nexus Core stands on a foundation of exceptional open-source projects. We bundle
 
 **Open (Apache 2.0):** Framework architecture, scoring structure, layer model, tool pattern, the public REST/MCP surface, caching patterns — **and Protocol Wealth's calibrated regime thresholds + scoring values**, which PW publishes openly as part of the EMF framework ([protocolwealthllc.com/framework](https://protocolwealthllc.com/framework)). All third-party integrations listed above.
 
-**Private:** API keys, client data, advisory/planning surfaces, the narrative/research pipeline, and any client-specific or suitability logic. (Calibrations are *not* private — EMF is a published framework. Adopters with different signal sources should still re-fit.)
+**Private:** API keys, client data, advisor/client planning workflows, suitability logic, report production, the narrative/research pipeline, and any client-specific implementation. (Calibrations are *not* private — EMF is a published framework. Adopters with different signal sources should still re-fit.)
 
 ## Installation
 
@@ -280,7 +286,7 @@ deployment.
 
 ### Using with any MCP client
 
-The hosted MCP endpoint is public and read-only, so any MCP-compatible AI client (Claude, GPT, Gemini), or an agent platform such as SmythOS, can register `https://nexusmcp.site/mcp` as a read-only MCP server — no account, no API key, no auth. For example, in a `.mcp.json` (or any client config that follows the same shape):
+The hosted MCP endpoint is public and read-only, so any MCP-compatible AI client (Claude, GPT, Gemini), or an agent platform such as SmythOS, can register `https://nexusmcp.site/mcp` as a read-only MCP server — no account or API key. Some remote clients complete transparent OAuth automatically; there is no user login. For example, in a `.mcp.json` (or any client config that follows the same shape):
 
 ```json
 {
@@ -313,15 +319,20 @@ runs without any of them, with reduced data coverage.
 | `VAULTSFYI_API_KEY` | Enables `/api/vaults` (vaults.fyi) |
 | `THEGRAPH_API_KEY` | Enables `/api/lp` (The Graph) |
 | `DATABASE_URL` | Persistence + `/api/benchmarks/history` (`503` when unset) |
+| `MCP_OAUTH_SIGNING_KEY` | Enables stateless transparent OAuth for remote MCP clients; omit locally to keep `/mcp` open |
 | `NEXUS_RATE_LIMIT_PER_MIN` | Per-IP request budget (default `60`) |
 | `NEXUS_CORS_ORIGINS` | Comma-separated CORS allow-list (default `*`) |
 
 ## Tech Stack
 
-Python 3.12 · FastAPI · FastMCP · `httpx` · `asyncpg` · PostgreSQL (Cloud SQL) · Redis · pandas · numpy · scipy · `mypy --strict` · ruff · CI-gated test + lint suite
+Python 3.12 · FastAPI · FastMCP · `httpx` · `asyncpg` · PostgreSQL (Cloud SQL) · pandas · numpy · scipy · `mypy --strict` · ruff · CI-gated test + lint suite
 
 ## Documentation
 
+- [Current state](CURRENT-STATE.md) — point-in-time live surface and status
+- [Roadmap](ROADMAP.md) — done vs next
+- [Validation](VALIDATION.md) — latest local gates and live smoke evidence
+- [Changelog](CHANGELOG.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Deployment](DEPLOY.md) — running the public API + Cloud Run / Cloud SQL deploy
 - [Public-surface audit](AUDIT.md) — what the deployment exposes (and excludes)

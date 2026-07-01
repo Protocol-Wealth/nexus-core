@@ -2,8 +2,9 @@
 
 Nexus Core is a public, read-only, regime-adaptive financial-analysis and
 DeFi/market-data engine. Python 3.12, FastAPI + FastMCP, synchronous `httpx`,
-`asyncpg`. It carries no client data and no authentication — every endpoint is
-public and read-only.
+`asyncpg`. It carries no client data; no account or API key is required. The
+hosted MCP transport may use transparent OAuth for remote-client compatibility,
+but every endpoint remains public and read-only.
 
 ## Layering
 
@@ -44,8 +45,10 @@ app/             FastAPI application factory + routers
   wallet.py chain.py vaults.py lp.py benchmarks.py snapshots.py
   ratelimit.py   in-process per-IP sliding-window limiter
   mcp_mount.py   mounts the FastMCP transport at /mcp
+  mcp_oauth.py   transparent OAuth 2.1 / PKCE shim for remote MCP clients
 mcp/server/      build_server() — the MCP tool surface (regime, score, market,
-                 economic, DefiLlama TVL, options); ships no auth of its own
+                 economic, DefiLlama TVL, options, planning); core registry
+                 ships no account auth of its own
 ```
 
 The market provider is assembled as a cached composite: yfinance (keyless
@@ -91,6 +94,8 @@ FRED series 1 hr); Cloudflare is set to respect origin.
 | Group | Endpoints |
 |-------|-----------|
 | Meta | `/health`, `/health/db` (DB connectivity probe), `/` (landing) |
+| Agent/discovery | `/docs`, `/openapi.json`, `/mcp-guide`, `/llms.txt`, `/.well-known/security.txt`, `/.well-known/ai-disclosure.json` |
+| OAuth metadata | `/.well-known/oauth-protected-resource[/mcp]`, `/.well-known/oauth-authorization-server`, `/register`, `/authorize`, `/token` (transparent MCP OAuth) |
 | Regime | `/api/regime`, `/api/regime/signals` |
 | Scoring | `/api/score/{ticker}` (8-check EMF, SEC EDGAR fundamentals) |
 | Market | `/api/market/quote/{symbol}`, `/api/market/history/{symbol}` |
@@ -99,11 +104,12 @@ FRED series 1 hr); Cloudflare is set to respect origin.
 | Wallet | `/api/wallet/{address}` (DeBank EVM balance) |
 | Chain | `/api/chain/chains`, `/api/chain/balance/{chain}/{address}`, `/api/chain/native/{address}` (Tatum) |
 | Vaults | `/api/vaults`, `/api/vaults/chains` (vaults.fyi v2) |
-| LP | `/api/lp/chains`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics`, `/api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` (ethereum, base, optimism, polygon); `/api/lp/aerodrome/{token_id}/analytics` (Base Slipstream, on-chain RPC) |
+| LP | `/api/lp/chains`, `/api/lp/uniswap-v3/{chain}/positions?owner=`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics`, `/api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` (ethereum, base, optimism, polygon); `/api/lp/aerodrome/{token_id}/analytics` (Base Slipstream, on-chain RPC) |
 | Solana | `/api/solana/price/{mint}`, `/api/solana/prices?mints=` (Jupiter v3 SPL token USD prices, keyless) |
 | Benchmarks | `/api/benchmarks`, `/api/benchmarks/series?days=`, `/api/benchmarks/history?days=` |
 | Usage | `/api/usage` (provider quota report) |
 | MCP | `/mcp` (MCP-over-HTTP, FastMCP) |
+| Planning gateway | `/mcp/tools`, `POST /mcp/tools/{tool_id}` (23 PII-free planning tools, contractVersion `0.1.0`) |
 
 ## Regime Engine
 
@@ -155,9 +161,28 @@ Tatum RPC), and Merkl reward APR to report position value, in-range status, IL,
 fee APR, uncollected fees, and total APR. USD prices are required query
 parameters (the engine does not assume a price oracle).
 
-Position analytics run on **ethereum, base, optimism, and polygon**. Arbitrum is
-not supported: its published subgraph ID uses a schema incompatible with the V3
-shape this client decodes.
+Position analytics run on **ethereum, base, optimism, and polygon**.
+`/api/lp/uniswap-v3/{chain}/positions?owner=` enumerates open positions owned by
+a public EVM address in token units (no USD valuation), then the by-token routes
+add valuation/IL/fee analytics when prices are supplied. Arbitrum is not
+supported: its published subgraph ID uses a schema incompatible with the V3 shape
+this client decodes.
+
+## Planning Engine
+
+`engine/planning/` holds pure, PII-free planning primitives exposed through both
+native MCP and the REST planning gateway. The live handler registry has 23 tools:
+Monte Carlo decumulation (including spend schedules and optional Guyton-Klinger
+guardrails), goal funding, deterministic cash-flow projection, glide path,
+tax-aware withdrawals, correlations, capital-market assumptions, regime path
+generation, Roth conversion, sequence stress, RMDs, tax-bracket headroom, Social
+Security claiming, regime-conditioned SWR, portfolio x-ray, allocation
+optimization, FIRE, risk metrics, rebalancing, IRMAA headroom, composite
+Roth-conversion analysis, conversion sequencing, and report assembly.
+
+The gateway (`app/planning/gateway.py`) rejects identity-shaped keys anywhere in
+the request body and echoes `contractVersion: "0.1.0"` on success. The composite
+Roth/IRMAA case object has its own `PLANNING_CONTRACT_VERSION = "1.1.0"`.
 
 `/api/lp/aerodrome/{token_id}/analytics` brings the same engine to Aerodrome
 Slipstream on Base — a Uniswap-V3 CLMM sibling. No Slipstream subgraph exists on
@@ -238,22 +263,22 @@ server = build_server(
 )
 ```
 
-The MCP server ships **no** authentication, authorization, tier enforcement,
-audit logging, or PII redaction of its own. The `ResponseFilter` Protocol is the
-hook surface where adopters wire those concerns in; the filter implementations
-are entirely adopter-defined and adopter-operated. The nexus-core public
-deployment runs the server unfiltered — all tool output is public by design.
+The core MCP registry ships no account authentication, tier enforcement, audit
+logging, or PII redaction of its own. The `ResponseFilter` Protocol is the hook
+surface where adopters wire those concerns in; the filter implementations are
+entirely adopter-defined and adopter-operated. The nexus-core public deployment
+runs the registry unfiltered — all tool output is public by design — while
+`app/mcp_oauth.py` can sit in front of the `/mcp` transport to satisfy remote MCP
+OAuth handshakes without creating user accounts or private scopes.
 
 ## Access Control and Tiering (Adopter-Supplied)
 
 The framework does not enforce access tiers. Production deployments that handle
-sensitive data need to distinguish public, authenticated, and privileged
-callers; adopters compose that logic on top of `ResponseFilter` (post-response
-scrubbing) or upstream of the MCP server (for example, an OAuth resource server
-in front of the FastAPI host doing authentication and rate limiting before the
-request reaches a tool). The public nexus-core deployment treats all callers as
-trusted and emits all tool output unfiltered, because it serves only public,
-read-only data.
+sensitive data need to distinguish public, authenticated, and privileged callers;
+adopters compose that logic on top of `ResponseFilter` (post-response scrubbing)
+or upstream of the MCP server. The hosted nexus-core OAuth shim is intentionally
+not an access-tier system: it issues public-scope tokens for anonymous clients so
+remote MCP connectors can complete their required authorization flow.
 
 ## Security Posture
 
@@ -266,8 +291,12 @@ read-only data.
   It is a best-effort abuse guard, not a security boundary — Cloudflare's edge
   rate-limit on cost-bearing endpoints is the primary control.
 - Cloudflare methods rule blocks non-`GET`/`POST`/`OPTIONS` requests.
+- Transparent MCP OAuth is stateless and anonymous when `MCP_OAUTH_SIGNING_KEY`
+  is set; it uses Dynamic Client Registration, PKCE, and HMAC-signed compact
+  tokens. Omitting the key leaves `/mcp` open in local/unkeyed deployments.
 - Secrets live only in Google Secret Manager (`nexus-*-api-key`,
-  `nexus-marketdata-database-url`); no credentials in config or code.
+  `nexus-marketdata-database-url`, hosted OAuth signing key); no credentials in
+  config or code.
 - The web service runs as the `nexus-core-run@pwllc-prod` service account.
 
 ## Deploy Topology

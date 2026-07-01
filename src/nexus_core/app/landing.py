@@ -3,8 +3,9 @@
 """Landing page for the nexus-core public deployment.
 
 A single self-contained HTML document — no template engine, no static-asset
-pipeline. The page describes the public, no-auth analytical surface and points
-visitors at the interactive API docs and the source repository.
+pipeline. The page describes the public analytical surface, which has no
+account/API-key gate, and points visitors at the interactive API docs and the
+source repository.
 """
 
 from __future__ import annotations
@@ -64,8 +65,9 @@ _PAGE = """\
   <h1>Nexus Core</h1>
   <p class="lede">
     A regime-adaptive financial analysis engine, exposed as a public API and as
-    Model Context Protocol (MCP) tools. Market data, macro signals, and regime
-    classification — no account, no API key, no authentication required.
+    Model Context Protocol (MCP) tools. Market data, macro signals, options,
+    DeFi analytics, and PII-free planning math — no account or API key required.
+    Remote MCP clients may complete transparent OAuth with no login.
   </p>
 
   <div class="grid">
@@ -110,10 +112,11 @@ curl -X POST https://nexusmcp.site/mcp/tools/glide_path \\
 
   <h2>Public surface only</h2>
   <p style="color:#aab3cf">
-    This deployment exposes market data and analytical signals. It contains no
-    client data, no account surfaces, and no advisory workflows — those live in
-    Protocol Wealth's closed systems. What you see here is the analytical
-    substrate, open for inspection and reuse.
+    This deployment exposes public data and educational analytical math. It
+    contains no client data, no account surfaces, no suitability logic, no report
+    production workflow, and no advisory workflow state — those live in Protocol
+    Wealth's closed systems. Planning endpoints accept de-identified inputs
+    only.
   </p>
 
   <footer>

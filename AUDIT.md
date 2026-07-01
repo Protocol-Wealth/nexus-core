@@ -1,67 +1,60 @@
-# Public-surface audit — nexus-core
+# Public-Surface Audit — nexus-core
 
-This document records the audit behind the nexusmcp.site rebuild: a
-confirmation that the public deployment exposes **market data and analytical
-signals only**, with no client data, account surfaces, or advisory workflows.
+This document records the current public-deployment boundary for
+[nexusmcp.site](https://nexusmcp.site). The public surface is read-only and
+educational: it exposes market/macro/options/DeFi analytics and PII-free planning
+math, with no client data, account surfaces, suitability logic, or advisory
+workflow state.
 
-## Background
+## Current Boundary
 
-The nexusmcp.site rebuild was originally scoped as "strip the client-related
-endpoints out of nexus-core." A Phase 1 audit found there was nothing to strip:
-`nexus-core` is, and always has been, an Apache-2.0 open-source package
-carrying no client-specific code. Its own `CLAUDE.md` states it plainly —
-*"nothing in this repo is client-specific or proprietary to PW."* The rebuild
-was therefore re-scoped to **build** a thin public application on top of the
-existing engine, rather than gut a non-existent one.
+`nexus-core` is an Apache-2.0 analytical engine. It is not the Protocol Wealth
+client/advisor application layer. Public planning tools in this repo accept
+de-identified inputs only (age, balances, asset classes, filing status, generic
+goal ids). Identity-shaped keys such as name, email, address, SSN, and date of
+birth are rejected by the planning gateway.
 
-## What the audit checked
-
-A case-insensitive scan of `src/`, `tests/`, and `examples/` for client and
-authentication surface markers:
-
-```
-client_id   advisor_id   JWT        session        risk_tolerance
-risk_assessment   financial_plan    kyc    aml      signed_document
-signing     portal       client_profile   login    oauth    bearer
-authenticate      authorization
-```
-
-**Result: zero client-related code.** The only matches were:
-
-- Documentation lines describing the *absence* of authentication (the scaffold
-  ships none; adopters wire their own via the `ResponseFilter` hook).
-- False-positive substring matches: `AML` inside the FRED economic-series codes
-  `BAMLC0A4CBBB` and `BAMLH0A0HYM2` (Bank of America Merrill Lynch credit
-  spread indices).
-
-There is no auth middleware, no client endpoint, no KYC/AML surface, no
-signed-document surface, and no advisor login anywhere in the repository.
-
-## What the public deployment exposes (retained)
+The public deployment has:
 
 | Surface | Module | Notes |
 |---------|--------|-------|
-| Regime classification | `engine/regime/` | Macro regime + per-signal breakdown |
-| Regime signals | `engine/regime/` | Raw signal readings |
-| Market quotes | `data/market/` | Stocks, ETFs, indices, crypto |
-| Market history | `data/market/` | OHLCV bars |
-| Economic data | `data/macro/` | FRED economic series |
-| MCP server | `mcp/server/` | Read-only analytical tools |
+| Regime classification/signals | `engine/regime/`, `app/routes.py` | Public macro signals and regime labels |
+| EMF scoring | `engine/scoring/`, `app/scoring.py` | SEC EDGAR fundamentals + public market data |
+| Market/economic data | `data/market/`, `data/macro/` | Quotes, history, FRED/BEA/EIA/Treasury-style macro adapters |
+| Options | `engine/pricing/`, `app/options.py` | Black-Scholes overlays + Deribit crypto options; educational only |
+| On-chain/DeFi | `data/onchain/`, `app/{wallet,chain,vaults,lp,solana}.py` | Public wallet/chain/vault/LP/Solana data |
+| Benchmarks/history | `engine/benchmarks.py`, `data/snapshots.py` | Daily benchmark snapshots via private Cloud SQL |
+| Planning math | `engine/planning/`, `app/planning/` | 23 PII-free tools via MCP and `/mcp/tools` |
+| MCP transport | `mcp/server/`, `app/mcp_mount.py` | Read-only tool registry, same engines as REST |
+| Transparent MCP OAuth | `app/mcp_oauth.py` | Anonymous OAuth 2.1 / PKCE compatibility flow for remote MCP clients |
+| Disclosure/security metadata | `app/{disclosure,well_known,llms_txt}.py` | AI disclosure card, security.txt, llms.txt |
 
-All endpoints accept anonymous requests. The data is public market and
-economic data; no input is persisted.
+## What Is Not Here
 
-## What is NOT in the deployment (never existed here)
+The public deployment does not contain client login, advisor authentication,
+KYC/AML identity verification, account onboarding, signed-document workflows,
+custody/trading actions, suitability determinations, client-specific planning
+records, report-production workflows, artifact receipts, or private PWOS workflow
+state. Those belong in closed Protocol Wealth systems or consumer repos.
 
-Client login, advisor authentication, KYC / AML / identity verification,
-risk-tolerance and risk-assessment surfaces, financial-planning and
-portfolio-construction endpoints, signed-document and signing surfaces, and any
-per-client data accessor. These belong to Protocol Wealth's closed systems and
-are not part of this repository.
+## Auth And OAuth
+
+No account or API key is required to use the public REST surface. The hosted MCP
+transport may require a bearer token when `MCP_OAUTH_SIGNING_KEY` is configured,
+because some remote MCP clients expect OAuth 2.1 + PKCE + Dynamic Client
+Registration. That flow is transparent and anonymous: any valid client can
+register and obtain a public-scope token, with no login and no privilege
+escalation beyond the public read-only tool surface. Local/unkeyed deployments
+can omit the signing key and leave `/mcp` open.
+
+## Persistence
+
+There are no public write endpoints. The only writer is the Cloud Run snapshot
+job (`nexus-core snapshot`), which writes daily benchmark prices to private Cloud
+SQL for `/api/benchmarks/history`. Public requests do not persist inputs.
 
 ## Posture
 
-The public deployment is read-only. The MCP server's framework posture is
-read-only by default (`mcp/server/` — tools do not mutate state). Rate limiting
-(per-IP) and open CORS are appropriate for a public-data-only surface with no
-PII at risk.
+The public deployment is read-only, non-custodial, and not advice. It holds no
+client data and no PII. Disclaimers are sourced from `src/nexus_core/disclaimers.py`
+and attached to public-facing analytical surfaces.

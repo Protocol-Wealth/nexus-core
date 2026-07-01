@@ -28,10 +28,11 @@ We will:
 
 **In scope:**
 - Code execution vulnerabilities
-- Authentication/authorization bypass
+- Transparent MCP OAuth / authorization bypass
 - Data exposure (including PII leakage)
 - Supply chain attacks (dependency vulnerabilities)
 - XBRL/SEC data integrity issues
+- Public write endpoint or unintended state-mutation exposure
 
 **Out of scope:**
 - Issues in third-party dependencies (report upstream)

@@ -20,7 +20,6 @@ The following components are distributed under the MIT License:
 - sec-parser — Copyright (c) 2023 Alphanome AI
 - FinGPT — Copyright (c) 2023 AI4Finance Foundation
 - FinRL — Copyright (c) 2020 AI4Finance Foundation
-- Ethereum-ETL — Copyright (c) 2018 Evgeny Medvedev
 - WenFire — Copyright (c) 2023 Bas Nijholt
 
 ### MIT License Text

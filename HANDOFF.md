@@ -3,8 +3,9 @@
 Operator handoff / current-state snapshot for `nexus-core` — the public,
 Apache-2.0 regime-adaptive financial-analysis + DeFi/market-data engine
 (github.com/Protocol-Wealth/nexus-core). Public, read-only, no client data,
-no auth. This file is the practical "what's live, what's next" reference for
-the next session.
+no account/API key; remote MCP may use transparent OAuth with no user login.
+This file is the practical "what's live, what's next" reference for the next
+session.
 
 Stack: Python 3.12, FastAPI + FastMCP, sync `httpx`, `asyncpg`, `mypy --strict`,
 `ruff`. Version `0.1.0`. CI-gated test suite.
@@ -12,8 +13,10 @@ Stack: Python 3.12, FastAPI + FastMCP, sync `httpx`, `asyncpg`, `mypy --strict`,
 > **For the current handoff read [NEXT-SESSION.md](NEXT-SESSION.md)** (latest
 > forward state) and **[CURRENT-STATE.md](CURRENT-STATE.md)** (live snapshot).
 > This file retains earlier-cycle operator detail; where it disagrees with those
-> two, they win. Live as of 2026-05-30: deployed `nexus-core-00040`, suite 724,
-> `ruff` + `mypy --strict` CI-enforced.
+> two, they win. Live status was refreshed 2026-07-01: `/health` is healthy,
+> `/mcp/tools` reports contractVersion `0.1.0` with 23 planning tools, GitHub has
+> no open PRs and seven open issues (#197-#203), and `ruff` + `mypy --strict`
+> remain CI-enforced.
 
 ---
 
@@ -105,6 +108,8 @@ degrade gracefully to `None`/empty/`503` when their API key is absent.
 
 - `/api/usage` — provider usage / quota report
 - `/mcp` — MCP-over-HTTP transport (FastMCP)
+- `/mcp/tools`, `POST /mcp/tools/{tool_id}` — PII-free planning REST gateway
+  with 23 tools, contractVersion `0.1.0`
 
 ---
 
@@ -118,7 +123,8 @@ degrade gracefully to `None`/empty/`503` when their API key is absent.
 - **Engine** — `engine/regime` (`RegimeEngine`), `engine/scoring/emf` (8-check),
   `engine/pricing` (Black-Scholes), `engine/lp/uniswap_v3.py` (pure CLMM math:
   tick math, `get_amounts_for_liquidity`, exact IL, fee APR),
-  `engine/benchmarks.py` (base-100 + buy-and-hold compositions).
+  `engine/benchmarks.py` (base-100 + buy-and-hold compositions), and
+  `engine/planning` (PII-free educational planning math).
 - **Jobs** — `jobs/daily_snapshot.py`.
 - **CLI** — `nexus-core {serve|mcp|snapshot}`.
 
@@ -141,6 +147,8 @@ is absent):
 - `THEGRAPH_API_KEY` (`/api/lp`)
 - `DATABASE_URL` (persistence + `/api/benchmarks/history`; returns `503` when
   unset)
+- `MCP_OAUTH_SIGNING_KEY` (optional transparent OAuth token signing for hosted
+  remote MCP clients)
 - `NEXUS_RATE_LIMIT_PER_MIN` (default 60), `NEXUS_CORS_ORIGINS`
 
 ---
@@ -149,6 +157,8 @@ is absent):
 
 - Public, read-only. **No public write endpoints** — the daily snapshot is a
   Cloud Run Job, not an HTTP route.
+- No account/API-key gate on REST endpoints; hosted remote MCP has transparent
+  OAuth metadata/registration/authorize/token endpoints for client compatibility.
 - Cloud SQL is private-IP-only; reachable only over Direct VPC egress.
 - In-process rate limiter resolves client IP **spoofing-resistantly**:
   `CF-Connecting-IP`, else the rightmost `X-Forwarded-For` hop (the fix on
@@ -210,10 +220,13 @@ All three should be green.
 Shipped since this handoff was first written: the position-vs-benchmark surface
 (`/api/lp/.../vs-benchmark`), the Jupiter Solana price source (`/api/solana`), and
 Aerodrome Slipstream on Base via on-chain RPC (`/api/lp/aerodrome/{token_id}/analytics`,
-partial — value/in-range/amounts/uncollected fees). Remaining:
+partial — value/in-range/amounts/uncollected fees). Remaining work is tracked in
+GitHub:
 
-1. **Aerodrome Slipstream full coverage via Envio** — the RPC path can't derive
-   IL, fee APR, or AERO gauge reward APR; an Envio client (or self-hosted
-   subgraph) would. Engine + decode-compatible NFPM are already wired.
-2. **Uniswap V4 + Balancer / Algebra LP adapters.**
-3. **Persisted LP-position snapshots.**
+1. **#197** — public-safe planning/report analytics extraction.
+2. **#198** — planning assumptions provenance.
+3. **#199** — LP/indexer expansion and data quality.
+4. **#200** — crypto-options follow-ups.
+5. **#201** — agent analytics capability backlog.
+6. **#202** — governance/tooling cleanup.
+7. **#203** — equity-research vertical gates and buildout.

@@ -6,7 +6,7 @@
 total USD balance + top token holdings via DeBank. This is **anonymous public
 on-chain data** — the input is just an address, the output is just balances.
 Nothing links an address to a person, name, or any client record; there is no
-account, no auth, and no stored identity.
+account, no caller API key, and no stored identity.
 """
 
 from __future__ import annotations

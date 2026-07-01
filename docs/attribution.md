@@ -138,10 +138,14 @@ This document provides detailed provenance for every capability in Nexus Core. W
 
 ### Blockchain & Onchain
 
-**Fully attributed to:**
-- **[Ethereum-ETL](https://github.com/blockchain-etl/ethereum-etl)** by Evgeny Medvedev (MIT)
-  - Blockchain data extraction and loading
-  - PostgreSQL/BigQuery/Kafka sinks
+**Provider integrations / protocol surfaces:**
+- **DeBank Pro API** — anonymous EVM wallet balances.
+- **Tatum API** — multi-chain native balances and EVM `eth_call` reads.
+- **The Graph Gateway** — Uniswap V3 subgraph reads.
+- **Merkl API** — liquidity incentive APRs.
+- **vaults.fyi API** — vault discovery.
+- **Jupiter Price API** — Solana SPL token USD prices.
+- **web3.py** (MIT) — optional `[onchain]` extra reserved for future direct-RPC readers.
 
 **Reference architecture (AGPL code NOT copied):**
 - **[DefiLlama Adapters](https://github.com/DefiLlama/DefiLlama-Adapters)** (GPL-3.0)
@@ -151,7 +155,8 @@ This document provides detailed provenance for every capability in Nexus Core. W
 - **[Rotki](https://github.com/rotki/rotki)** (AGPL-3.0)
   - Self-hosted portfolio tracking architecture
 
-**Our original work:** Multi-chain aggregation, DeFi position cost basis, tax-lot tracking.
+**Our original work:** Provider adapters, graceful-degradation behavior, and the
+pure CLMM math/route composition for read-only LP analytics.
 
 ---
 

@@ -1,70 +1,52 @@
 # Validation — nexus-core public deployment
 
-Records the validation performed on the nexusmcp.site rebuild (the
-`nexus_core.app` HTTP API + MCP transport and the `nexus_core.data` providers).
+Records the latest validation for the `nexus_core.app` HTTP API, MCP transport,
+data providers, and public documentation/status surface.
 
 ## Automated tests
 
-Full hermetic suite — **137 passed**, no network calls, no API keys:
+Latest local gate, run 2026-07-01 from the repo venv:
 
 ```bash
-pip install -e ".[dev,market,mcp]"
-pytest -q          # 137 passed
-ruff check src/ tests/
-mypy src/nexus_core/
+.venv/bin/ruff check src/ tests/                 # All checks passed
+.venv/bin/mypy --strict src/nexus_core/          # no issues in 151 source files
+.venv/bin/python -m pytest -q                   # 1077 passed in 7.76s
+git diff --check                                 # clean
 ```
 
-`ruff` and `mypy` are clean on all files added by the rebuild (`data/http.py`,
-`data/market/*`, `data/macro/*`, `app/*`, `cli.py`). Pre-existing `ruff` /
-`mypy` findings in unrelated modules are unchanged — out of scope for this work.
+Current test coverage includes:
 
-Coverage added:
-
-- 33 data-provider tests — yfinance (injected ticker factory), MBOUM /
-  MarketStack / CoinGecko / FRED (`httpx.MockTransport`), composite fallback.
-- 14 application tests — landing page, health, OpenAPI schema, quote / history
-  / economic / regime endpoints, 404 / 503 paths, CORS headers, per-IP rate
-  limiting, and the MCP transport mount.
+- Application/documentation tests — landing page, MCP guide, `/llms.txt`,
+  OpenAPI schema, OAuth/discovery surfaces, health, CORS/security headers,
+  rate limiting, and MCP transport mount behavior.
+- Provider tests — yfinance, MBOUM, MarketStack, CoinGecko, FRED, BEA, EIA,
+  Treasury, DeBank, Tatum, The Graph, Merkl, vaults.fyi, Jupiter, and Deribit,
+  with mocked transports and no live keys required.
+- Engine/gateway tests — EMF regime/scoring, options/crypto-overlays, LP math,
+  benchmark snapshots, and the 23-tool PII-free planning gateway/MCP handler
+  set.
 
 ## Live smoke test
 
-`nexus-core serve` run locally; endpoints exercised against live providers:
+Live public status was checked on 2026-07-01:
 
 | Check | Result |
 |-------|--------|
-| `GET /health` | `200` — `{"status":"ok",...}` |
-| `GET /` | `200` — landing page (`text/html`) |
-| `GET /docs` | `200` — Swagger UI |
-| `GET /openapi.json` | `200` — all six REST paths present, title `Nexus Core 0.1.0` |
-| `GET /api/market/quote/AAPL` | `200` — live yfinance quote |
-| `GET /api/market/quote/bitcoin` | `200` — live CoinGecko quote (composite fell through yfinance → CoinGecko) |
-| `GET /api/regime` | `200` — live classification (regime + confidence + 6 signal statuses) |
-| `GET /api/economic/DGS10` | `503` — correct graceful response when `FRED_API_KEY` is unset |
-| `POST /mcp` | mounted — `307` redirect to the MCP transport sub-app |
+| `GET https://nexusmcp.site/health` | `200` — `{"status":"ok","service":"nexus-core","version":"0.1.0"}` |
+| `GET https://nexusmcp.site/mcp/tools` | `200` — contractVersion `0.1.0`, 23 planning tools |
+| `GET https://nexusmcp.site/openapi.json` | `200` — public OpenAPI schema served with security headers |
+| `GET https://nexusmcp.site/llms.txt` | `200` — agent site map served |
+| `GET https://nexusmcp.site/.well-known/ai-disclosure.json` | `200` — generatedAt `2026-06-01T00:00:00Z` on the currently deployed artifact; local docs/source now update this to `2026-07-01T00:00:00Z` for the next deploy |
+| OAuth metadata | `/.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-authorization-server` served successfully |
 
-The composite provider's ordered fallback was observed working end-to-end: a
-`bitcoin` lookup missed on yfinance/MBOUM/MarketStack and was served by
-CoinGecko, with no error surfaced to the caller.
-
-## Keyless vs keyed
-
-- **Keyless** (no environment configuration): yfinance market data and
-  CoinGecko crypto data are live; regime classification runs with neutral
-  macro fallbacks. Validated above.
-- **Keyed**: FRED, MBOUM, and MarketStack require API keys. Their adapters are
-  covered by hermetic tests but have **not** been exercised against the live
-  APIs. Recommended post-deploy spot-check once secrets are configured:
-  - `GET /api/economic/DGS10` returns a numeric value (FRED).
-  - `GET /api/market/quote/AAPL` still succeeds with MBOUM / MarketStack keys set.
-  - **MBOUM field mapping** — the quote/history extractors are inferred from
-    MBOUM's documented Yahoo-proxy envelope. Confirm `regularMarketPrice` (or
-    a fallback field) resolves on a live key; the extractor is permissive but
-    the exact field name is unverified against a live response.
+GitHub status after the issue-sync pass: no open PRs; seven open issues
+(#197-#203) track the outstanding and future-build lanes from the roadmap.
 
 ## Client-data check
 
-`AUDIT.md` records the scan confirming the deployment exposes market and
-economic data only — no client data, no authentication, no advisory surfaces.
-The served responses (`/api/*`) contain only market/economic data and
-analytical signals; no `client_id` / `advisor_id` / auth fields appear in any
-response shape.
+`AUDIT.md` records the public-surface scan: nexus-core exposes public market,
+macro, options, anonymous on-chain/LP, benchmark, and PII-free planning math.
+It has no client data, no account surfaces, no suitability logic, no report
+production workflow, no advisory workflow state, and no public write endpoint.
+Remote MCP may use transparent OAuth for connector compatibility, but this is
+not a client login or account authorization system.

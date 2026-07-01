@@ -407,5 +407,6 @@ and compliance gates that only the keyed/public and backtest pieces actually nee
 
 *Apache-2.0 · USPTO #64/034,229 (defensive) · OIN member. This is a planning
 document; it ships no production tool. New work preserves the public-surface
-contract: no auth on read endpoints, no public write routes, no client data, no
-breaking changes to existing response shapes, confidence tiers are never verdicts.*
+contract: no account/API-key gate on REST endpoints, no public write routes, no
+client data, no breaking changes to existing response shapes, confidence tiers
+are never verdicts.*

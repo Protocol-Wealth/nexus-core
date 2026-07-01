@@ -4,18 +4,21 @@ A point-in-time snapshot of exactly what is live right now. For the architectura
 overview see [README.md](README.md); for deploy mechanics see [DEPLOY.md](DEPLOY.md);
 for the public-surface audit see [AUDIT.md](AUDIT.md).
 
+- **Last verified:** 2026-07-01 — local `main` at `e4197ad`; live `/health` OK; live `/mcp/tools` returned 23 tools; GitHub: 7 open issues (#197-#203), 0 open PRs.
 - **Repo:** [github.com/Protocol-Wealth/nexus-core](https://github.com/Protocol-Wealth/nexus-core) — public, Apache-2.0
 - **Live:** [nexusmcp.site](https://nexusmcp.site) (Cloudflare → Cloud Run)
 - **Version:** 0.1.0
 - **Stack:** Python 3.12 · FastAPI · FastMCP · sync httpx · asyncpg · mypy `--strict` · ruff
 - **Tests:** CI-gated test suite (`pytest`)
-- **Posture:** public, read-only, no client data, no auth, no public write endpoints
+- **Posture:** public, read-only, no client data, no account/API key, transparent OAuth only for remote MCP handshakes, no public write endpoints
 
 ## Public REST surface
 
-Every endpoint is anonymous GET (the `/mcp` transport also accepts POST). External
-integrations degrade gracefully — when a provider key is absent the dependent
-endpoint returns `None` / empty / `503` rather than failing the service.
+Every REST endpoint is anonymous GET unless noted. The `/mcp` transport accepts
+POST and may require a transparent OAuth bearer token when `MCP_OAUTH_SIGNING_KEY`
+is configured; that flow has no user login and grants only public-scope access.
+External integrations degrade gracefully — when a provider key is absent the
+dependent endpoint returns `None` / empty / `503` rather than failing the service.
 
 ### Meta
 
@@ -29,6 +32,8 @@ endpoint returns `None` / empty / `503` rather than failing the service.
 | `GET /mcp-guide` | MCP client setup guide (hosted + local) | — |
 | `GET /llms.txt` | agent site map (llmstxt.org) | — |
 | `GET /.well-known/security.txt` | RFC 9116 disclosure pointer → security@protocolwealthllc.com | — |
+| `GET /.well-known/ai-disclosure.json` | machine-readable AI disclosure card | — |
+| `GET /.well-known/oauth-protected-resource[/mcp]`, `GET /.well-known/oauth-authorization-server`, `POST /register`, `GET /authorize`, `POST /token` | transparent OAuth 2.1 / PKCE metadata and token flow for remote MCP clients | `MCP_OAUTH_SIGNING_KEY` enables issuing tokens |
 
 ### Regime & scoring
 
@@ -73,6 +78,7 @@ Crypto option underliers: **BTC, ETH** are coin-settled (inverse, queried as `cu
 | `GET /api/vaults` | vaults.fyi v2 — vault discovery | `VAULTSFYI_API_KEY` |
 | `GET /api/vaults/chains` | vaults.fyi v2 — chains with vault data | `VAULTSFYI_API_KEY` |
 | `GET /api/lp/chains` | — chains/versions with LP analytics | — |
+| `GET /api/lp/uniswap-v3/{chain}/positions?owner=` | The Graph — positions owned by a public EVM address | `THEGRAPH_API_KEY`; token units only, no USD valuation |
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/analytics` | The Graph + RPC (Tatum) + Merkl | `THEGRAPH_API_KEY`, `TATUM_API_KEY` (uncollected fees); USD prices are required query params |
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` | same + hold-strategy benchmark returns over a window | `THEGRAPH_API_KEY`, `TATUM_API_KEY`; USD prices are required query params |
 | `GET /api/lp/aerodrome/{token_id}/analytics` | Aerodrome Slipstream on **Base**, read on-chain via Tatum RPC (no subgraph) | `TATUM_API_KEY`; USD prices required. `data_mode: onchain_rpc` — value/in-range/amounts/uncollected fees only; IL, fee APR, AERO gauge APR null/zero |
@@ -135,14 +141,13 @@ read-only with `readOnlyHint` + the educational disclaimer):
   `crypto_options_book_mtm` / `crypto_options_scenario`. Full overwriting + hedge
   suite is on BOTH the REST surface (`/api/options/crypto/{currency}/...`) and MCP.
 - **DeFi** — `defi_protocols`, `defi_protocol`, `defi_chains`
-- **Planning** (16 live) — `monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `fire`, `risk_metrics`, `rebalance`
-- **Planning — composite Roth/IRMAA** (3, **live** since rev `nexus-core-00048` (**PlanningContract v1.1.0**), 2026-06-04) — `analyze_roth_conversion`, `sequence_conversions`, `irmaa_headroom` (size a Roth conversion under both the bracket *and* projected-IRMAA ceilings). v1.1.0 added `accounts.employer_plan_aggregate` (→ RMD drag), the structured `YearAnalysis.aca` (ACA PTC cliff when an `aca` situation is injected), and `DoNothingProjection` survivor-compression + employer-plan fields. Verified live on `nexusmcp.site` (POST returns `contract_version 1.1.0`, binding=irmaa).
+- **Planning** (23 live) — `monte_carlo_decumulation`, `analyze_goals`, `project_cash_flow`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `fire`, `risk_metrics`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`
 - **Meta** — `health` (per-upstream status), `describe` (catalog + symbology + contract version)
 
-The 16 single-purpose planning tools are served *both* natively (above) and via the
-REST gateway (`POST /mcp/tools/{id}`) for the browser-based pwplan-core shell — same
-handlers, contractVersion `0.1.0`. The 3 composite Roth/IRMAA tools (case contract
-v1.1.0) share that gateway + native-MCP path and are live (rev `nexus-core-00048`).
+All 23 planning tools are served both natively through MCP and via the REST gateway
+(`POST /mcp/tools/{id}`) for the browser-based pwplan-core shell — same handlers,
+contractVersion `0.1.0`. The composite Roth/IRMAA case contract is
+`PLANNING_CONTRACT_VERSION = 1.1.0`; the gateway envelope remains `0.1.0`.
 
 ## Code layout
 
@@ -188,7 +193,8 @@ v1.1.0) share that gateway + native-MCP path and are live (rev `nexus-core-00048
 `nexus-fred-api-key`, `nexus-mboum-api-key`, `nexus-marketstack-api-key`,
 `nexus-coingecko-api-key`, `nexus-eia-api-key`, `nexus-bea-api-key`,
 `nexus-debank-api-key`, `nexus-tatum-api-key`, `nexus-vaultsfyi-api-key`,
-`nexus-thegraph-api-key`, `nexus-marketdata-database-url`.
+`nexus-thegraph-api-key`, `nexus-marketdata-database-url`, plus the deployment's
+`MCP_OAUTH_SIGNING_KEY` secret when transparent MCP OAuth is enabled.
 
 ### Environment variables
 
@@ -205,6 +211,7 @@ v1.1.0) share that gateway + native-MCP path and are live (rev `nexus-core-00048
 | `VAULTSFYI_API_KEY` | `/api/vaults` |
 | `THEGRAPH_API_KEY` | `/api/lp` |
 | `DATABASE_URL` | persistence + `/api/benchmarks/history` (`503` when unset) |
+| `MCP_OAUTH_SIGNING_KEY` | stateless transparent OAuth for remote `/mcp`; omit locally to keep `/mcp` open |
 | `NEXUS_RATE_LIMIT_PER_MIN` | per-IP request budget (default `60`) |
 | `NEXUS_CORS_ORIGINS` | CORS allow-list |
 
@@ -219,6 +226,9 @@ key is absent.
   identity. No credentials in config — secrets live only in Secret Manager.
 - In-process rate limiter resolves the client IP spoofing-resistantly
   (`CF-Connecting-IP`, else rightmost `X-Forwarded-For`).
+- Transparent MCP OAuth uses stateless HMAC-signed client ids, authorization
+  codes, and bearer/refresh tokens when `MCP_OAUTH_SIGNING_KEY` is set. It exists
+  for remote MCP client compatibility, not user authentication.
 - Cloudflare methods rule blocks non-`GET`/`POST`/`OPTIONS`; edge rate-limit on the
   cost endpoints.
 - No client data, no PII at risk.
@@ -229,52 +239,39 @@ key is absent.
   Errors are masked (`mask_error_details=True`) so no `str(e)` leaks to the wire.
 - **CI** gates `ruff` + `mypy --strict` + `pytest` (80% floor) on every push/PR.
 
-## Recent work (this cycle — platform hardening, deployed `nexus-core-00041`)
+## Recent work
 
-- **Planning tools 6 → 12** — added `roth_conversion`, `sequence_of_returns_stress`,
-  `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`
-  (pure `engine/planning/` primitives + REST/native-MCP tools); the MCP guide gained
-  a Claude Code quick-start + worked prompts + `examples/planning_agent.py` (Agent
-  SDK); a machine-readable AI-disclosure card at `/.well-known/ai-disclosure.json`.
-- **Native MCP planning tools** + `health`/`describe`/`get_quotes` + `readOnlyHint` annotations
-- **Compliance** — canonical disclaimers everywhere; `score_asset` → `NOT APPLICABLE` on
-  insufficient coverage (was a verdict-shaped `BELOW THRESHOLD`)
-- **Reliability** — `mask_error_details`; option input validation; `defi_protocol` TVL fix;
-  FRED 429-retry + invalid-key visibility
-- **Provenance** — `as_of` / `source` / `market_status` on quotes + FRED (Saturday close reads `last_close`)
-- **Regime signals** — `breadth` (% sectors > 200DMA) + `precious_metals_signal` (GLD vs 200DMA), free
-- **Agent/discovery** — `/llms.txt`, `AGENTS.md`, `/.well-known/security.txt`, OpenAPI servers/tags
-- **CI gate** + fixed 12 pre-existing `mypy --strict` errors
-- **EMF coverage** — ASAN fail-safe + 5 new sector buckets (AAPL 6/8→5/8); Perez capex-light
-  revenue path; crypto/ETF → durability-layer router. `SHARED/strategy/emf-canonical.md` updated to match.
-
-Prior cycle: multi-chain Uniswap V3 LP analytics + `vs-benchmark`, Jupiter Solana SPL prices,
-Tatum multi-chain balances, vaults.fyi discovery, CoinGecko benchmarks (+ persisted Cloud SQL),
-daily snapshot Cloud Run Job + Scheduler, spoofing-resistant rate-limiter, Deribit 6-underlier crypto options.
+- **Docs/status reconciliation (2026-07-01)** — verified live `/health`, `/mcp/tools`,
+  OpenAPI, OAuth metadata, `/llms.txt`, GitHub issues, and local `main`; reconciled
+  docs around 23 planning tools, public PII-free planning, transparent MCP OAuth,
+  and open GitHub issue tracking (#197-#203).
+- **Guyton-Klinger dynamic withdrawals** — `monte_carlo_decumulation` accepts
+  optional `guardrails` and returns `withdrawalRule`, `spendingByYear`, and
+  `guardrailActivity` only when enabled.
+- **Planning surface now 23 tools** — includes `analyze_goals`, `project_cash_flow`,
+  `optimize_allocation`, `build_planning_report`, and the composite Roth/IRMAA trio.
+- **Uniswap V3 owned-position enumeration** — `GET /api/lp/uniswap-v3/{chain}/positions?owner=`
+  lists open positions before USD valuation.
+- **Research-data cleanup** — FMP/FinanceToolkit path removed; supported future
+  research sources are MBOUM, MarketStack, and keyless SEC EDGAR.
 
 ## Next (roadmap)
 
-Deferred from the hardening pass (lower priority / governance):
-- **`SHARED/strategy/emf-canonical.md` numbering** — canon numbers Perez as Check 7 / ASAN as 8;
-  the code orders Perez 5 / ASAN 8. Content is aligned; the numbering mismatch predates this work.
-- **Reconcile the two `SECURITY.md` files** (root vs `.github/`); run `ruff format` (66 files; not CI-enforced).
-- **Roadmap §5 tier-3/4 features** (not built): real options chains + IV, `score_portfolio`,
-  `defi_yields`/`defi_risk`, structured provenance/versioning on scores, `resolve_symbol`.
-- **`breadth` / `precious_metals` are display-only** signals (not consumed by the classifier).
+Outstanding and future work is tracked in GitHub Issues:
 
-- **Aerodrome Slipstream — full coverage via Envio** — the on-chain RPC path is **live**
-  (`GET /api/lp/aerodrome/{token_id}/analytics`, partial: value, in-range, token amounts,
-  uncollected fees; `data_mode: onchain_rpc`). No canonical Slipstream V3-schema subgraph
-  exists on The Graph (name-matching ones are Revert-automation + ICHI-vault subgraphs),
-  and the on-chain-only path cannot derive IL (needs deposit history), fee APR (needs pool
-  volume), or AERO gauge reward APR. An **Envio** client would add those; the pure engine +
-  Slipstream NFPM (`0x827922686190790b37229fd06084350E74485b72`, decode-compatible) are wired.
-- **Arbitrum Uniswap V3** — needs a correct V3-schema subgraph ID (published one is incompatible).
-- **Base subgraph data quality** — public Base V3 deployment has spam-token TVL
-  contamination (pollutes discovery + pool-aggregate fee APR; per-position value/IL stay
-  accurate) → consider self-hosting a cleaner indexer.
-- **Uniswap V4** via Envio (Unichain).
-- **Solana CLMM** (Raydium / Orca) — Q64.64 sibling engine; Jupiter price layer already shipped.
-- Subgraph health-gate (`_meta` block-lag → degraded).
-- Persisted position-PnL history.
-- Enrich Tatum Solana balance with Jupiter USD prices.
+- **#197 public-safe planning/report analytics extraction** — decide what generic,
+  PII-free analytics should move from private PWOS producer work into nexus-core
+  versus staying in advisor workflow code.
+- **#198 planning assumptions provenance** — add source/freshness metadata to
+  reference planning assumptions and echo it in outputs.
+- **#199 LP/indexer expansion and data-quality backlog** — Aerodrome Envio,
+  Arbitrum V3 subgraph, Base data quality, subgraph health-gate, Uniswap V4,
+  Solana CLMM, persisted LP PnL, and Solana USD enrichment.
+- **#200 crypto-options follow-ups** — put-side skew/risk reversal, collar
+  laddering, IV-rank context, and regime-overlay config.
+- **#201 agent analytics backlog** — equity options IV, `score_portfolio`,
+  `defi_yields`/`defi_risk`, `resolve_symbol`, and score provenance/versioning.
+- **#202 governance/tooling cleanup** — EMF canonical numbering, display-only
+  regime signal decision, and possible `ruff format` gate.
+- **#203 equity-research vertical gates** — MBOUM live-key probe, redistribution
+  rights, public-safe research provider/tools, and backtest compliance boundary.

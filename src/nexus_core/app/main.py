@@ -79,13 +79,15 @@ from .well_known import render_security_txt
 logger = logging.getLogger(__name__)
 
 _DESCRIPTION = f"""\
-Open, regime-adaptive financial analysis — market data, macro signals, and
-regime classification. Public and read-only: no account, no API key, no
-authentication required.
+Open, regime-adaptive financial analysis — market data, macro signals, options,
+DeFi analytics, and PII-free planning math. Public and read-only: no account or
+API key is required; remote MCP clients may complete transparent OAuth with no
+login.
 
 This is the analytical substrate of the [Protocol Wealth](https://protocolwealthllc.com)
-research engine, extracted under Apache-2.0. It carries no client data and no
-advisory workflows.
+research engine, extracted under Apache-2.0. It carries no client data, no PII,
+and no client/advisor workflow state. The planning surface is de-identified
+educational math, not an advisory workflow.
 
 *{_FULL_DISCLAIMER}*
 """

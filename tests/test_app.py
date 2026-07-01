@@ -90,14 +90,31 @@ def test_mcp_guide_connection_details() -> None:
 def test_mcp_guide_documents_pwplan_core_integration() -> None:
     html = render_mcp_guide()
     assert "Connecting pwplan-core to nexus-core" in html
-    # All six planning tool ids are listed for the browser consumer.
+    # All planning tool ids are listed for the browser consumer.
     for tool_id in (
         "monte_carlo_decumulation",
+        "analyze_goals",
+        "project_cash_flow",
         "glide_path",
         "tax_aware_withdrawal",
         "correlation_matrix",
         "capital_market_assumptions",
         "regime_return_generator",
+        "roth_conversion",
+        "sequence_of_returns_stress",
+        "rmd",
+        "tax_bracket_headroom",
+        "social_security_claiming",
+        "regime_conditioned_swr",
+        "portfolio_xray",
+        "optimize_allocation",
+        "fire",
+        "risk_metrics",
+        "rebalance",
+        "irmaa_headroom",
+        "analyze_roth_conversion",
+        "sequence_conversions",
+        "build_planning_report",
     ):
         assert tool_id in html, tool_id
     assert '"contractVersion": "0.1.0"' in html  # version handshake documented
@@ -127,6 +144,8 @@ def test_openapi_schema_lists_endpoints() -> None:
     assert "/api/regime" in paths
     assert "/api/market/quote/{symbol}" in paths
     assert "/api/economic/{series_id}" in paths
+    assert "/mcp/tools" in paths
+    assert "/api/lp/uniswap-v3/{chain}/positions" in paths
 
 
 def test_openapi_has_servers_and_tag_descriptions() -> None:

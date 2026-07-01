@@ -3,49 +3,50 @@
 Forward-looking handoff. For the full live snapshot read [CURRENT-STATE.md](CURRENT-STATE.md);
 for change history read [CHANGELOG.md](CHANGELOG.md).
 
-## Where things stand (2026-05-30)
+## Where things stand (2026-07-01)
 
-- **Deployed:** `nexus-core-00040-cld` serving 100% on [nexusmcp.site](https://nexusmcp.site)
-  (Cloudflare → Cloud Run `pwllc-prod`/`us-central1`). Version `0.1.0`.
-- **Health:** all upstreams green — FRED key rotated + working (regime runs on real signals);
-  quotes, Deribit, DefiLlama, EDGAR all live.
-- **Quality:** suite **724** tests; `ruff` + `mypy --strict` clean and **CI-enforced**
-  (`.github/workflows/ci.yml`, 80% coverage floor). `main` is clean.
+- **Deployed:** [nexusmcp.site](https://nexusmcp.site) is serving version
+  `0.1.0` (Cloudflare → Cloud Run `pwllc-prod`/`us-central1`).
+- **Health:** `/health` returns
+  `{"status":"ok","service":"nexus-core","version":"0.1.0"}`.
+- **Public tool surface:** `/mcp/tools` returns contractVersion `0.1.0` with
+  23 PII-free planning tools. `/openapi.json`, `/llms.txt`, OAuth metadata, and
+  `/mcp-guide` are live public discovery surfaces.
+- **GitHub:** no open PRs; seven open issues (#197-#203) track all current
+  outstanding/future-build lanes from the roadmap.
+- **Quality:** `ruff` + `mypy --strict` + `pytest` are CI-enforced
+  (`.github/workflows/ci.yml`, 80% coverage floor).
 - **Tooling note:** CI runs only lint/type/test + SPDX + license-scan + CodeQL — there is **no
   deploy step**; deploys are manual (see below).
 
 ## What shipped recently
 
-The "platform hardening" pass (see CHANGELOG `[Unreleased]`): native MCP planning tools +
-`health`/`describe`/`get_quotes`; canonical disclaimers + `NOT APPLICABLE` score gating;
-error masking + input validation + `defi_protocol` TVL fix + FRED 429-retry; data provenance
-(`as_of`/`source`/`market_status`); `breadth` + `precious_metals` signals; `/llms.txt` +
-`AGENTS.md` + `/.well-known/security.txt` + security headers; and the EMF coverage changes
-(ASAN fail-safe + 5 buckets, Perez capex-light, crypto/ETF layer router) with
-`SHARED/strategy/emf-canonical.md` updated to match.
+The current public surface includes market/macro data, EMF scoring/regime,
+educational options and crypto-options overlays, anonymous on-chain/LP/vault
+analytics, benchmark snapshots, native MCP tools, transparent MCP OAuth
+metadata, and 23 PII-free planning tools served through both native MCP and the
+REST planning gateway.
 
 ## Open items (nothing blocking)
 
 Operator / governance:
-- **Cascade nothing further for EMF** — `emf-canonical.md` is already updated; just confirm the
-  thresholds the new ASAN buckets use (technology_hardware/communication/materials/utilities/
-  real_estate) match your intent (they were ratified "as-is" this session).
+- **Issue #197:** decide which generic planning/report analytics are public-safe
+  enough for nexus-core and keep client context, suitability, report production,
+  artifact receipts, and private workflow state out.
+- **Issue #202:** settle governance/tooling cleanup items: EMF numbering,
+  display-only signal decision, and possible `ruff format` gate.
 
 Engineering follow-ups (lower priority):
-- Reconcile the two `SECURITY.md` files (root vs `.github/`) into one canonical file.
-- Run `ruff format` (66 files would reformat; not currently CI-enforced — add it after, or leave).
-- Canon vs code **check numbering** mismatch (Perez 7/ASAN 8 in canon; 5/8 in code) — content is
-  aligned, numbering is cosmetic; reconcile only if it bothers a reader.
-- Roadmap §5 tier-3/4 capability features remain unbuilt (real options chains + IV,
-  `score_portfolio`, `defi_yields`/`defi_risk`, `resolve_symbol`, structured score provenance).
-- LP roadmap (unchanged): Aerodrome Slipstream full coverage via Envio, Arbitrum V3 subgraph,
-  Uniswap V4, Solana CLMM — see CURRENT-STATE "Next".
+- **Issue #198:** planning assumptions provenance.
+- **Issue #199:** LP/indexer expansion and data quality.
+- **Issue #200:** crypto-options follow-ups.
+- **Issue #201:** agent analytics capability backlog.
+- **Issue #203:** equity-research vertical gates and buildout.
 
 ## How to deploy + verify
 
 ```bash
-# from a clean main (deploy preserves all secrets incl. MCP_OAUTH_SIGNING_KEY —
-# do NOT pass --set-secrets; DEPLOY.md's list is stale and omits it)
+# from a clean main; DEPLOY.md owns the full source-build/secret mapping
 gcloud run deploy nexus-core --source . --region us-central1 --project pwllc-prod
 
 # verify (direct origin bypasses the Cloudflare cache)

@@ -43,10 +43,10 @@ Open an issue with the `enhancement` label. Describe:
 1. **Fork** the repository
 2. **Create a branch** from `main`: `git checkout -b feat/your-feature`
 3. **Write tests** for your changes (we use pytest)
-4. **Run the test suite** locally: `pytest tests/`
-5. **Run the linter**: `ruff check src/ tests/`
-6. **Sign off your commits**: `git commit -s -m "feat: your feature"`
-7. **Push** to your fork and open a PR
+4. **Run the local gate**: `pytest`, `ruff check src/ tests/`, and
+   `mypy --strict src/nexus_core/`
+5. **Sign off your commits**: `git commit -s -m "feat: your feature"`
+6. **Push** to your fork and open a PR
 
 ### PR Guidelines
 
@@ -64,17 +64,16 @@ git clone https://github.com/YOUR_USERNAME/nexus-core.git
 cd nexus-core
 
 # Install dev dependencies
-pip install -e ".[all,dev]"
+pip install -e ".[dev,serve]"
 
 # Run tests
-pytest tests/
+pytest
 
 # Run linter
 ruff check src/ tests/
-ruff format --check src/ tests/
 
 # Type check
-mypy src/
+mypy --strict src/nexus_core/
 ```
 
 ## Code Style
@@ -84,6 +83,11 @@ mypy src/
 - **Linting:** `ruff check`
 - **Type hints:** Required for all public APIs
 - **Docstrings:** Google style, required for all public functions
+- **Python:** 3.12+
+
+The CI gate also enforces SPDX headers on Python files, license compliance, and
+CodeQL. New public output surfaces must import disclaimer copy from
+`src/nexus_core/disclaimers.py`.
 
 ## Testing
 

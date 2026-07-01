@@ -17,8 +17,9 @@ _BODY = """\
 # Nexus Core
 
 > Open, regime-adaptive financial-analysis engine exposed as Model Context
-> Protocol (MCP) tools and a read-only REST API. Public — no account, no API
-> key, no authentication. Educational and informational use only — not advice.
+> Protocol (MCP) tools and a read-only REST API. Public — no account or API
+> key; remote MCP clients may complete transparent OAuth with no login.
+> Educational and informational use only — not advice.
 > Operated by Protocol Wealth, LLC (SEC-registered RIA, CRD #335298). Apache-2.0.
 
 Nexus Core gives an AI client regime-aware market, macro, options, DeFi, and
@@ -41,7 +42,7 @@ pair (`BTC-USD`); crypto *options* use a Deribit code (`BTC`, `ETH`, `SOL`).
 ## Setup
 - [MCP setup guide](https://nexusmcp.site/mcp-guide): connect Claude.ai, Claude
   Desktop (via `mcp-remote`), Cursor, or any MCP client — hosted or local.
-- MCP endpoint: `https://nexusmcp.site/mcp` (Streamable HTTP, public).
+- MCP endpoint: `https://nexusmcp.site/mcp` (Streamable HTTP, public; transparent OAuth where the client requires it).
 - Local stdio server: `pip install "nexus-core[mcp] @ git+https://github.com/Protocol-Wealth/nexus-core.git"` then `nexus-core mcp`.
 
 ## Docs
@@ -57,7 +58,7 @@ pair (`BTC-USD`); crypto *options* use a Deribit code (`BTC`, `ETH`, `SOL`).
 - **Options** (`option_price`, `covered_call`, `cash_secured_put`, `collar`) — Black-Scholes price/Greeks + overlay illustrations. Educational, not recommendations.
 - **Crypto options** (`crypto_option_instruments`, `crypto_option_ticker`) — Deribit BTC/ETH/SOL/XRP/TRX/AVAX.
 - **DeFi** (`defi_protocols`, `defi_protocol`, `defi_chains`) — DefiLlama TVL.
-- **Planning** (`monte_carlo_decumulation`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`) — PII-free retirement math. De-identified inputs only (age, never date of birth).
+- **Planning** (`monte_carlo_decumulation`, `analyze_goals`, `project_cash_flow`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `fire`, `risk_metrics`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`) — 23 PII-free retirement/planning math tools. De-identified inputs only (age, never date of birth).
 - **Meta** (`health`, `describe`) — upstream status + the tool catalog/symbology.
 
 ## Planning over REST (pwplan-core contract v0.1.0)

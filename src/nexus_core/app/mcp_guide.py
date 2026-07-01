@@ -77,8 +77,9 @@ _PAGE = """\
   <p class="lede">
     Nexus Core speaks the <a href="https://modelcontextprotocol.io" style="color:#c7d2fe">Model
     Context Protocol</a>, so any MCP-compatible AI client can call its
-    regime-aware financial analysis as tools — no account, no API key, no auth.
-    You can use the hosted server or run your own.
+    regime-aware financial analysis as tools — no account or API key. Remote
+    clients may complete transparent OAuth with no login. You can use the hosted
+    server or run your own.
   </p>
 
   <h2>Option A — Use the hosted server (no install)</h2>
@@ -141,7 +142,7 @@ _PAGE = """\
     them at <code>{mcp_url}</code> with the HTTP / Streamable-HTTP transport.
     Any MCP-compatible AI client (Claude, GPT, Gemini), or an agent platform
     such as SmythOS, can register this read-only endpoint the same way — no
-    account, no API key, no auth.
+    account or API key.
   </p>
   <div class="note">
     <strong>Tools not showing up?</strong> Fully quit and reopen Claude Desktop
@@ -185,6 +186,7 @@ nexus-core mcp        # MCP server over stdio</code></pre>
     <tr><td>Options</td><td>Black-Scholes price + Greeks; covered-call / cash-secured-put / collar overlays</td></tr>
     <tr><td>Crypto options</td><td>Deribit instruments + IV/Greeks (BTC, ETH, SOL, XRP, TRX, AVAX)</td></tr>
     <tr><td>DeFi</td><td>DefiLlama TVL by protocol and chain</td></tr>
+    <tr><td>Planning</td><td>23 PII-free tools: Monte Carlo, goal funding, deterministic cash flow, allocation optimization, Roth/IRMAA, report assembly</td></tr>
   </table>
   <p>
     Everything is read-only, public, and educational — no side effects, no
@@ -255,6 +257,8 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
   <p>Invoke a tool with <code>POST /mcp/tools/{{tool_id}}</code> and a JSON body:</p>
   <ul>
     <li><code>monte_carlo_decumulation</code> — primary retirement decumulation simulation</li>
+    <li><code>analyze_goals</code> — goal-funding status + shared-pool priority allocation</li>
+    <li><code>project_cash_flow</code> — deterministic year-by-year cash-flow and net-worth projection</li>
     <li><code>glide_path</code> — equity weight by age across the horizon</li>
     <li><code>tax_aware_withdrawal</code> — RMD-first, tax-efficient withdrawal sequencing</li>
     <li><code>correlation_matrix</code> — real-data return correlation across asset classes</li>
@@ -267,6 +271,14 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     <li><code>social_security_claiming</code> — benefit by claim age 62–70 + breakeven ages</li>
     <li><code>regime_conditioned_swr</code> — base safe withdrawal rate adjusted for the live regime</li>
     <li><code>portfolio_xray</code> — regime-aware structural diagnostics (concentration, tax-location, regime sensitivity)</li>
+    <li><code>optimize_allocation</code> — optimizer-driven target asset-class weights</li>
+    <li><code>fire</code> — FIRE / Coast-FIRE calculator</li>
+    <li><code>risk_metrics</code> — annualized return/volatility, Sharpe, Sortino, drawdown, VaR/CVaR</li>
+    <li><code>rebalance</code> — target-vs-current drift and self-financing trade list</li>
+    <li><code>irmaa_headroom</code> — projected Medicare IRMAA headroom</li>
+    <li><code>analyze_roth_conversion</code> — composite Roth conversion analysis under tax + IRMAA ceilings</li>
+    <li><code>sequence_conversions</code> — multi-year Roth conversion sequencing</li>
+    <li><code>build_planning_report</code> — ordered, render-ready envelope from de-identified planning outputs</li>
   </ul>
   <div class="note">
     <code>monte_carlo_decumulation</code> takes an optional <code>retirementAge</code>:
@@ -276,8 +288,9 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     adjust the gross spend after retirement age: <code>delta</code> adds a
     recurring bump/reduction over an age range, <code>override</code> replaces
     the base spend for an age range, and <code>one_time</code> adds a single
-    lump expense. Inputs are de-identified — the engine is PII-free and works
-    on age, never date of birth. Monte Carlo and scenario outputs are
+    lump expense. Optional <code>guardrails</code> enables Guyton-Klinger
+    dynamic withdrawals. Inputs are de-identified — the engine is PII-free and
+    works on age, never date of birth. Monte Carlo and scenario outputs are
     illustrative model results from hypothetical assumptions — not predictions
     or guarantees of any individual outcome.
   </div>

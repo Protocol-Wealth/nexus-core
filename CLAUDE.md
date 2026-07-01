@@ -3,6 +3,10 @@
 > Repo: `Protocol-Wealth/nexus-core` · License: Apache 2.0 · Patent Pending: USPTO #64/034,229 · OIN member.
 > Open-source extraction of the [Protocol Wealth research engine](https://nexusmcp.site); nothing in this repo is client-specific or proprietary to PW.
 
+**Current state (2026-07-01 — docs/status audit):**
+- **Live deployment verified:** `https://nexusmcp.site/health` returns `{"status":"ok","service":"nexus-core","version":"0.1.0"}` and `https://nexusmcp.site/mcp/tools` returns contractVersion `0.1.0` with **23 planning tool ids**: `monte_carlo_decumulation`, `analyze_goals`, `project_cash_flow`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `fire`, `risk_metrics`, `rebalance`, `build_planning_report`, `irmaa_headroom`, `analyze_roth_conversion`, and `sequence_conversions`. GitHub has **no open PRs** and seven open issues (#197-#203) tracking public-safe planning/report extraction, planning assumptions provenance, LP/indexer expansion, crypto-options follow-ups, agent analytics, governance/tooling cleanup, and equity-research gates.
+- **Dependency status:** `requirements-serve.lock` pins `pandas==2.3.3`; keep `pyproject.toml` on `pandas>=2.2,<3.0` until `alphalens-reloaded` supports pandas 3.x. Dependabot's pandas 3.x bump conflicted with the documented `[all]`/`[backtest]` installability boundary.
+
 **Current state (2026-06-24 — Guyton-Klinger dynamic withdrawals):**
 - **`monte_carlo_decumulation` gained an optional `guardrails` config (Guyton-Klinger dynamic withdrawals).** When supplied, the simulation replaces the static `net_spend_by_year` draw (from the first decumulation year onward) with a path-dependent withdrawal governed by the three GK rules — the withdrawal rule (inflation raise, frozen after a down year when the rate is elevated), the capital-preservation rule (cut when the rate climbs `band` above the path's initial rate; suspended in the final `preservationFinalYears`), and the prosperity rule (raise when the rate falls `band` below). The rules run **vectorized across paths** in the existing year-loop (a `_guardrail_step` helper + a `GuardrailParams` dataclass in `engine/planning/monte_carlo.py`), so the non-guardrail path is **byte-identical** to before. The response gains `withdrawalRule` / `spendingByYear` (p10/p50/p90 realized-spend bands) / `guardrailActivity` only when `guardrails` is set. Gateway parsing + validation in `app/planning/tools.py` (`guardrails` body field). `mypy --strict` + `ruff` clean; +13 tests; full suite green. This is the engine half — the pwos chat-tool/report wiring (passing `guardrails`) is the follow-on consumer change.
 
@@ -11,7 +15,7 @@
 
 ## What This Is
 
-Python 3.12 package — a regime-adaptive financial-analysis + DeFi/market-data engine. It serves a **public, read-only HTTP API** (FastAPI) with an **MCP-over-HTTP transport** mounted at `/mcp`, so any MCP-compatible AI client (Claude, GPT, Gemini) can call regime-aware analysis without re-implementing financial domain logic. No account, no API key, no auth.
+Python 3.12 package — a regime-adaptive financial-analysis + DeFi/market-data engine. It serves a **public, read-only HTTP API** (FastAPI) with an **MCP-over-HTTP transport** mounted at `/mcp`, so any MCP-compatible AI client (Claude, GPT, Gemini) can call regime-aware analysis without re-implementing financial domain logic. No account or API key is required; the hosted MCP transport may use transparent OAuth for compatible clients, with no login.
 
 Built and tested in production by Protocol Wealth LLC (SEC-registered RIA, CRD #335298). The public deployment at [nexusmcp.site](https://nexusmcp.site) runs the `nexus_core.app` surface from **this** repository, on **Google Cloud Run** (Cloudflare → Cloud Run); see [`DEPLOY.md`](DEPLOY.md). Version `0.1.0`; CI-gated test suite (`ruff` + `mypy --strict` + `pytest`, 80% coverage floor). The README's *Status* section is the source of truth on maturity — this is an alpha framework. Some subpackages are scaffold (`__init__.py` only); check the actual module contents before assuming an API exists.
 
@@ -36,6 +40,7 @@ nexus-core/
 │   │   ├── snapshots.py      # /api/benchmarks/history router (persisted snapshots)
 │   │   ├── landing.py        # / landing page
 │   │   ├── mcp_mount.py      # build_mcp_app() — FastMCP sub-app for /mcp
+│   │   ├── mcp_oauth.py      # transparent OAuth 2.1 / PKCE shim for remote MCP clients
 │   │   └── ratelimit.py      # in-process per-IP limiter (spoofing-resistant client IP)
 │   ├── engine/
 │   │   ├── regime/           # RegimeEngine: signals, signal_fetcher, classifier, hysteresis, thresholds, dampener, codes
@@ -60,7 +65,7 @@ nexus-core/
 │   ├── mcp/server/           # FastMCP server: build_server() + @mcp.tool() registry
 │   ├── ai/ compliance/ planning/ rebalancing/   # scaffold subpackages (FinBERT wrapper exists; rest __init__-only)
 │   └── cli.py                # nexus-core CLI — serve / mcp / snapshot
-├── tests/                    # pytest suites — match source files (test_<module>.py), ~594 tests
+├── tests/                    # pytest suites — match source files (test_<module>.py)
 ├── examples/                 # Runnable examples (run without network credentials)
 ├── docs/
 │   ├── ARCHITECTURE.md       # Signal ensemble, regime states, scoring checks
@@ -96,10 +101,10 @@ pip install -e ".[dev]"           # Dev tooling only (pytest, pytest-asyncio, py
 pip install -e ".[all]"           # All capability extras (heavy: torch, transformers, QuantLib, zipline)
 pip install -e "."                # Core only (regime + scoring + market/macro/onchain HTTP clients)
 
-pytest                            # Full suite (CI-gated; ~724 tests)
+pytest                            # Full suite (CI-gated)
 pytest tests/test_regime_engine.py
 ruff check src/ tests/
-mypy src/nexus_core/              # strict
+mypy --strict src/nexus_core/
 ```
 
 Use modular installs in CI — `[all]` pulls heavy AI deps. Modular install patterns are documented in [README § Installation](README.md#installation).
@@ -137,7 +142,7 @@ nexus-core --version
 | `/api/solana/price/{mint}`, `/api/solana/prices?mints=` | Solana SPL token USD prices (Jupiter v3, keyless — no API key) |
 | `/api/benchmarks`, `/api/benchmarks/series?days=`, `/api/benchmarks/history?days=` | Base-100 hold-strategy returns (BTC/ETH/SOL + ETH-USDC 50/50,60/40,70/30 + ETH-BTC 50/50; USDC held at $1; buy-and-hold). `/series` on-demand from CoinGecko; `/history` from persisted daily snapshots |
 | `/api/usage` | Provider usage/quota report (non-sensitive; no keys, no client data) |
-| `/mcp` | MCP-over-HTTP transport (FastMCP) — exempt from the rate limiter. `tools/list` includes the research tools + `health`/`describe`/`get_quotes` + the 23 planning tools (20 single-purpose — incl. the deterministic `project_cash_flow` cash-flow/net-worth projection + the goal-funding `analyze_goals` + the optimizer-driven `optimize_allocation` + the report assembler `build_planning_report` — plus the composite Roth/IRMAA trio `analyze_roth_conversion` / `sequence_conversions` / `irmaa_headroom`); every tool is `readOnlyHint` + carries the disclaimer |
+| `/mcp` | MCP-over-HTTP transport (FastMCP) — exempt from the rate limiter. `tools/list` includes the research tools + `health`/`describe`/`get_quotes` + the 23 planning tools, including `project_cash_flow`, `analyze_goals`, `optimize_allocation`, `build_planning_report`, and the Roth/IRMAA tools `analyze_roth_conversion` / `sequence_conversions` / `irmaa_headroom`; every tool is `readOnlyHint` + carries the disclaimer |
 | `/mcp/tools`, `POST /mcp/tools/{id}` | Planning REST gateway (pwplan-core, contractVersion `0.1.0`, PII-free) |
 | `/docs`, `/openapi.json`, `/mcp-guide`, `/llms.txt`, `/.well-known/security.txt` | OpenAPI (servers + tags), MCP setup guide, agent site map, RFC 9116 disclosure |
 
@@ -153,7 +158,7 @@ external integrations degrade gracefully to `None`/empty/503 when their key is a
 
 ### Environment variables
 
-`FRED_API_KEY`, `MBOUM_API_KEY`, `MARKETSTACK_API_KEY`, `COINGECKO_API_KEY`, `EIA_API_KEY`, `BEA_API_KEY`, `DEBANK_API_KEY` (`/api/wallet`), `TATUM_API_KEY` (`/api/chain` + LP uncollected fees), `VAULTSFYI_API_KEY` (`/api/vaults`), `THEGRAPH_API_KEY` (`/api/lp`), `DATABASE_URL` (persistence + `/api/benchmarks/history`; 503 when unset), `NEXUS_RATE_LIMIT_PER_MIN` (default 60), `NEXUS_CORS_ORIGINS` (default `*`).
+`FRED_API_KEY`, `MBOUM_API_KEY`, `MARKETSTACK_API_KEY`, `COINGECKO_API_KEY`, `EIA_API_KEY`, `BEA_API_KEY`, `DEBANK_API_KEY` (`/api/wallet`), `TATUM_API_KEY` (`/api/chain` + LP uncollected fees), `VAULTSFYI_API_KEY` (`/api/vaults`), `THEGRAPH_API_KEY` (`/api/lp`), `DATABASE_URL` (persistence + `/api/benchmarks/history`; 503 when unset), `MCP_OAUTH_SIGNING_KEY` (optional stateless transparent OAuth for hosted `/mcp`; omit locally to keep `/mcp` open), `NEXUS_RATE_LIMIT_PER_MIN` (default 60), `NEXUS_CORS_ORIGINS` (default `*`).
 
 ## Security Posture
 
@@ -161,6 +166,7 @@ external integrations degrade gracefully to `None`/empty/503 when their key is a
 - **Private-only Cloud SQL** — no public IP, reached only over the VPC.
 - **In-process rate limiter** (`app/ratelimit.py`) resolves the client IP spoofing-resistantly (`CF-Connecting-IP`, else rightmost `X-Forwarded-For`); `/health` and `/mcp` are exempt.
 - **Cloudflare** methods rule blocks non-GET/POST/OPTIONS + edge rate-limit on cost endpoints.
+- **Transparent MCP OAuth** (`app/mcp_oauth.py`) is stateless and anonymous when `MCP_OAUTH_SIGNING_KEY` is set: Dynamic Client Registration + PKCE + HMAC-signed access/refresh tokens satisfy remote-MCP client handshakes without user accounts or privileged scopes.
 - **Secrets only in Secret Manager** — no credentials in config or code.
 
 ## Conventions
@@ -191,7 +197,7 @@ external integrations degrade gracefully to `None`/empty/503 when their key is a
 3. Add tests under `tests/test_<name>.py` covering happy path + the regime-state edge cases (Growth / Transition / Hard Asset / Deflation / Repression).
 4. Re-export from the subpackage's `__init__.py` if it's part of the public API surface.
 5. If the change touches the engine's contract (new signal output type, new regime state, new score component) update [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) in the same PR.
-6. Run `pytest && ruff check src/ tests/ && mypy src/nexus_core/` — all three must pass before opening the PR.
+6. Run `pytest && ruff check src/ tests/ && mypy --strict src/nexus_core/` — all three must pass before opening the PR.
 
 **Do NOT:**
 - Change the calibrated threshold/decay/weight values casually. These ARE Protocol Wealth's published EMF calibration (EMF is openly published — see [protocolwealthllc.com/framework](https://protocolwealthllc.com/framework)); there is no private companion. `regime/thresholds.py` is the single source of truth.
@@ -231,7 +237,7 @@ Hard NOs. Each is enforced by review + tooling where possible:
 
 Recently shipped (see `CHANGELOG.md`): multi-chain Uniswap V3 LP (base/optimism/polygon added to ethereum); position `vs-benchmark` (pair LP IL with hold benchmarks — "was LPing worth it?"); Jupiter Solana SPL prices (`/api/solana`, keyless); **Aerodrome Slipstream LP on Base via on-chain RPC** (`/api/lp/aerodrome/{token_id}/analytics`, partial — value/in-range/amounts/uncollected fees; no IL/fee-APR/gauge-APR without an indexer).
 
-Next surfaces (see `CHANGELOG.md` / `ROADMAP` for detail):
+Next surfaces (see `CHANGELOG.md` / `ROADMAP` for detail; tracked in #199):
 - **Aerodrome Slipstream — full coverage via Envio** — the on-chain RPC path is **live** (partial: value, in-range, amounts, uncollected fees; `data_mode: onchain_rpc`). No canonical Slipstream V3-schema subgraph exists on The Graph (name-matching ones are Revert-automation + ICHI-vault subgraphs), and the on-chain-only path cannot derive IL (needs deposit history), fee APR (needs pool volume), or AERO gauge reward APR. An **Envio** client would add those; the pure engine + Slipstream NFPM (`0x827922686190790b37229fd06084350E74485b72`, decode-compatible) are already wired.
 - **Arbitrum Uniswap V3** — needs a correct V3-schema subgraph ID (the published one is incompatible).
 - **Base subgraph data quality** — the public Base V3 deployment has spam-token TVL contamination (pollutes discovery + pool-aggregate fee APR; per-position value/IL stays accurate) → consider self-hosting a cleaner indexer.

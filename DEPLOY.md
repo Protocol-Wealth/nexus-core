@@ -3,8 +3,9 @@
 This document describes how the public nexus-core surface — [nexusmcp.site](https://nexusmcp.site) —
 is built and deployed. The deployable application lives in
 [`src/nexus_core/app/`](src/nexus_core/app/); it exposes the regime engine,
-market/onchain data, and DeFi analytics as a public, read-only HTTP API plus an
-MCP-over-HTTP transport. Traffic flows Cloudflare → Cloud Run.
+market/onchain data, options, DeFi analytics, and PII-free planning math as a
+public, read-only HTTP API plus an MCP-over-HTTP transport. Traffic flows
+Cloudflare → Cloud Run.
 
 Three deployable units make up the production system:
 
@@ -26,6 +27,13 @@ server hosting the FastAPI application from `nexus_core.app:create_app`:
 | `GET /health/db` | Database connectivity probe |
 | `GET /docs` | Interactive OpenAPI / Swagger UI |
 | `GET /openapi.json` | OpenAPI schema |
+| `GET /mcp-guide` | MCP setup guide |
+| `GET /llms.txt` | Agent site map |
+| `GET /.well-known/security.txt` | RFC 9116 security contact |
+| `GET /.well-known/ai-disclosure.json` | Machine-readable AI disclosure card |
+| `GET /.well-known/oauth-protected-resource[/mcp]` | MCP OAuth protected-resource metadata |
+| `GET /.well-known/oauth-authorization-server` | MCP OAuth authorization-server metadata |
+| `POST /register`, `GET /authorize`, `POST /token` | Transparent OAuth 2.1 / PKCE flow for remote MCP clients |
 | `GET /api/regime` | Current macro regime classification |
 | `GET /api/regime/signals` | Raw regime signal readings |
 | `GET /api/score/{ticker}` | 8-check EMF scoring (SEC EDGAR fundamentals) |
@@ -34,24 +42,34 @@ server hosting the FastAPI application from `nexus_core.app:create_app`:
 | `GET /api/economic/{series_id}` | FRED economic series |
 | `GET /api/options/price` | Black-Scholes option pricing + Greeks |
 | `GET /api/options/overlay/{strategy}` | Educational covered-call / cash-secured-put / collar overlays |
+| `GET /api/options/crypto/currencies` | Deribit-supported crypto option underliers |
 | `GET /api/options/crypto/{currency}/instruments` | Deribit crypto option instruments |
 | `GET /api/options/crypto/instrument/{instrument_name}` | Deribit crypto option detail |
+| `GET/POST /api/options/crypto/{currency}/...` | Settlement-aware crypto overwrite/hedge suite |
 | `GET /api/wallet/{address}` | Anonymous EVM wallet balance (DeBank) |
 | `GET /api/chain/chains` | Supported chains for native-balance lookups |
 | `GET /api/chain/balance/{chain}/{address}` | Multi-chain native balance (Tatum) |
 | `GET /api/chain/native/{address}` | Native balance helper |
 | `GET /api/vaults` | DeFi vault discovery (vaults.fyi v2) |
 | `GET /api/vaults/chains` | Vault-discovery supported chains |
+| `GET /api/solana/price/{mint}` | Solana SPL token USD price (Jupiter v3) |
+| `GET /api/solana/prices?mints=` | Batch Solana SPL token USD prices |
 | `GET /api/lp/chains` | LP-analytics supported chains |
+| `GET /api/lp/uniswap-v3/{chain}/positions?owner=` | Open Uniswap V3 positions owned by a public address |
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/analytics` | Uniswap V3 position analytics (exact IL, fee APR, Merkl rewards) |
+| `GET /api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` | LP position analytics vs hold-strategy benchmarks |
+| `GET /api/lp/aerodrome/{token_id}/analytics` | Aerodrome Slipstream position analytics on Base |
 | `GET /api/benchmarks` | Base-100 hold-strategy benchmark definitions |
 | `GET /api/benchmarks/series?days=` | On-demand benchmark returns (CoinGecko) |
 | `GET /api/benchmarks/history?days=` | Benchmark returns from persisted daily snapshots |
 | `GET /api/usage` | Provider usage / quota report |
 | `POST /mcp` | Model Context Protocol endpoint |
+| `GET /mcp/tools`, `POST /mcp/tools/{tool_id}` | PII-free planning REST gateway (23 tools, contractVersion `0.1.0`) |
 
-There is **no authentication**, **no client data**, and **no public write
-endpoint** — the daily snapshot runs as a Cloud Run Job, not an HTTP route. See
+There is **no account or API key requirement**, **no client data**, and **no
+public write endpoint** — the daily snapshot runs as a Cloud Run Job, not an HTTP
+route. The hosted `/mcp` transport can use transparent OAuth for remote MCP
+client compatibility; it does not add user login or privileged scopes. See
 [`AUDIT.md`](AUDIT.md).
 
 ## Configuration
@@ -73,6 +91,7 @@ runs without any of them, degrading each integration gracefully to
 | `VAULTSFYI_API_KEY` | Enables `/api/vaults*` discovery | yes |
 | `THEGRAPH_API_KEY` | Enables `/api/lp/*` Uniswap V3 analytics | yes |
 | `DATABASE_URL` | Cloud SQL persistence; powers `/api/benchmarks/history` and `/health/db` (`503` when unset) | yes |
+| `MCP_OAUTH_SIGNING_KEY` | Enables stateless transparent OAuth for remote `/mcp`; omit locally to keep `/mcp` open | yes in hosted deploy |
 | `NEXUS_RATE_LIMIT_PER_MIN` | Per-IP request budget (default `60`) | no |
 | `NEXUS_CORS_ORIGINS` | Comma-separated CORS allow-list (default `*`) | no |
 | `PORT` | Listen port (Cloud Run injects this; default `8080`) | no |
@@ -130,6 +149,7 @@ printf '%s' "YOUR_TATUM_KEY"       | gcloud secrets create nexus-tatum-api-key -
 printf '%s' "YOUR_VAULTSFYI_KEY"   | gcloud secrets create nexus-vaultsfyi-api-key --data-file=-
 printf '%s' "YOUR_THEGRAPH_KEY"    | gcloud secrets create nexus-thegraph-api-key --data-file=-
 printf '%s' "YOUR_DATABASE_URL"    | gcloud secrets create nexus-marketdata-database-url --data-file=-
+printf '%s' "YOUR_RANDOM_SIGNING_KEY" | gcloud secrets create nexus-mcp-oauth-signing-key --data-file=-
 ```
 
 ### 2. Private database
@@ -163,7 +183,8 @@ DEBANK_API_KEY=nexus-debank-api-key:latest,\
 TATUM_API_KEY=nexus-tatum-api-key:latest,\
 VAULTSFYI_API_KEY=nexus-vaultsfyi-api-key:latest,\
 THEGRAPH_API_KEY=nexus-thegraph-api-key:latest,\
-DATABASE_URL=nexus-marketdata-database-url:latest"
+DATABASE_URL=nexus-marketdata-database-url:latest,\
+MCP_OAUTH_SIGNING_KEY=nexus-mcp-oauth-signing-key:latest"
 ```
 
 `--min-instances 1` keeps one instance always warm — it eliminates Cloud Run cold

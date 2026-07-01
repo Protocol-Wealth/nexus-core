@@ -96,10 +96,6 @@ is in THIRD_PARTY_LICENSES.md.
   Copyright (c) 2017-2026 Ran Aroussi
   Licensed under the Apache License, Version 2.0
 
-- FinanceToolkit (https://github.com/JerBouma/FinanceToolkit)
-  Copyright (c) 2025 Jeroen Bouma
-  Licensed under the MIT License
-
 ## Backtesting & Factor Analysis
 
 - zipline-reloaded (https://github.com/stefan-jansen/zipline-reloaded)
@@ -133,12 +129,6 @@ is in THIRD_PARTY_LICENSES.md.
 - Moov Watchman (https://github.com/moov-io/watchman)
   Copyright (c) 2019-2026 Moov Financial, Inc.
   Licensed under the Apache License, Version 2.0
-
-## Blockchain Data
-
-- Ethereum-ETL (https://github.com/blockchain-etl/ethereum-etl)
-  Copyright (c) 2018-2026 Evgeny Medvedev
-  Licensed under the MIT License
 
 ## Planning & Retirement Simulation
 

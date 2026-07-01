@@ -22,8 +22,9 @@ read-only, model-less, no-client-data public analysis API + MCP tool server:
 ``model.provider`` is ``"none"`` (no LLM in the served path; transformers/torch
 are optional extras, never imported by ``app`` or ``mcp``); data retention is
 zero (anonymous, read-only); PII handling is ``block`` (the planning gateway
-rejects identity-shaped keys). Served at ``/.well-known/ai-disclosure.json`` and
-pointed to from ``llms.txt``.
+rejects identity-shaped keys). No account or API key is required; the remote MCP
+transport may use transparent OAuth to satisfy MCP client handshakes. Served at
+``/.well-known/ai-disclosure.json`` and pointed to from ``llms.txt``.
 
 Bump ``_GENERATED_AT`` whenever the card's content changes (it records when this
 disclosure was authored / last reviewed, NOT the time of each request); keep the
@@ -42,7 +43,7 @@ _CANONICAL_DISCLOSURE_URL = "https://protocolwealthllc.com/disclosures/"
 #: When this disclosure content was last authored / reviewed (ISO-8601, UTC).
 #: Pinned, not "now": stamping the request time would falsely imply continuous
 #: re-review. Bump on any content change.
-_GENERATED_AT = "2026-06-01T00:00:00Z"
+_GENERATED_AT = "2026-07-01T00:00:00Z"
 
 
 def render_disclosure_card() -> dict[str, Any]:
@@ -97,7 +98,8 @@ def render_disclosure_card() -> dict[str, Any]:
             "deterministic analysis engine and MCP tool server. The 'model' block "
             "is not applicable; any LLM that calls these tools is a separate system.",
             "Public and read-only: accepts no client data, stores no client prompts "
-            "or outputs, and requires no authentication (data minimization).",
+            "or outputs, and requires no account or API key. Remote MCP clients "
+            "may complete transparent OAuth with no login.",
             "Regime classifications and durability scores are probabilistic labels, "
             "not verdicts, predictions, or guarantees.",
             "External data integrations degrade to null / empty / HTTP 503 when a "

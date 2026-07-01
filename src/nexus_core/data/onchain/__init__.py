@@ -21,10 +21,9 @@ Concrete clients:
   USD prices (by mint) — the practical price source for tokens outside
   CoinGecko's coin-id catalogue.
 
-All need only the core ``httpx`` dependency. Reference libraries for richer
-chain pipelines (``pip install nexus-core[onchain]``):
+All live clients need only the core ``httpx`` dependency. Reference libraries for
+future richer direct-RPC readers (``pip install nexus-core[onchain]``):
 
-- Ethereum-ETL (MIT) — https://github.com/blockchain-etl/ethereum-etl
 - web3.py (MIT) — https://github.com/ethereum/web3.py
 """
 

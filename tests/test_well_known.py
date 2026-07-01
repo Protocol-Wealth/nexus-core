@@ -40,6 +40,8 @@ def test_llms_txt_served() -> None:
     assert "nexusmcp.site/mcp" in body
     assert "not investment, tax, legal, or financial advice" in body.lower()
     assert "BTC-USD" in body  # symbology trap documented
+    assert "analyze_goals" in body
+    assert "build_planning_report" in body
 
 
 def test_security_txt_rfc9116() -> None:

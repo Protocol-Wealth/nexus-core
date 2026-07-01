@@ -1326,10 +1326,6 @@ qdldl==0.1.9.post1 \
     --hash=sha256:fbd6ca88867514f3f2061a99abdd6cc8bbce76c8fe699586f81486e2958160d8 \
     --hash=sha256:fcc2184cac1e502ed624efe7f00c1c215b95cfd324a8cacf7f0053c00fa524f5
     # via cvxpy
-redis==8.0.0 \
-    --hash=sha256:a00c5355432051ac14e593b8b197fc76c887ee12d55a0984f69328a1115fdc49 \
-    --hash=sha256:c938c18338585009f0bc310f4c7e4e4b4d37639356c4ac072cedf3af570c8dc7
-    # via nexus-core (pyproject.toml)
 referencing==0.37.0 \
     --hash=sha256:381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231 \
     --hash=sha256:44aefc3142c5b842538163acb373e24cce6632bd54bdb01b21ad5863489f50d8
