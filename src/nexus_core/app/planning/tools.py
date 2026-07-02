@@ -27,9 +27,11 @@ from typing import Any, cast
 from ...data.providers import MarketDataProvider
 from ...disclaimers import FULL
 from ...engine.planning import (
+    Direction,
     GlidePathShape,
     GuardrailParams,
     InfeasiblePlanError,
+    SolveResult,
     analyze_goals,
     analyze_roth_conversion,
     bracket_headroom,
@@ -51,6 +53,8 @@ from ...engine.planning import (
     sequence_conversions,
     sequence_of_returns_stress,
     social_security_claiming,
+    solve_integer_monotone,
+    solve_monotone,
     tax_aware_withdrawal,
 )
 from ...engine.planning.case import (
@@ -95,6 +99,22 @@ _RETURN_MODELS = (
     "emf_regime",
 )
 _SPEND_SCHEDULE_MODES = frozenset({"delta", "override", "one_time"})
+
+# ── Goal solver (solve_goal) ─────────────────────────────────────────────────
+# A fixed seed pins the success curve across search iterations (an unseeded MC
+# redraws paths each call → a noisy curve that makes bisection oscillate); it
+# mirrors the pinned SOLVE_SEED the prior BFF-side spend solver used.
+_SOLVE_SEED = 4242421
+# Reduced paths during the search; one full-paths confirmation runs at the
+# solved value (the full run is the authoritative reported success).
+_SOLVE_PATHS = 2000
+_SOLVE_FOR = (
+    "annual_spend",
+    "annual_contribution",
+    "savings_rate",
+    "retirement_age",
+    "initial_savings",
+)
 
 
 @dataclass(frozen=True)
@@ -1171,9 +1191,18 @@ def _net_spend_schedule(
     annual_spend: float,
     spend_cola: float,
     body: dict[str, Any],
+    annual_contribution: float = 0.0,
+    contribution_cola: float = 0.0,
 ) -> list[float]:
     """Per-year net withdrawal: 0 while accumulating (age < retirementAge), then
-    COLA-grown spend minus active guaranteed income once decumulating."""
+    COLA-grown spend minus active guaranteed income once decumulating.
+
+    ``annual_contribution`` (default 0 — the historical behavior, byte-identical)
+    models retirement saving during the accumulation years as a NEGATIVE net draw,
+    i.e. a portfolio inflow the decumulation engine adds before growth each year.
+    This runs through the real Monte Carlo engine (a negative ``this_w`` is a
+    contribution, not a special case) — it is NOT a deterministic approximation.
+    """
     incomes = body.get("guaranteedIncome", [])
     if not isinstance(incomes, list):
         raise PlanningInputError("guaranteedIncome must be a list")
@@ -1202,7 +1231,11 @@ def _net_spend_schedule(
     for year in range(years):
         age = current_age + year
         if age < retirement_age:
-            schedule.append(0.0)  # accumulation: portfolio grows untouched
+            if annual_contribution:
+                # Accumulation with saving: a negative net draw = a portfolio inflow.
+                schedule.append(-annual_contribution * (1.0 + contribution_cola) ** year)
+            else:
+                schedule.append(0.0)  # accumulation: portfolio grows untouched
             continue
         spend = annual_spend * (1.0 + spend_cola) ** year
         spend = _apply_spend_schedule(base_spend=spend, age=age, entries=spend_entries)
@@ -1286,10 +1319,49 @@ def _parse_guardrails(body: dict[str, Any], *, spend_cola: float) -> GuardrailPa
     )
 
 
-def _monte_carlo_decumulation_tool(
+@dataclass(frozen=True)
+class _MonteCarloContext:
+    """A parsed, ready-to-run decumulation body.
+
+    Everything the ``monte_carlo_decumulation`` engine needs, parsed ONCE — so the
+    goal solver can evaluate many candidate values in-process (rebuilding only the
+    per-iteration ``net_spend_by_year`` / ``initial_balance``) without re-parsing,
+    re-validating, or re-fetching the (network-bound) correlation matrix. ``body``
+    is retained so the solver can rebuild the net-spend schedule against a
+    different spend / retirement age / contribution.
+    """
+
+    years: int
+    current_age: int
+    weights: list[float]
+    means: list[float]
+    vols: list[float]
+    lambdas: list[float]
+    correlation: list[list[float]]
+    return_model: str
+    paths: int
+    seed: int
+    regime_seed: int
+    current_regime: str
+    retirement_age: int
+    annual_spend: float
+    spend_cola: float
+    initial_balance: float
+    net_spend: list[float]
+    guardrails: GuardrailParams | None
+    body: dict[str, Any]
+
+
+def _prepare_monte_carlo(
     body: dict[str, Any], market: MarketDataProvider, regime_engine: RegimeEngine
-) -> dict[str, Any]:
-    """``monte_carlo_decumulation`` — the primary decumulation simulation."""
+) -> _MonteCarloContext:
+    """Parse + validate a decumulation body into a reusable :class:`_MonteCarloContext`.
+
+    This is the full parsing/validation of ``monte_carlo_decumulation`` (identical
+    order + messages), factored out so both the tool and the solver share one
+    dispatch. The returned context carries the base ``net_spend`` + ``guardrails``
+    so the tool runs unchanged; the solver overrides the varied field per iteration.
+    """
     current_age = _as_int(body, "currentAge")
     horizon_age = _as_int(body, "horizonAge")
     if not 0 < current_age < horizon_age <= 120:
@@ -1362,23 +1434,344 @@ def _monte_carlo_decumulation_tool(
     if return_model == "emf_regime":
         current_regime = to_generic_regime(regime_engine.classify().regime)
 
-    return monte_carlo_decumulation(
+    return _MonteCarloContext(
         years=years,
+        current_age=current_age,
         weights=weights,
         means=means,
         vols=vols,
         lambdas=lambdas,
         correlation=correlation,
-        initial_balance=initial_balance,
-        net_spend_by_year=net_spend,
         return_model=return_model,
         paths=paths,
         seed=seed_used,
         regime_seed=regime_seed,
         current_regime=current_regime,
-        current_age=current_age,
+        retirement_age=retirement_age,
+        annual_spend=annual_spend,
+        spend_cola=float(spend_cola),
+        initial_balance=initial_balance,
+        net_spend=net_spend,
+        guardrails=guardrails,
+        body=body,
+    )
+
+
+def _run_monte_carlo(
+    ctx: _MonteCarloContext,
+    *,
+    initial_balance: float,
+    net_spend_by_year: list[float],
+    paths: int | None = None,
+    guardrails: GuardrailParams | None = None,
+) -> dict[str, Any]:
+    """Run one in-process decumulation over a prepared context.
+
+    Only ``initial_balance`` / ``net_spend_by_year`` (and optionally the path
+    count) vary per solver iteration; everything else is reused. The pinned
+    ``seed`` + ``regime_seed`` make the success curve smooth across iterations.
+    """
+    return monte_carlo_decumulation(
+        years=ctx.years,
+        weights=ctx.weights,
+        means=ctx.means,
+        vols=ctx.vols,
+        lambdas=ctx.lambdas,
+        correlation=ctx.correlation,
+        initial_balance=initial_balance,
+        net_spend_by_year=net_spend_by_year,
+        return_model=ctx.return_model,
+        paths=ctx.paths if paths is None else paths,
+        seed=ctx.seed,
+        regime_seed=ctx.regime_seed,
+        current_regime=ctx.current_regime,
+        current_age=ctx.current_age,
         guardrails=guardrails,
     )
+
+
+def _mc_success(
+    ctx: _MonteCarloContext,
+    *,
+    initial_balance: float,
+    net_spend_by_year: list[float],
+    paths: int | None = None,
+) -> float:
+    """The scalar success probability of one in-process run (the solver evaluate)."""
+    result = _run_monte_carlo(
+        ctx, initial_balance=initial_balance, net_spend_by_year=net_spend_by_year, paths=paths
+    )
+    return float(result["successProbability"])
+
+
+def _monte_carlo_decumulation_tool(
+    body: dict[str, Any], market: MarketDataProvider, regime_engine: RegimeEngine
+) -> dict[str, Any]:
+    """``monte_carlo_decumulation`` — the primary decumulation simulation."""
+    ctx = _prepare_monte_carlo(body, market, regime_engine)
+    return _run_monte_carlo(
+        ctx,
+        initial_balance=ctx.initial_balance,
+        net_spend_by_year=ctx.net_spend,
+        guardrails=ctx.guardrails,
+    )
+
+
+def _total_guaranteed_income(body: dict[str, Any]) -> float:
+    """Sum the (year-0 nominal) guaranteed income — a best-effort upper-bound aid.
+
+    Used only to widen the default annual-spend ceiling so the upper bound sits
+    safely in the fails-almost-surely region. The schedule builder already
+    validated ``guaranteedIncome`` during :func:`_prepare_monte_carlo`.
+    """
+    incomes = body.get("guaranteedIncome", [])
+    if not isinstance(incomes, list):
+        return 0.0
+    total = 0.0
+    for income in incomes:
+        if isinstance(income, dict):
+            amount = income.get("annualAmount")
+            if isinstance(amount, (int, float)) and not isinstance(amount, bool):
+                total += float(amount)
+    return total
+
+
+def _default_solve_bounds(solve_for: str, ctx: _MonteCarloContext) -> tuple[float, float]:
+    """Sensible per-variable default search bounds when ``bounds`` is omitted."""
+    horizon_age = ctx.current_age + ctx.years
+    if solve_for == "annual_spend":
+        # 0 (always the safest) → a 25%-of-portfolio draw plus all guaranteed
+        # income: a withdrawal rate that fails over any real horizon.
+        return 0.0, ctx.initial_balance * 0.25 + _total_guaranteed_income(ctx.body)
+    if solve_for == "annual_contribution":
+        return 0.0, max(ctx.annual_spend, ctx.initial_balance * 0.25, 10_000.0)
+    if solve_for == "savings_rate":
+        return 0.0, 1.0
+    if solve_for == "retirement_age":
+        return float(ctx.current_age), float(horizon_age)
+    # initial_savings: 0 → enough capital that the plan is almost surely funded.
+    return 0.0, max(ctx.initial_balance * 3.0, ctx.annual_spend * ctx.years, 100_000.0)
+
+
+def _parse_solve_bounds(
+    body: dict[str, Any], solve_for: str, ctx: _MonteCarloContext
+) -> tuple[float, float]:
+    """Resolve the search bounds — caller-supplied ``bounds`` or per-variable defaults."""
+    default_lo, default_hi = _default_solve_bounds(solve_for, ctx)
+    raw = body.get("bounds")
+    if raw is None:
+        return default_lo, default_hi
+    if not isinstance(raw, dict):
+        raise PlanningInputError("bounds must be an object or null")
+    lo = _opt_num(raw, "min", default_lo)
+    hi = _opt_num(raw, "max", default_hi)
+    if not hi > lo:
+        raise PlanningInputError("bounds.max must be greater than bounds.min")
+    if solve_for == "retirement_age":
+        if lo != int(lo) or hi != int(hi):
+            raise PlanningInputError("bounds for retirement_age must be whole ages")
+        if lo < ctx.current_age or hi > ctx.current_age + ctx.years:
+            raise PlanningInputError(
+                "retirement_age bounds must satisfy currentAge <= min < max <= horizonAge"
+            )
+    elif solve_for == "savings_rate":
+        if lo < 0.0 or hi > 1.0:
+            raise PlanningInputError("savings_rate bounds must lie within [0, 1]")
+    elif lo < 0.0:
+        raise PlanningInputError("bounds.min must be non-negative")
+    return lo, hi
+
+
+def _schedule_for(
+    ctx: _MonteCarloContext,
+    *,
+    annual_spend: float | None = None,
+    retirement_age: int | None = None,
+    annual_contribution: float = 0.0,
+) -> list[float]:
+    """Rebuild the net-spend schedule with one field overridden (cheap; no network)."""
+    return _net_spend_schedule(
+        current_age=ctx.current_age,
+        retirement_age=ctx.retirement_age if retirement_age is None else retirement_age,
+        years=ctx.years,
+        annual_spend=ctx.annual_spend if annual_spend is None else annual_spend,
+        spend_cola=ctx.spend_cola,
+        body=ctx.body,
+        annual_contribution=annual_contribution,
+    )
+
+
+def _round_solve_x(solve_for: str, x: float) -> float | int:
+    if solve_for == "retirement_age":
+        return int(round(x))
+    if solve_for == "savings_rate":
+        return round(x, 4)
+    return round(x, 2)
+
+
+def _solve_goal_variable(
+    ctx: _MonteCarloContext, solve_for: str, *, lo: float, hi: float, target: float
+) -> tuple[SolveResult, Direction, Callable[[float], tuple[float, list[float]]]]:
+    """Build the per-variable evaluate closure, run the solver, and return the result.
+
+    The returned mapper turns a solved value into the ``(initial_balance,
+    net_spend_by_year)`` pair for the full-paths confirmation run.
+    """
+    solve_paths = min(ctx.paths, _SOLVE_PATHS)
+
+    if solve_for == "annual_spend":
+        direction: Direction = "decreasing"
+
+        def spend_inputs(value: float) -> tuple[float, list[float]]:
+            return ctx.initial_balance, _schedule_for(ctx, annual_spend=value)
+
+        result = solve_monotone(
+            evaluate=lambda x: _mc_success(
+                ctx, initial_balance=ctx.initial_balance,
+                net_spend_by_year=_schedule_for(ctx, annual_spend=x), paths=solve_paths,
+            ),
+            lo=lo, hi=hi, target=target, direction=direction,
+        )
+        return result, direction, spend_inputs
+
+    if solve_for == "annual_contribution":
+        direction = "increasing"
+
+        def contrib_inputs(value: float) -> tuple[float, list[float]]:
+            return ctx.initial_balance, _schedule_for(ctx, annual_contribution=value)
+
+        result = solve_monotone(
+            evaluate=lambda x: _mc_success(
+                ctx, initial_balance=ctx.initial_balance,
+                net_spend_by_year=_schedule_for(ctx, annual_contribution=x), paths=solve_paths,
+            ),
+            lo=lo, hi=hi, target=target, direction=direction,
+        )
+        return result, direction, contrib_inputs
+
+    if solve_for == "savings_rate":
+        income = ctx.body.get("annualIncome")
+        if isinstance(income, bool) or not isinstance(income, (int, float)) or income <= 0:
+            raise PlanningInputError(
+                "solveFor 'savings_rate' requires a positive numeric 'annualIncome' in the body"
+            )
+        income_f = float(income)
+        direction = "increasing"
+
+        def rate_inputs(value: float) -> tuple[float, list[float]]:
+            return ctx.initial_balance, _schedule_for(ctx, annual_contribution=value * income_f)
+
+        result = solve_monotone(
+            evaluate=lambda x: _mc_success(
+                ctx, initial_balance=ctx.initial_balance,
+                net_spend_by_year=_schedule_for(ctx, annual_contribution=x * income_f),
+                paths=solve_paths,
+            ),
+            lo=lo, hi=hi, target=target, direction=direction,
+        )
+        return result, direction, rate_inputs
+
+    if solve_for == "retirement_age":
+        direction = "increasing"
+
+        def age_inputs(value: float) -> tuple[float, list[float]]:
+            return ctx.initial_balance, _schedule_for(ctx, retirement_age=int(round(value)))
+
+        result = solve_integer_monotone(
+            evaluate=lambda x: _mc_success(
+                ctx, initial_balance=ctx.initial_balance,
+                net_spend_by_year=_schedule_for(ctx, retirement_age=int(round(x))),
+                paths=solve_paths,
+            ),
+            lo=int(round(lo)), hi=int(round(hi)),
+            target=target, direction=direction,
+        )
+        return result, direction, age_inputs
+
+    # initial_savings: only the starting balance varies; the schedule is fixed.
+    direction = "increasing"
+
+    def balance_inputs(value: float) -> tuple[float, list[float]]:
+        return value, ctx.net_spend
+
+    result = solve_monotone(
+        evaluate=lambda x: _mc_success(
+            ctx, initial_balance=x, net_spend_by_year=ctx.net_spend, paths=solve_paths,
+        ),
+        lo=lo, hi=hi, target=target, direction=direction,
+    )
+    return result, direction, balance_inputs
+
+
+def _solve_goal_tool(
+    body: dict[str, Any], market: MarketDataProvider, regime_engine: RegimeEngine
+) -> dict[str, Any]:
+    """``solve_goal`` — solve one plan variable to a target success probability.
+
+    Parses ``{ solveFor, targetSuccess, bounds?, ...baseMonteCarloBody }``, closes
+    an evaluate over the in-process decumulation engine (pinned seed + reduced
+    paths during the search), monotone-bisects to the target, then runs ONE
+    full-paths confirmation at the solved value. Numbers + enums only — an
+    illustration, not advice.
+    """
+    solve_for = _as_str(body, "solveFor")
+    if solve_for not in _SOLVE_FOR:
+        raise PlanningInputError(f"solveFor must be one of {', '.join(_SOLVE_FOR)}")
+    target = _as_number(body, "targetSuccess")
+    if not 0.0 < target <= 1.0:
+        raise PlanningInputError("targetSuccess must be a number in (0, 1]")
+
+    # The remaining body is a full monte_carlo_decumulation request. Pin the seed
+    # (unless the caller pinned their own) so the success curve is smooth.
+    mc_body = {k: v for k, v in body.items() if k not in {"solveFor", "targetSuccess", "bounds"}}
+    mc_body.setdefault("seed", _SOLVE_SEED)
+    ctx = _prepare_monte_carlo(mc_body, market, regime_engine)
+
+    lo, hi = _parse_solve_bounds(body, solve_for, ctx)
+    result, direction, to_inputs = _solve_goal_variable(
+        ctx, solve_for, lo=lo, hi=hi, target=target
+    )
+
+    # One authoritative confirmation at the solved value, at full paths.
+    confirm_balance, confirm_net = to_inputs(result.solved_value)
+    confirm = _run_monte_carlo(
+        ctx, initial_balance=confirm_balance, net_spend_by_year=confirm_net, paths=ctx.paths
+    )
+    achieved = round(float(confirm["successProbability"]), 4)
+
+    response: dict[str, Any] = {
+        "solveFor": solve_for,
+        "targetSuccess": round(target, 4),
+        "feasible": result.feasible,
+        "solvedValue": _round_solve_x(solve_for, result.solved_value),
+        "achievedSuccess": achieved,
+        "direction": direction,
+        "bounds": {
+            "min": _round_solve_x(solve_for, lo),
+            "max": _round_solve_x(solve_for, hi),
+        },
+        "iterations": result.iterations,
+        "pathsSearch": min(ctx.paths, _SOLVE_PATHS),
+        "pathsConfirm": ctx.paths,
+        "seedUsed": ctx.seed,
+        "successCurve": [
+            {
+                "x": _round_solve_x(solve_for, point.x),
+                "successProbability": point.success_probability,
+            }
+            for point in result.success_curve
+        ],
+        "terminalValues": confirm["terminalValues"],
+    }
+    if solve_for in ("annual_contribution", "savings_rate"):
+        # Accumulation modeled as a real in-engine inflow — an exact run, not an
+        # FV approximation. Surfaced as an enum so the method is auditable.
+        response["savingsMethod"] = "net_spend_inflow"
+    if not result.feasible:
+        # Target sits above the achievable ceiling within bounds → the confirmed
+        # success at the boundary IS the best this plan can do (never raise).
+        response["bestAchievable"] = achieved
+    return response
 
 
 def _opt_num(body: dict[str, Any], key: str, default: float) -> float:
@@ -1529,6 +1922,9 @@ def build_tool_handlers(
     def monte_carlo_decumulation_tool(body: dict[str, Any]) -> dict[str, Any]:
         return _monte_carlo_decumulation_tool(body, market, regime_engine)
 
+    def solve_goal_tool(body: dict[str, Any]) -> dict[str, Any]:
+        return _solve_goal_tool(body, market, regime_engine)
+
     def regime_conditioned_swr_tool(body: dict[str, Any]) -> dict[str, Any]:
         return _regime_conditioned_swr_tool(body, regime_engine)
 
@@ -1543,6 +1939,7 @@ def build_tool_handlers(
 
     return {
         "monte_carlo_decumulation": monte_carlo_decumulation_tool,
+        "solve_goal": solve_goal_tool,
         "analyze_goals": analyze_goals_tool,
         "project_cash_flow": project_cash_flow_tool,
         "glide_path": glide_path_tool,

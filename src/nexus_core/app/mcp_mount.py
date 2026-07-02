@@ -40,6 +40,19 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "Guyton-Klinger dynamic-withdrawal guardrails (pass `guardrails`), and "
         "depletion-age diagnostics. Pass the planning request as a JSON object in `body`."
     ),
+    "solve_goal": (
+        "Multi-variable goal solver: back into the value of ONE plan variable that "
+        "hits a target retirement success probability, over the in-process Monte "
+        "Carlo decumulation engine. Pass `solveFor` (one of annual_spend, "
+        "annual_contribution, savings_rate, retirement_age, initial_savings), "
+        "`targetSuccess` (0-1), optional `bounds` {min,max}, and the rest of a full "
+        "monte_carlo_decumulation body (savings_rate also needs `annualIncome`). "
+        "Returns the solved value, whether it's feasible (with `bestAchievable` when "
+        "the target is above the in-bounds ceiling — never errors), the confirmed "
+        "success at a full-paths run, and a monotone success curve. Pinned seed + "
+        "reduced-path search. Identity-free (numbers + enums). Illustration only, "
+        "not advice. JSON request object in `body`."
+    ),
     "analyze_goals": (
         "Goal-based funding analysis: for each financial goal (education, home, "
         "legacy, major purchase) the inflation-grown future cost, the projected "
@@ -231,8 +244,8 @@ def build_configured_server(
     the EMF ``score_asset`` (sharing the REST ``/api/score`` context builder +
     framework, so MCP and REST return identical scores), market quotes/history,
     FRED economic series, DefiLlama TVL, the options pricing/overlay + Deribit
-    crypto-option tools, and the 23 planning tools (monte_carlo_decumulation,
-    analyze_goals, project_cash_flow, glide_path, tax_aware_withdrawal,
+    crypto-option tools, and the 24 planning tools (monte_carlo_decumulation,
+    solve_goal, analyze_goals, project_cash_flow, glide_path, tax_aware_withdrawal,
     correlation_matrix,
     regime_return_generator,
     capital_market_assumptions, roth_conversion, sequence_of_returns_stress, rmd,
