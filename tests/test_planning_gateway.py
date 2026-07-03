@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from nexus_core.app.planning import CONTRACT_VERSION, build_planning_router
 from nexus_core.app.planning import gateway as planning_gateway
 from nexus_core.app.planning.contract import PlanningInfeasibleError, PlanningInputError
-from nexus_core.app.planning.tools import _monte_carlo_decumulation_tool
+from nexus_core.app.planning.tools import _monte_carlo_decumulation_tool, _solve_goal_tool
 from nexus_core.data.providers import PriceBar
 
 
@@ -177,6 +177,7 @@ def test_list_tools_version_handshake() -> None:
     assert "tax_aware_withdrawal" in body["tools"]
     assert "regime_return_generator" in body["tools"]
     assert "monte_carlo_decumulation" in body["tools"]
+    assert "solve_goal" in body["tools"]
     assert "roth_conversion" in body["tools"]
     assert "sequence_of_returns_stress" in body["tools"]
     assert "rmd" in body["tools"]
@@ -1119,3 +1120,172 @@ def test_project_cash_flow_bad_filing_status_400() -> None:
     )
     assert r.status_code == 400
     assert "filing_status" in r.text
+
+
+# ── solve_goal (multi-variable goal solver) ──────────────────────────────────
+
+# A lean base body (fewer paths, deterministic MVN model) so the ~14-iteration
+# search stays fast. Seed is pinned by the tool when omitted.
+_SOLVE_BASE: dict[str, Any] = {
+    "contractVersion": "0.1.0",
+    "currentAge": 45,
+    "retirementAge": 65,
+    "horizonAge": 95,
+    "accounts": [
+        {"type": "traditional", "balance": 1_200_000, "allocation": {"us_equity": 0.6, "us_bonds": 0.4}},
+        {"type": "roth", "balance": 300_000, "allocation": {"us_equity": 0.8, "us_bonds": 0.2}},
+    ],
+    "assetClasses": [
+        {"id": "us_equity", "expectedReturn": 0.07, "volatility": 0.16, "lambda": 0.35},
+        {"id": "us_bonds", "expectedReturn": 0.03, "volatility": 0.05, "lambda": 0.10},
+    ],
+    "correlations": None,
+    "annualSpend": 120_000,
+    "spendColaRate": 0.025,
+    "guaranteedIncome": [
+        {"label": "Social Security", "annualAmount": 42_000, "startAge": 67, "colaRate": 0.02}
+    ],
+    "returnModel": "multivariate_normal",
+    "paths": 800,
+}
+
+
+def _solve(**overrides: Any) -> dict[str, Any]:
+    return _monte_carlo_free_client_solve({**_SOLVE_BASE, **overrides})
+
+
+def _monte_carlo_free_client_solve(body: dict[str, Any]) -> dict[str, Any]:
+    r = _client().post("/mcp/tools/solve_goal", json=body)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_solve_goal_annual_spend_end_to_end() -> None:
+    body = _solve(solveFor="annual_spend", targetSuccess=0.80)
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert body["disclaimer"]  # gateway attaches the MC disclaimer
+    assert body["solveFor"] == "annual_spend"
+    assert body["targetSuccess"] == 0.80
+    assert isinstance(body["feasible"], bool)
+    assert body["direction"] == "decreasing"
+    assert body["seedUsed"] == 4242421  # the pinned solve seed
+    assert body["bounds"]["min"] <= body["solvedValue"] <= body["bounds"]["max"]
+    assert 0.0 <= body["achievedSuccess"] <= 1.0
+    assert body["pathsSearch"] == 800
+    assert body["pathsConfirm"] == 800
+    assert set(body["terminalValues"]) == {"p10", "p25", "p50", "p75", "p90"}
+
+
+def test_solve_goal_success_curve_is_monotone_for_spend() -> None:
+    body = _solve(solveFor="annual_spend", targetSuccess=0.75)
+    curve = body["successCurve"]
+    assert len(curve) >= 2
+    xs = [pt["x"] for pt in curve]
+    assert xs == sorted(xs)  # sorted by the variable
+    probs = [pt["successProbability"] for pt in curve]
+    assert probs == sorted(probs, reverse=True)  # spend up -> success down (non-increasing)
+    assert all(0.0 <= p <= 1.0 for p in probs)
+
+
+def test_solve_goal_retirement_age_returns_integer() -> None:
+    body = _solve(solveFor="retirement_age", targetSuccess=0.80)
+    assert body["direction"] == "increasing"
+    assert isinstance(body["solvedValue"], int)
+    assert 45 <= body["solvedValue"] <= 95
+    assert all(isinstance(pt["x"], int) for pt in body["successCurve"])
+
+
+def test_solve_goal_contribution_labels_inflow_method() -> None:
+    body = _solve(solveFor="annual_contribution", targetSuccess=0.80)
+    assert body["direction"] == "increasing"
+    assert body["savingsMethod"] == "net_spend_inflow"  # exact in-engine run, not an approximation
+    assert body["solvedValue"] >= 0.0
+
+
+def test_solve_goal_initial_savings_increasing() -> None:
+    body = _solve(solveFor="initial_savings", targetSuccess=0.80)
+    assert body["direction"] == "increasing"
+    assert body["solvedValue"] >= 0.0
+
+
+def test_solve_goal_savings_rate_requires_income() -> None:
+    with pytest.raises(PlanningInputError, match="annualIncome"):
+        _solve_goal_tool(
+            {**_SOLVE_BASE, "solveFor": "savings_rate", "targetSuccess": 0.80},
+            _FakeMarket(),
+            _FakeRegimeEngine(),
+        )
+    # with a positive income it solves a rate in [0, 1]
+    body = _solve(solveFor="savings_rate", targetSuccess=0.80, annualIncome=200_000)
+    assert body["savingsMethod"] == "net_spend_inflow"
+    assert 0.0 <= body["solvedValue"] <= 1.0
+
+
+def test_solve_goal_infeasible_reports_best_achievable() -> None:
+    # A stressed plan (high spend) with an unreachable target — the least spend in
+    # bounds ($0) still can't hit 99.9% here; solver reports best-achievable, not raise.
+    body = _solve(
+        solveFor="annual_spend",
+        annualSpend=400_000,
+        accounts=[
+            {"type": "traditional", "balance": 500_000, "allocation": {"us_equity": 0.9, "us_bonds": 0.1}}
+        ],
+        targetSuccess=0.999,
+        bounds={"min": 350_000, "max": 800_000},
+    )
+    assert body["feasible"] is False
+    assert "bestAchievable" in body
+    assert body["bestAchievable"] == body["achievedSuccess"]
+    assert body["bestAchievable"] < 0.999
+
+
+def test_solve_goal_bad_solve_for_400() -> None:
+    r = _client().post(
+        "/mcp/tools/solve_goal", json={**_SOLVE_BASE, "solveFor": "crystal_ball", "targetSuccess": 0.8}
+    )
+    assert r.status_code == 400
+    assert "solveFor" in r.text
+
+
+def test_solve_goal_bad_target_400() -> None:
+    for bad in (0.0, 1.5, -0.2):
+        r = _client().post(
+            "/mcp/tools/solve_goal", json={**_SOLVE_BASE, "solveFor": "annual_spend", "targetSuccess": bad}
+        )
+        assert r.status_code == 400
+        assert "targetSuccess" in r.text
+
+
+def test_solve_goal_bad_retirement_age_bounds_400() -> None:
+    with pytest.raises(PlanningInputError, match="retirement_age bounds"):
+        _solve_goal_tool(
+            {
+                **_SOLVE_BASE,
+                "solveFor": "retirement_age",
+                "targetSuccess": 0.80,
+                "bounds": {"min": 40, "max": 70},  # 40 < currentAge 45
+            },
+            _FakeMarket(),
+            _FakeRegimeEngine(),
+        )
+
+
+def test_solve_goal_deterministic() -> None:
+    a = _solve(solveFor="annual_spend", targetSuccess=0.80)
+    b = _solve(solveFor="annual_spend", targetSuccess=0.80)
+    assert a == b  # pinned seed -> identical solve
+
+
+def test_solve_goal_rejects_invalid_base_body_400() -> None:
+    # The base body is still a full MC body — a bad allocation is rejected as usual.
+    bad = {
+        **_SOLVE_BASE,
+        "solveFor": "annual_spend",
+        "targetSuccess": 0.80,
+        "accounts": [
+            {"type": "traditional", "balance": 1000, "allocation": {"us_equity": 0.5, "us_bonds": 0.4}}
+        ],
+    }
+    r = _client().post("/mcp/tools/solve_goal", json=bad)
+    assert r.status_code == 400
+    assert "sums to" in r.text

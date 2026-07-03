@@ -22,6 +22,13 @@ from .cash_flow_projection import project_cash_flow
 from .correlation import correlation_matrix
 from .fire import fire
 from .glide_path import GlidePathShape, compute_glide_path
+from .goal_solve import (
+    Direction,
+    SolvePoint,
+    SolveResult,
+    solve_integer_monotone,
+    solve_monotone,
+)
 from .goals import GOAL_KINDS, analyze_goals
 from .irmaa import irmaa_headroom
 from .monte_carlo import GuardrailParams, monte_carlo_decumulation
@@ -53,6 +60,7 @@ __all__ = [
     "PLANNING_CONTRACT_VERSION",
     "AcaSituation",
     "BracketTable",
+    "Direction",
     "GlidePathShape",
     "InfeasiblePlanError",
     "IrmaaTable",
@@ -60,6 +68,8 @@ __all__ = [
     "PlanningContract",
     "PlanningContractError",
     "RothConversionAnalysis",
+    "SolvePoint",
+    "SolveResult",
     "StateConversionRule",
     "analyze_goals",
     "analyze_roth_conversion",
@@ -86,5 +96,7 @@ __all__ = [
     "sequence_conversions",
     "sequence_of_returns_stress",
     "social_security_claiming",
+    "solve_integer_monotone",
+    "solve_monotone",
     "tax_aware_withdrawal",
 ]
