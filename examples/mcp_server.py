@@ -19,7 +19,6 @@ from __future__ import annotations
 
 from nexus_core.data.providers import Quote
 from nexus_core.engine.regime import RegimeEngine
-from nexus_core.engine.scoring import ScoringFramework
 from nexus_core.mcp.server import build_server
 
 

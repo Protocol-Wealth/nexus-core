@@ -11,7 +11,7 @@ a broker quote feed, your internal data service, etc.).
 
 from __future__ import annotations
 
-from nexus_core.data.providers import MacroDataProvider, MarketDataProvider, Quote
+from nexus_core.data.providers import Quote
 from nexus_core.engine.regime import RegimeEngine, RegimeThresholds
 
 
