@@ -35,6 +35,9 @@ from ...engine.planning import (
     analyze_goals,
     analyze_roth_conversion,
     bracket_headroom,
+    budget_pacing_projection,
+    cash_reserve_analysis,
+    cashflow_planning_bridge,
     compute_glide_path,
     correlation_matrix,
     fire,
@@ -466,6 +469,60 @@ def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
             retirement_income=_optional_number(body, "retirementIncome", 0.0),
             current_liabilities=_optional_number(body, "currentLiabilities", 0.0),
             base_year=base_year,
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def cashflow_planning_bridge_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``cashflow_planning_bridge`` — derived monthly close into planning inputs."""
+    volatility = body.get("spendingVolatility", "medium")
+    if not isinstance(volatility, str):
+        raise PlanningInputError("spendingVolatility must be a string or omitted")
+    try:
+        return cashflow_planning_bridge(
+            months_analyzed=_as_int(body, "monthsAnalyzed"),
+            average_monthly_spending=_as_number(body, "averageMonthlySpending"),
+            essential_monthly_spending=_as_number(body, "essentialMonthlySpending"),
+            lifestyle_monthly_spending=_as_number(body, "lifestyleMonthlySpending"),
+            average_monthly_income=_as_number(body, "averageMonthlyIncome"),
+            average_monthly_savings=_as_number(body, "averageMonthlySavings"),
+            current_cash_reserve=_as_number(body, "currentCashReserve"),
+            target_cash_reserve_months=_as_number(body, "targetCashReserveMonths"),
+            one_time_expense_adjustment=_optional_number(body, "oneTimeExpenseAdjustment", 0.0),
+            spending_volatility=cast(Any, volatility),
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def cash_reserve_analysis_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``cash_reserve_analysis`` — reserve coverage against essential spending."""
+    secondary = body.get("secondaryTargetMonths")
+    if secondary is not None and (isinstance(secondary, bool) or not isinstance(secondary, (int, float))):
+        raise PlanningInputError("secondaryTargetMonths must be a number or omitted")
+    try:
+        return cash_reserve_analysis(
+            monthly_essential_spending=_as_number(body, "monthlyEssentialSpending"),
+            monthly_total_spending=_as_number(body, "monthlyTotalSpending"),
+            current_cash_reserve=_as_number(body, "currentCashReserve"),
+            target_months=_as_number(body, "targetMonths"),
+            secondary_target_months=float(secondary) if secondary is not None else None,
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def budget_pacing_projection_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``budget_pacing_projection`` — month-end budget pace from aggregate spend."""
+    try:
+        return budget_pacing_projection(
+            month_day=_as_int(body, "monthDay"),
+            days_in_month=_as_int(body, "daysInMonth"),
+            month_to_date_spending=_as_number(body, "monthToDateSpending"),
+            monthly_budget=_as_number(body, "monthlyBudget"),
+            recurring_remaining=_optional_number(body, "recurringRemaining", 0.0),
+            known_one_time_remaining=_optional_number(body, "knownOneTimeRemaining", 0.0),
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
@@ -1942,6 +1999,9 @@ def build_tool_handlers(
         "solve_goal": solve_goal_tool,
         "analyze_goals": analyze_goals_tool,
         "project_cash_flow": project_cash_flow_tool,
+        "cashflow_planning_bridge": cashflow_planning_bridge_tool,
+        "cash_reserve_analysis": cash_reserve_analysis_tool,
+        "budget_pacing_projection": budget_pacing_projection_tool,
         "glide_path": glide_path_tool,
         "tax_aware_withdrawal": tax_aware_withdrawal_tool,
         "correlation_matrix": correlation_matrix_tool,
@@ -1969,7 +2029,10 @@ __all__ = [
     "ToolHandler",
     "analyze_goals_tool",
     "analyze_roth_conversion_tool",
+    "budget_pacing_projection_tool",
     "build_tool_handlers",
+    "cash_reserve_analysis_tool",
+    "cashflow_planning_bridge_tool",
     "fire_tool",
     "glide_path_tool",
     "irmaa_headroom_tool",

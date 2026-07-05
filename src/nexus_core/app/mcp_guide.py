@@ -257,8 +257,12 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
   <p>Invoke a tool with <code>POST /mcp/tools/{{tool_id}}</code> and a JSON body:</p>
   <ul>
     <li><code>monte_carlo_decumulation</code> — primary retirement decumulation simulation</li>
+    <li><code>solve_goal</code> — solve one planning variable to a target success probability</li>
     <li><code>analyze_goals</code> — goal-funding status + shared-pool priority allocation</li>
     <li><code>project_cash_flow</code> — deterministic year-by-year cash-flow and net-worth projection</li>
+    <li><code>cashflow_planning_bridge</code> — derived monthly close values into planning assumptions</li>
+    <li><code>cash_reserve_analysis</code> — cash reserve coverage and funding status</li>
+    <li><code>budget_pacing_projection</code> — month-end budget pace from aggregate spending</li>
     <li><code>glide_path</code> — equity weight by age across the horizon</li>
     <li><code>tax_aware_withdrawal</code> — RMD-first, tax-efficient withdrawal sequencing</li>
     <li><code>correlation_matrix</code> — real-data return correlation across asset classes</li>

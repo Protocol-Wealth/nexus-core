@@ -93,8 +93,12 @@ def test_mcp_guide_documents_pwplan_core_integration() -> None:
     # All planning tool ids are listed for the browser consumer.
     for tool_id in (
         "monte_carlo_decumulation",
+        "solve_goal",
         "analyze_goals",
         "project_cash_flow",
+        "cashflow_planning_bridge",
+        "cash_reserve_analysis",
+        "budget_pacing_projection",
         "glide_path",
         "tax_aware_withdrawal",
         "correlation_matrix",

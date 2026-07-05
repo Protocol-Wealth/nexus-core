@@ -102,10 +102,11 @@ gracefully to `None` / empty / `503` when its key is absent.
 - **`GET /api/usage`** — provider usage / quota report.
 - **`POST /mcp`** — MCP-over-HTTP transport (FastMCP, also `nexus-core mcp` over
   stdio) exposing the above as tools, plus `health` / `describe` / `get_quotes`
-  and the 23 planning tools. `GET /mcp/tools` + `POST /mcp/tools/{id}` are the
+  and the 27 current-source planning tools. `GET /mcp/tools` + `POST /mcp/tools/{id}` are the
   REST planning gateway (contractVersion `0.1.0`) for the pwplan-core shell.
-  The same 23-tool handler set serves native MCP and REST, including
-  `analyze_goals`, `project_cash_flow`, `optimize_allocation`,
+  The same handler set serves native MCP and REST, including
+  `solve_goal`, `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio,
+  `optimize_allocation`,
   `build_planning_report`, and the Roth/IRMAA tools
   `analyze_roth_conversion`, `sequence_conversions`, and `irmaa_headroom`.
 - **Persistence** — private Cloud SQL (`nexus-marketdata`, POSTGRES_16,
@@ -155,7 +156,11 @@ classification, Monarch import parsing, report production, artifact receipts,
 client context, suitability, approvals, release workflow, audit trail, and
 private workflow state out unless deliberately generalized. Slice 1 now has the
 pure engine functions for `cashflow_planning_bridge`, `cash_reserve_analysis`,
-and `budget_pacing_projection`; Slice 2 would be MCP/REST wrappers if accepted.
+and `budget_pacing_projection`; Slice 2 exposes those through the existing
+planning gateway/native MCP registry as public-safe wrappers over derived
+monthly-close aggregates only. Future `pwplan-core` work should consume synthetic
+or de-identified outputs from these tools and must still keep real ingestion,
+household workflow, approvals, release state, and audit trails private.
 
 **Next planning build — assumptions provenance (open issue #198; decided
 2026-06-04).** Tag every

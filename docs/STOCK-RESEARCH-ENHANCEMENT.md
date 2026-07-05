@@ -31,7 +31,7 @@ equity. The regime/score lens is the strongest of them; everything else is thin.
 | 2 | **EMF durability score** | `score_asset` | The primary equity-research artifact: the 8-check framework (CROIC, Piotroski F-Score, Hurst, Lambda decay, Perez phase, Regime alignment, Sector tailwind, ASAN) → a confidence **tier** (HIGH / MODERATE / LOW / BELOW / NOT_APPLICABLE) + per-check pass/fail/value/threshold. Internally pulls SEC EDGAR companyfacts + price history, but surfaces only the verdicts, not the statements. |
 | 3 | **Price** | `get_quote`, `get_quotes`, `get_price_history` | `get_quote` is **price-only** (last price + a freshness label — no change/%/volume/market-cap/52w/bid-ask). `get_price_history` is **daily OHLCV only**. |
 | 4 | **Options** | `option_price`, `covered_call`, `cash_secured_put`, `collar` | **Black-Scholes illustrations only**, on a vol estimated from ~90d of historical stdev. **No real equity chain / strikes / OI / IV.** (The full real-chain + IV/skew/term-structure/MTM suite exists but is **crypto-only**, via 13 Deribit tools.) |
-| 5 | **Portfolio/planning math** | 23 planning tools | Monte Carlo, `optimize_allocation`, `correlation_matrix`, `risk_metrics`, `portfolio_xray` — over de-identified **asset-class** portfolios, not equity-level holdings. |
+| 5 | **Portfolio/planning math** | 27 planning tools in current source | Monte Carlo, `optimize_allocation`, `correlation_matrix`, `risk_metrics`, `portfolio_xray`, and cash-flow bridge tools — over de-identified **asset-class** portfolios and monthly-close aggregates, not equity-level holdings or raw transactions. |
 
 **Net:** the analyst gets a regime-aware, graded durability assessment plus a bare
 price. A research-service pick can be run through the **EMF quality + regime

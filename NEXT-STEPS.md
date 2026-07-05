@@ -30,10 +30,14 @@ re-smoked._
   inputs and derived monthly-close values, but must not ingest Monarch CSVs or
   store raw transactions, merchant/payee strings, account nicknames, household
   records, advisor/client notes, approvals, release state, or audit trails.
-- **Current Slice 1 state:** `cashflow_planning_bridge`,
+- **Current Slice 2 state:** `cashflow_planning_bridge`,
   `cash_reserve_analysis`, and `budget_pacing_projection` live in
-  `engine/planning/cashflow_bridge.py` and are exported from
-  `nexus_core.engine.planning`. They are not MCP/REST tools yet.
+  `engine/planning/cashflow_bridge.py`, are exported from
+  `nexus_core.engine.planning`, and are exposed through the existing planning
+  gateway/native MCP registry as read-only public-safe tools. They consume
+  derived monthly-close aggregates only. They do not ingest Monarch CSVs, raw
+  transaction rows, merchant/payee strings, account nicknames, household records,
+  client/advisor notes, approvals, release state, or audit trails.
 
 ## Before you commit (the gate — mirrors CI)
 
@@ -51,11 +55,11 @@ whatever is on your PATH:
 version (e.g. 1.14.1) that reports phantom errors disagreeing with CI. Always run
 `.venv/bin/mypy`. Same for `pytest` (bare `python` can't import `nexus_core`).
 
-**Full-suite diagnostic note (2026-07-05):** Slice 1 targeted tests passed, but
-`timeout 180 .venv/bin/python -m pytest -vv --maxfail=1` collected 1134 tests and
-timed out at `tests/test_app.py::test_landing_page`. That appears unrelated to
-the cash-flow bridge engine module; investigate separately before treating the
-full suite as a Slice 1 failure.
+**Full-suite diagnostic note (2026-07-05):** Slice 1/Slice 2 targeted tests
+passed, but `timeout 180 .venv/bin/python -m pytest -vv --maxfail=1` collected
+1143 tests and timed out at `tests/test_app.py::test_landing_page`. That appears
+unrelated to the cash-flow bridge engine/gateway work; investigate separately
+before treating the full suite as a Slice 1/Slice 2 failure.
 
 Conventional commits, SPDX header on every `.py`, and **DCO sign-off**
 (`git commit -s`). Branch off `main`; open a PR; merge when the single CI job

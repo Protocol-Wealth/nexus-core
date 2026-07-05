@@ -6,7 +6,7 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
 [AUDIT.md](AUDIT.md).
 
 - **Last live verified:** 2026-07-01 — live `/health` OK; live `/mcp/tools` returned 23 tools; GitHub: 7 open issues (#197-#203), 0 open PRs.
-- **Last local update:** 2026-07-05 — local `main` inspected at `4499a54`; Slice 0 docs-only boundary update plus Slice 1 pure cash-flow planning bridge engine functions for the PW Cash Flow OS + PW Planning Lab + PW Retirement Income Lab direction. Live endpoints were not re-smoked in this pass.
+- **Last local update:** 2026-07-05 — local `main` now includes Slice 0 docs-only boundary alignment, Slice 1 pure cash-flow planning bridge engine functions, and Slice 2 planning gateway/MCP wrappers for the PW Cash Flow OS + PW Planning Lab + PW Retirement Income Lab direction. Current source exposes 27 planning tools; live endpoints were not re-smoked in this pass.
 - **Repo:** [github.com/Protocol-Wealth/nexus-core](https://github.com/Protocol-Wealth/nexus-core) — public, Apache-2.0
 - **Live:** [nexusmcp.site](https://nexusmcp.site) (Cloudflare → Cloud Run)
 - **Version:** 0.1.0
@@ -28,9 +28,12 @@ call Nexus only after de-identification and aggregation.
 Slice 1 added the pure engine module
 `src/nexus_core/engine/planning/cashflow_bridge.py` with
 `cashflow_planning_bridge`, `cash_reserve_analysis`, and
-`budget_pacing_projection`, exported from `nexus_core.engine.planning`. These are
-not public MCP/REST tools yet; no app router, tool registry, OpenAPI, or MCP
-surface changed. Future Slice 2, if accepted, is the wrapper layer.
+`budget_pacing_projection`, exported from `nexus_core.engine.planning`. Slice 2
+exposes those functions through the existing read-only planning gateway and
+native MCP tool list. The wrappers accept only de-identified monthly-close
+aggregates and do not ingest Monarch CSVs, raw transaction rows, merchant/payee
+strings, account nicknames, household records, advisor/client notes, approvals,
+release state, or audit trails.
 
 ## Public REST surface
 
@@ -161,10 +164,10 @@ read-only with `readOnlyHint` + the educational disclaimer):
   `crypto_options_book_mtm` / `crypto_options_scenario`. Full overwriting + hedge
   suite is on BOTH the REST surface (`/api/options/crypto/{currency}/...`) and MCP.
 - **DeFi** — `defi_protocols`, `defi_protocol`, `defi_chains`
-- **Planning** (23 live) — `monte_carlo_decumulation`, `analyze_goals`, `project_cash_flow`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `fire`, `risk_metrics`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`
+- **Planning** (27 in current source; last live verification returned 23 on 2026-07-01) — `monte_carlo_decumulation`, `solve_goal`, `analyze_goals`, `project_cash_flow`, `cashflow_planning_bridge`, `cash_reserve_analysis`, `budget_pacing_projection`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `fire`, `risk_metrics`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`
 - **Meta** — `health` (per-upstream status), `describe` (catalog + symbology + contract version)
 
-All 23 planning tools are served both natively through MCP and via the REST gateway
+All 27 current-source planning tools are served both natively through MCP and via the REST gateway
 (`POST /mcp/tools/{id}`) for the browser-based pwplan-core shell — same handlers,
 contractVersion `0.1.0`. The composite Roth/IRMAA case contract is
 `PLANNING_CONTRACT_VERSION = 1.1.0`; the gateway envelope remains `0.1.0`.
@@ -268,12 +271,15 @@ key is absent.
 - **Cash-flow planning bridge engine functions (2026-07-05)** —
   `cashflow_planning_bridge`, `cash_reserve_analysis`, and
   `budget_pacing_projection` exist as pure, deterministic `engine/planning`
-  functions only. They consume de-identified monthly-close aggregates and remain
-  unexposed through MCP/REST until a future wrapper slice.
+  functions and are exposed through the existing planning gateway/native MCP
+  registry as read-only public-safe tools. They consume de-identified
+  monthly-close aggregates only; production ingestion and workflow remain private
+  PWOS/pw-api/PWPortal responsibilities.
 - **Guyton-Klinger dynamic withdrawals** — `monte_carlo_decumulation` accepts
   optional `guardrails` and returns `withdrawalRule`, `spendingByYear`, and
   `guardrailActivity` only when enabled.
-- **Planning surface now 23 tools** — includes `analyze_goals`, `project_cash_flow`,
+- **Planning surface now 27 tools in current source** — includes `solve_goal`,
+  `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio,
   `optimize_allocation`, `build_planning_report`, and the composite Roth/IRMAA trio.
 - **Uniswap V3 owned-position enumeration** — `GET /api/lp/uniswap-v3/{chain}/positions?owner=`
   lists open positions before USD valuation.

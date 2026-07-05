@@ -167,6 +167,12 @@ def test_extra_tools_register() -> None:
 
 _PLANNING_TOOL_IDS = {
     "monte_carlo_decumulation",
+    "solve_goal",
+    "analyze_goals",
+    "project_cash_flow",
+    "cashflow_planning_bridge",
+    "cash_reserve_analysis",
+    "budget_pacing_projection",
     "glide_path",
     "tax_aware_withdrawal",
     "correlation_matrix",
@@ -182,6 +188,10 @@ _PLANNING_TOOL_IDS = {
     "fire",
     "risk_metrics",
     "rebalance",
+    "irmaa_headroom",
+    "analyze_roth_conversion",
+    "sequence_conversions",
+    "build_planning_report",
 }
 
 

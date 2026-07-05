@@ -7,19 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Cash-flow planning bridge engine
+### Cash-flow planning bridge tools
 
 #### Added
 
+- Exposed the Slice 1 cash-flow planning bridge functions through the existing
+  read-only planning REST gateway and native MCP registry as
+  `cashflow_planning_bridge`, `cash_reserve_analysis`, and
+  `budget_pacing_projection`. These wrappers preserve the standard planning
+  `contractVersion` envelope, reject identity-shaped keys through the existing
+  gateway tripwire, and consume derived monthly-close aggregates only.
+- Updated planning gateway/MCP tests and source-rendered `/llms.txt` +
+  `/mcp-guide` copy for the current 27-tool planning surface. Slice 2 adds no
+  raw Monarch CSV ingestion, transaction classification, merchant/payee fields,
+  household records, workflow state, approval/release state, persistence, or
+  audit trail.
 - Added Slice 1 pure planning bridge functions in
   `src/nexus_core/engine/planning/cashflow_bridge.py`:
   `cashflow_planning_bridge`, `cash_reserve_analysis`, and
   `budget_pacing_projection`. These functions consume de-identified monthly-close
   aggregates only and return deterministic planning assumptions, cash-reserve
-  status, and budget-pacing output. They are engine-only in this slice: no MCP
-  tools, REST routes, app router wiring, Monarch CSV ingestion, raw transaction
-  classification, merchant/payee fields, household records, approval workflow, or
-  audit trail were added.
+  status, and budget-pacing output.
 
 ### Hybrid planning boundary docs
 

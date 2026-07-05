@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from types import SimpleNamespace
 from typing import Any
@@ -12,6 +13,7 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.testclient import TestClient
 
 from nexus_core.app.planning import CONTRACT_VERSION, build_planning_router
@@ -64,6 +66,41 @@ def _client(*, cors: bool = False) -> TestClient:
         build_planning_router(market=_FakeMarket(), regime_engine=_FakeRegimeEngine())
     )
     return TestClient(app)
+
+
+def _planning_router():
+    return build_planning_router(market=_FakeMarket(), regime_engine=_FakeRegimeEngine())
+
+
+def _route_endpoint(path: str) -> Any:
+    router = _planning_router()
+    return next(route.endpoint for route in router.routes if route.path == path)
+
+
+def _list_gateway_tools() -> dict[str, Any]:
+    endpoint = _route_endpoint("/mcp/tools")
+    return endpoint()
+
+
+class _JsonRequest:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self._payload = payload
+
+    async def json(self) -> dict[str, Any]:
+        return self._payload
+
+
+def _call_gateway_tool(tool_id: str, payload: dict[str, Any]) -> JSONResponse | PlainTextResponse:
+    endpoint = _route_endpoint("/mcp/tools/{tool_id}")
+    return asyncio.run(endpoint(tool_id, _JsonRequest(payload)))
+
+
+def _response_json(response: JSONResponse) -> dict[str, Any]:
+    return json.loads(response.body)
+
+
+def _response_text(response: JSONResponse | PlainTextResponse) -> str:
+    return response.body.decode()
 
 
 def test_planning_error_public_messages_are_sanitized() -> None:
@@ -167,10 +204,9 @@ def test_planning_response_carries_disclaimer() -> None:
 
 
 def test_list_tools_version_handshake() -> None:
-    r = _client().get("/mcp/tools")
-    assert r.status_code == 200
-    body = r.json()
+    body = _list_gateway_tools()
     assert body["contractVersion"] == CONTRACT_VERSION
+    assert len(body["tools"]) == 27
     assert "glide_path" in body["tools"]
     assert "correlation_matrix" in body["tools"]
     assert "capital_market_assumptions" in body["tools"]
@@ -191,6 +227,9 @@ def test_list_tools_version_handshake() -> None:
     assert "fire" in body["tools"]
     assert "risk_metrics" in body["tools"]
     assert "rebalance" in body["tools"]
+    assert "cashflow_planning_bridge" in body["tools"]
+    assert "cash_reserve_analysis" in body["tools"]
+    assert "budget_pacing_projection" in body["tools"]
 
 
 _MC_PAYLOAD: dict[str, Any] = {
@@ -928,7 +967,7 @@ _ROTH_CONTRACT: dict[str, Any] = {
 
 def test_analyze_roth_conversion_gateway() -> None:
     r = _client().post("/mcp/tools/analyze_roth_conversion", json={"contract": _ROTH_CONTRACT})
-    assert r.status_code == 200, r.text
+    assert r.status_code == 200, _response_text(r)
     body = r.json()
     assert body["contract_version"] == "1.1.0"
     assert len(body["years"]) == 2
@@ -1120,6 +1159,167 @@ def test_project_cash_flow_bad_filing_status_400() -> None:
     )
     assert r.status_code == 400
     assert "filing_status" in r.text
+
+
+def test_cashflow_planning_bridge_gateway() -> None:
+    r = _call_gateway_tool(
+        "cashflow_planning_bridge",
+        {
+            "contractVersion": "0.1.0",
+            "monthsAnalyzed": 6,
+            "averageMonthlySpending": 8_000,
+            "essentialMonthlySpending": 5_000,
+            "lifestyleMonthlySpending": 3_000,
+            "averageMonthlyIncome": 12_000,
+            "averageMonthlySavings": 4_000,
+            "currentCashReserve": 25_000,
+            "targetCashReserveMonths": 6,
+            "oneTimeExpenseAdjustment": 500,
+            "spendingVolatility": "high",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert isinstance(r, JSONResponse)
+    body = _response_json(r)
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert body["normalizedAnnualSpend"] == 90_000.0
+    assert body["cashReserveGap"] == 5_000.0
+    assert "spending_volatility_high" in body["planningWarnings"]
+    assert "project_cash_flow" in body["recommendedNextTools"]
+    assert body["disclaimer"]
+
+
+def test_cashflow_planning_bridge_bad_volatility_400() -> None:
+    r = _call_gateway_tool(
+        "cashflow_planning_bridge",
+        {
+            "monthsAnalyzed": 6,
+            "averageMonthlySpending": 8_000,
+            "essentialMonthlySpending": 5_000,
+            "lifestyleMonthlySpending": 3_000,
+            "averageMonthlyIncome": 12_000,
+            "averageMonthlySavings": 4_000,
+            "currentCashReserve": 25_000,
+            "targetCashReserveMonths": 6,
+            "spendingVolatility": "extreme",
+        },
+    )
+    assert r.status_code == 400
+    assert "spending_volatility" in _response_text(r)
+
+
+def test_cash_reserve_analysis_gateway() -> None:
+    r = _call_gateway_tool(
+        "cash_reserve_analysis",
+        {
+            "monthlyEssentialSpending": 5_000,
+            "monthlyTotalSpending": 8_000,
+            "currentCashReserve": 35_000,
+            "targetMonths": 6,
+            "secondaryTargetMonths": 6,
+        },
+    )
+    assert r.status_code == 200, _response_text(r)
+    assert isinstance(r, JSONResponse)
+    body = _response_json(r)
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert body["targetReserve"] == 30_000.0
+    assert body["gapToSecondaryTarget"] == 13_000.0
+    assert body["status"] == "on_track"
+
+
+def test_cash_reserve_analysis_malformed_input_400() -> None:
+    r = _call_gateway_tool(
+        "cash_reserve_analysis",
+        {
+            "monthlyEssentialSpending": 5_000,
+            "monthlyTotalSpending": 4_000,
+            "currentCashReserve": 35_000,
+            "targetMonths": 6,
+        },
+    )
+    assert r.status_code == 400
+    assert "monthly_total_spending" in _response_text(r)
+
+
+def test_budget_pacing_projection_gateway() -> None:
+    r = _call_gateway_tool(
+        "budget_pacing_projection",
+        {
+            "monthDay": 15,
+            "daysInMonth": 30,
+            "monthToDateSpending": 2_700,
+            "monthlyBudget": 5_000,
+            "recurringRemaining": 250,
+            "knownOneTimeRemaining": 125,
+        },
+    )
+    assert r.status_code == 200, _response_text(r)
+    assert isinstance(r, JSONResponse)
+    body = _response_json(r)
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert body["projectedMonthEndSpending"] == 5_775.0
+    assert body["pacingStatus"] == "over"
+    assert body["warningLevel"] == "alert"
+    assert "not yet included" in body["assumptions"]["recurringRemainingBasis"]
+
+
+def test_budget_pacing_projection_invalid_date_400() -> None:
+    r = _call_gateway_tool(
+        "budget_pacing_projection",
+        {
+            "monthDay": 31,
+            "daysInMonth": 30,
+            "monthToDateSpending": 2_700,
+            "monthlyBudget": 5_000,
+        },
+    )
+    assert r.status_code == 400
+    assert "month_day" in _response_text(r)
+
+
+@pytest.mark.parametrize(
+    ("tool_id", "payload"),
+    [
+        (
+            "cashflow_planning_bridge",
+            {
+                "monthsAnalyzed": 6,
+                "averageMonthlySpending": 8_000,
+                "essentialMonthlySpending": 5_000,
+                "lifestyleMonthlySpending": 3_000,
+                "averageMonthlyIncome": 12_000,
+                "averageMonthlySavings": 4_000,
+                "currentCashReserve": 25_000,
+                "targetCashReserveMonths": 6,
+            },
+        ),
+        (
+            "cash_reserve_analysis",
+            {
+                "monthlyEssentialSpending": 5_000,
+                "monthlyTotalSpending": 8_000,
+                "currentCashReserve": 35_000,
+                "targetMonths": 6,
+            },
+        ),
+        (
+            "budget_pacing_projection",
+            {
+                "monthDay": 15,
+                "daysInMonth": 30,
+                "monthToDateSpending": 2_700,
+                "monthlyBudget": 5_000,
+            },
+        ),
+    ],
+)
+def test_cashflow_bridge_tools_reject_identity_keys(
+    tool_id: str, payload: dict[str, Any]
+) -> None:
+    r = _call_gateway_tool(tool_id, {**payload, "email": "client@example.com"})
+    assert r.status_code == 400
+    assert "identity" in _response_text(r).lower()
 
 
 # ── solve_goal (multi-variable goal solver) ──────────────────────────────────

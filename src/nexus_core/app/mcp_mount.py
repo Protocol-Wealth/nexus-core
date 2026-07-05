@@ -81,6 +81,26 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "Identity-free (numbers + filing status only). Illustration only, not "
         "advice. JSON request object in `body`."
     ),
+    "cashflow_planning_bridge": (
+        "Public-safe bridge from private monthly-close aggregates into planning "
+        "assumptions: annualized spend/income/savings, normalized annual spend "
+        "after one-time adjustment, cash-reserve target/gap, retirement income "
+        "floor, lifestyle spending band, warnings, and recommended next tools. "
+        "Consumes derived numbers only — no raw transactions, merchant/payee text, "
+        "account nicknames, household records, notes, approvals, or audit state. "
+        "JSON request object in `body`."
+    ),
+    "cash_reserve_analysis": (
+        "Cash-reserve coverage against essential spending and optional total-spend "
+        "secondary target: target reserve, gaps, months covered, and reserve status. "
+        "Consumes aggregate spending/reserve numbers only. JSON request object in `body`."
+    ),
+    "budget_pacing_projection": (
+        "Month-end budget pacing from month-to-date aggregate spending, monthly "
+        "budget, and known future remaining items not already included in MTD "
+        "spend. Returns projected month-end spend, variance, pacing status, "
+        "warning level, and assumptions. JSON request object in `body`."
+    ),
     "glide_path": "Equity-weight glide path by age across the horizon. JSON request object in `body`.",
     "tax_aware_withdrawal": (
         "RMD-first, tax-efficient withdrawal sequencing. JSON request object in `body`."
@@ -244,8 +264,9 @@ def build_configured_server(
     the EMF ``score_asset`` (sharing the REST ``/api/score`` context builder +
     framework, so MCP and REST return identical scores), market quotes/history,
     FRED economic series, DefiLlama TVL, the options pricing/overlay + Deribit
-    crypto-option tools, and the 24 planning tools (monte_carlo_decumulation,
-    solve_goal, analyze_goals, project_cash_flow, glide_path, tax_aware_withdrawal,
+    crypto-option tools, and the 27 planning tools (monte_carlo_decumulation,
+    solve_goal, analyze_goals, project_cash_flow, cashflow_planning_bridge,
+    cash_reserve_analysis, budget_pacing_projection, glide_path, tax_aware_withdrawal,
     correlation_matrix,
     regime_return_generator,
     capital_market_assumptions, roth_conversion, sequence_of_returns_stress, rmd,
