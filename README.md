@@ -32,6 +32,14 @@ Built and tested in production by an SEC-registered RIA (Protocol Wealth LLC, CR
 
 The deployed surface is public, read-only, and carries no client data. No account or API key is required; remote MCP clients may complete a transparent OAuth handshake with no login. Every external integration degrades gracefully — to `None`, an empty result, or `503` — when its API key is absent.
 
+For the PW Cash Flow OS + PW Planning Lab + PW Retirement Income Lab direction,
+Nexus Core is the public-safe calculation plane. It can accept de-identified
+planning inputs and derived monthly-close numbers, but it must not ingest Monarch
+CSV exports, raw transaction rows, merchant/payee strings, account nicknames,
+household records, advisor/client notes, approval state, release state, or
+books-and-records audit trails. Those production workflows belong in private
+PWOS / pw-api / PWPortal.
+
 ### Meta
 
 | Endpoint | Description |
@@ -139,7 +147,7 @@ Nexus Core (FastAPI + FastMCP)
 ├── Benchmarks (engine/benchmarks.py)
 │   └── Base-100 buy-and-hold compositions
 ├── Planning (engine/planning)
-│   └── PII-free retirement/planning math: Monte Carlo, goals, cash flow, Roth/IRMAA
+│   └── PII-free retirement/planning math: Monte Carlo, goals, deterministic cash-flow projection, Roth/IRMAA
 ├── Data Clients (data/)
 │   ├── market/   yfinance, MBOUM, MarketStack, CoinGecko + cache + composite
 │   ├── macro/    FRED, EIA, BEA, Treasury
@@ -203,7 +211,12 @@ Nexus Core stands on a foundation of exceptional open-source projects. We bundle
 
 **Open (Apache 2.0):** Framework architecture, scoring structure, layer model, tool pattern, the public REST/MCP surface, caching patterns — **and Protocol Wealth's calibrated regime thresholds + scoring values**, which PW publishes openly as part of the EMF framework ([protocolwealthllc.com/framework](https://protocolwealthllc.com/framework)). All third-party integrations listed above.
 
-**Private:** API keys, client data, advisor/client planning workflows, suitability logic, report production, the narrative/research pipeline, and any client-specific implementation. (Calibrations are *not* private — EMF is a published framework. Adopters with different signal sources should still re-fit.)
+**Private:** API keys, client data, Monarch imports, raw transaction processing,
+household records, advisor/client planning workflows, suitability logic, report
+production, approvals, release workflow, books-and-records audit trail, the
+narrative/research pipeline, and any client-specific implementation.
+(Calibrations are *not* private — EMF is a published framework. Adopters with
+different signal sources should still re-fit.)
 
 ## Installation
 

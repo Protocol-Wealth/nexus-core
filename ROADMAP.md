@@ -147,8 +147,15 @@ which generic, PII-free analytics from private PWOS producer work belong in
 nexus-core as educational substrate: allocation decomposition, diversification
 readiness, index-proxy replay/backtest boundaries, model-portfolio context,
 education-reference context, source-quality signals, and report-input coverage.
-Keep report production, artifact receipts, client context, suitability, and
-private workflow state out unless deliberately generalized.
+For the hybrid PW Cash Flow OS + PW Planning Lab + PW Retirement Income Lab
+direction, this also includes public-safe planning-bridge analytics that consume
+derived monthly-close values — for example cash-reserve analysis, budget pacing,
+goal-funding deltas, or retirement-income guardrail inputs. Keep raw transaction
+classification, Monarch import parsing, report production, artifact receipts,
+client context, suitability, approvals, release workflow, audit trail, and
+private workflow state out unless deliberately generalized. Slice 1 now has the
+pure engine functions for `cashflow_planning_bridge`, `cash_reserve_analysis`,
+and `budget_pacing_projection`; Slice 2 would be MCP/REST wrappers if accepted.
 
 **Next planning build — assumptions provenance (open issue #198; decided
 2026-06-04).** Tag every

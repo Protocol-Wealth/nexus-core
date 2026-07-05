@@ -6,8 +6,10 @@ A hand-off for new contributors (interns). Read this with
 [`ROADMAP.md`](ROADMAP.md) (what's live vs next). This file is the **prioritized
 to-do list**; keep it current as you finish items.
 
-_Last updated: 2026-07-01. Live deployment: [nexusmcp.site](https://nexusmcp.site)
-health verified `{"status":"ok","service":"nexus-core","version":"0.1.0"}`._
+_Last updated: 2026-07-05. Live deployment was last verified on 2026-07-01 at
+[nexusmcp.site](https://nexusmcp.site); current local work is Slice 0 docs plus
+Slice 1 pure cash-flow planning bridge engine functions. Live endpoints were not
+re-smoked._
 
 ## Orient yourself in 5 minutes
 
@@ -24,6 +26,14 @@ health verified `{"status":"ok","service":"nexus-core","version":"0.1.0"}`._
   `src/nexus_core/data/`; the FastAPI app + routers in `src/nexus_core/app/`; the
   MCP server in `src/nexus_core/mcp/server/app.py`. Engine functions are pure and
   clock-free; routers/tools do the I/O.
+- **Cash Flow OS boundary:** Nexus may calculate from de-identified planning
+  inputs and derived monthly-close values, but must not ingest Monarch CSVs or
+  store raw transactions, merchant/payee strings, account nicknames, household
+  records, advisor/client notes, approvals, release state, or audit trails.
+- **Current Slice 1 state:** `cashflow_planning_bridge`,
+  `cash_reserve_analysis`, and `budget_pacing_projection` live in
+  `engine/planning/cashflow_bridge.py` and are exported from
+  `nexus_core.engine.planning`. They are not MCP/REST tools yet.
 
 ## Before you commit (the gate — mirrors CI)
 
@@ -40,6 +50,12 @@ whatever is on your PATH:
 **Gotcha (will waste your afternoon):** a bare `mypy` on PATH may be an OLD
 version (e.g. 1.14.1) that reports phantom errors disagreeing with CI. Always run
 `.venv/bin/mypy`. Same for `pytest` (bare `python` can't import `nexus_core`).
+
+**Full-suite diagnostic note (2026-07-05):** Slice 1 targeted tests passed, but
+`timeout 180 .venv/bin/python -m pytest -vv --maxfail=1` collected 1134 tests and
+timed out at `tests/test_app.py::test_landing_page`. That appears unrelated to
+the cash-flow bridge engine module; investigate separately before treating the
+full suite as a Slice 1 failure.
 
 Conventional commits, SPDX header on every `.py`, and **DCO sign-off**
 (`git commit -s`). Branch off `main`; open a PR; merge when the single CI job
@@ -64,8 +80,17 @@ analytics from private PWOS producer work belong in nexus-core as educational
 substrate. Candidate work includes allocation decomposition, diversification
 readiness, index-proxy replay/backtest boundaries, model-portfolio context,
 education-reference context, source-quality signals, and report-input coverage.
-Keep report production, artifact receipts, client context, suitability, and
-private workflow state out unless deliberately generalized.
+The hybrid planning-bridge candidate belongs here too: pure functions over
+derived monthly-close values for cash reserves, budget pacing, goal funding, and
+retirement-income guardrail inputs. Keep raw transaction classification, Monarch
+imports, report production, artifact receipts, client context, suitability,
+approvals, release workflow, audit trail, and private workflow state out unless
+deliberately generalized.
+
+Slice 1 has landed the pure engine layer for the first three bridge functions.
+If accepted, Slice 2 should add MCP/REST wrappers and tests without changing the
+raw-data boundary. Future `pwplan-core` work should consume only synthetic or
+de-identified outputs from those wrappers.
 
 ### Planning assumptions provenance (#198)
 

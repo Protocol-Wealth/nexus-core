@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Cash-flow planning bridge engine
+
+#### Added
+
+- Added Slice 1 pure planning bridge functions in
+  `src/nexus_core/engine/planning/cashflow_bridge.py`:
+  `cashflow_planning_bridge`, `cash_reserve_analysis`, and
+  `budget_pacing_projection`. These functions consume de-identified monthly-close
+  aggregates only and return deterministic planning assumptions, cash-reserve
+  status, and budget-pacing output. They are engine-only in this slice: no MCP
+  tools, REST routes, app router wiring, Monarch CSV ingestion, raw transaction
+  classification, merchant/payee fields, household records, approval workflow, or
+  audit trail were added.
+
+### Hybrid planning boundary docs
+
+#### Changed
+
+- Clarified the Slice 0 architecture boundary for the PW Cash Flow OS + PW
+  Planning Lab + PW Retirement Income Lab direction: `nexus-core` remains the
+  public-safe calculation plane, may add pure planning-bridge analytics over
+  de-identified monthly-close values, and must not ingest Monarch CSVs, raw
+  transactions, merchant/payee strings, household records, advisor/client
+  workflow state, approvals, release state, or audit trails.
+
 ### Docs/status and dependency hygiene
 
 #### Changed

@@ -1,16 +1,36 @@
 # Current state — nexus-core
 
-A point-in-time snapshot of exactly what is live right now. For the architectural
-overview see [README.md](README.md); for deploy mechanics see [DEPLOY.md](DEPLOY.md);
-for the public-surface audit see [AUDIT.md](AUDIT.md).
+A point-in-time snapshot of the local source/docs plus the most recent live
+verification. For the architectural overview see [README.md](README.md); for
+deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
+[AUDIT.md](AUDIT.md).
 
-- **Last verified:** 2026-07-01 — local `main` at `e4197ad`; live `/health` OK; live `/mcp/tools` returned 23 tools; GitHub: 7 open issues (#197-#203), 0 open PRs.
+- **Last live verified:** 2026-07-01 — live `/health` OK; live `/mcp/tools` returned 23 tools; GitHub: 7 open issues (#197-#203), 0 open PRs.
+- **Last local update:** 2026-07-05 — local `main` inspected at `4499a54`; Slice 0 docs-only boundary update plus Slice 1 pure cash-flow planning bridge engine functions for the PW Cash Flow OS + PW Planning Lab + PW Retirement Income Lab direction. Live endpoints were not re-smoked in this pass.
 - **Repo:** [github.com/Protocol-Wealth/nexus-core](https://github.com/Protocol-Wealth/nexus-core) — public, Apache-2.0
 - **Live:** [nexusmcp.site](https://nexusmcp.site) (Cloudflare → Cloud Run)
 - **Version:** 0.1.0
 - **Stack:** Python 3.12 · FastAPI · FastMCP · sync httpx · asyncpg · mypy `--strict` · ruff
 - **Tests:** CI-gated test suite (`pytest`)
 - **Posture:** public, read-only, no client data, no account/API key, transparent OAuth only for remote MCP handshakes, no public write endpoints
+
+## Hybrid planning boundary
+
+For the PW Cash Flow OS + PW Planning Lab + PW Retirement Income Lab direction,
+this repo remains the public-safe calculation engine. It may expose pure,
+deterministic functions over de-identified planning inputs and derived
+monthly-close values. It must not ingest or store Monarch CSV exports, raw import
+rows, merchant/payee text, account nicknames, household/person identifiers,
+advisor/client notes, document requests, approvals, release state, or compliance
+audit trails. Private PWOS / pw-api / PWPortal owns those workflows and should
+call Nexus only after de-identification and aggregation.
+
+Slice 1 added the pure engine module
+`src/nexus_core/engine/planning/cashflow_bridge.py` with
+`cashflow_planning_bridge`, `cash_reserve_analysis`, and
+`budget_pacing_projection`, exported from `nexus_core.engine.planning`. These are
+not public MCP/REST tools yet; no app router, tool registry, OpenAPI, or MCP
+surface changed. Future Slice 2, if accepted, is the wrapper layer.
 
 ## Public REST surface
 
@@ -245,6 +265,11 @@ key is absent.
   OpenAPI, OAuth metadata, `/llms.txt`, GitHub issues, and local `main`; reconciled
   docs around 23 planning tools, public PII-free planning, transparent MCP OAuth,
   and open GitHub issue tracking (#197-#203).
+- **Cash-flow planning bridge engine functions (2026-07-05)** —
+  `cashflow_planning_bridge`, `cash_reserve_analysis`, and
+  `budget_pacing_projection` exist as pure, deterministic `engine/planning`
+  functions only. They consume de-identified monthly-close aggregates and remain
+  unexposed through MCP/REST until a future wrapper slice.
 - **Guyton-Klinger dynamic withdrawals** — `monte_carlo_decumulation` accepts
   optional `guardrails` and returns `withdrawalRule`, `spendingByYear`, and
   `guardrailActivity` only when enabled.
@@ -261,7 +286,9 @@ Outstanding and future work is tracked in GitHub Issues:
 
 - **#197 public-safe planning/report analytics extraction** — decide what generic,
   PII-free analytics should move from private PWOS producer work into nexus-core
-  versus staying in advisor workflow code.
+  versus staying in advisor workflow code. This now includes the Cash Flow OS /
+  Planning Bridge question: the Slice 1 pure engine functions consume derived
+  monthly-close values only. Wrapper exposure, if accepted, is future Slice 2.
 - **#198 planning assumptions provenance** — add source/freshness metadata to
   reference planning assumptions and echo it in outputs.
 - **#199 LP/indexer expansion and data-quality backlog** — Aerodrome Envio,
