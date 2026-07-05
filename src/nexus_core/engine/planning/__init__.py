@@ -19,6 +19,11 @@ from .case import (
     planning_contract_schema,
 )
 from .cash_flow_projection import project_cash_flow
+from .cashflow_bridge import (
+    budget_pacing_projection,
+    cash_reserve_analysis,
+    cashflow_planning_bridge,
+)
 from .correlation import correlation_matrix
 from .fire import fire
 from .glide_path import GlidePathShape, compute_glide_path
@@ -74,8 +79,11 @@ __all__ = [
     "analyze_goals",
     "analyze_roth_conversion",
     "bracket_headroom",
+    "budget_pacing_projection",
     "compute_glide_path",
     "GuardrailParams",
+    "cash_reserve_analysis",
+    "cashflow_planning_bridge",
     "correlation_matrix",
     "fire",
     "irmaa_headroom",
