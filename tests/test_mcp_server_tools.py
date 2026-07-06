@@ -121,6 +121,7 @@ def test_full_tool_set_registers() -> None:
         "covered_call",
         "cash_secured_put",
         "collar",
+        "equity_collar_screen",
         "crypto_option_instruments",
         "crypto_option_ticker",
         "crypto_covered_call",
@@ -270,6 +271,55 @@ def test_option_price_rejects_bad_inputs_preserves_bs_limits() -> None:
         body = json.loads(_call_text(server, "option_price", {**base, "days": 30, **ok}))
         assert "error" not in body, ok
         assert body["price"] >= 0.0
+
+
+def test_equity_collar_screen_tool() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket())  # type: ignore[arg-type]
+    body = json.loads(
+        _call_text(
+            server,
+            "equity_collar_screen",
+            {
+                "positions": [
+                    {"symbol": "AAPL", "expiry_days": 45, "sigma": 0.25, "dividend_yield": 0.01}
+                ]
+            },
+        )
+    )
+    assert "error" not in body
+    assert body["count"] == 1
+    row = body["screen"][0]
+    assert row["symbol"] == "AAPL"
+    assert row["spot"] == 100.0  # live quote from the fake market
+    assert row["put_strike"] == 85.0  # 15% below spot on the $1 grid
+    assert row["put_strike"] < row["spot"] < row["call_strike"]
+    assert row["theoretical"] is True
+    assert "not investment advice" in body["disclaimer"].lower()
+
+
+def test_equity_collar_screen_tool_rejects_bad_inputs() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket())  # type: ignore[arg-type]
+    too_many = [
+        {"symbol": f"T{i}", "spot": 100, "sigma": 0.3, "expiry_days": 30} for i in range(26)
+    ]
+    bad_calls: list[dict[str, object]] = [
+        {"positions": []},
+        {"positions": too_many},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 45}], "target_call_delta": 1.5},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 45}], "put_otm_pct": 100},
+        {"positions": [{"symbol": "", "expiry_days": 45}]},
+        {"positions": [{"symbol": "AAPL"}]},  # expiry_days missing
+        {"positions": [{"symbol": "AAPL", "expiry_days": 5000}]},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 45, "spot": -1}]},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 45, "dividend_yield": 2}]},
+    ]
+    for args in bad_calls:
+        body = json.loads(_call_text(server, "equity_collar_screen", args))
+        assert "error" in body, args
 
 
 def test_crypto_covered_call_tool_inverse_yield() -> None:

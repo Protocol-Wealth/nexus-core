@@ -147,6 +147,112 @@ def test_unknown_symbol_404() -> None:
     assert r.status_code == 404
 
 
+# ── Equity collar screen (batch POST) ──
+
+_COLLAR_SCREEN = "/api/options/overlay/collar-screen"
+
+
+def test_collar_screen_spot_supplied() -> None:
+    r = _client().post(
+        _COLLAR_SCREEN,
+        json={
+            "positions": [
+                {
+                    "symbol": "MSFT",
+                    "spot": 400.0,
+                    "sigma": 0.22,
+                    "dividend_yield": 0.008,
+                    "expiry_days": 45,
+                }
+            ]
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] == 1
+    row = body["screen"][0]
+    assert row["symbol"] == "MSFT"
+    assert row["spot"] == 400.0  # supplied spot used, not the fake quote (100)
+    assert row["put_strike"] == 340.0  # 15% below 400 on the $5 grid
+    assert row["put_strike"] < 400.0 < row["call_strike"]
+    assert row["theoretical"] is True
+    assert row["net_credit"] == row["call_premium"] - row["put_premium"]
+    assert "not investment, tax, legal, or financial advice" in body["disclaimer"].lower()
+    assert "disclaimer" in row
+    assert r.headers["cache-control"] == "public, max-age=300"
+
+
+def test_collar_screen_spot_and_sigma_fetched() -> None:
+    r = _client().post(
+        _COLLAR_SCREEN,
+        json={"positions": [{"symbol": "AAPL", "expiry_days": 30}]},
+    )
+    assert r.status_code == 200
+    row = r.json()["screen"][0]
+    assert row["spot"] == 100.0  # fetched from the fake market
+    assert row["sigma"] > 0.0  # estimated from the fake history
+    assert row["put_strike"] == 85.0
+    assert row["dividend_yield"] == 0.0
+
+
+def test_collar_screen_ranked_by_income_and_counted() -> None:
+    r = _client().post(
+        _COLLAR_SCREEN,
+        json={
+            "positions": [
+                {"symbol": "LOWVOL", "spot": 100.0, "sigma": 0.15, "expiry_days": 45},
+                {"symbol": "HIVOL", "spot": 100.0, "sigma": 0.45, "expiry_days": 45},
+            ]
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] == 2
+    rows = body["screen"]
+    assert [row["symbol"] for row in rows] == ["HIVOL", "LOWVOL"]
+    assert (
+        rows[0]["total_annualized_income_pct"] >= rows[1]["total_annualized_income_pct"]
+    )
+
+
+def test_collar_screen_unknown_symbol_404_when_spot_missing() -> None:
+    r = _client().post(
+        _COLLAR_SCREEN,
+        json={"positions": [{"symbol": "UNKNOWN", "expiry_days": 30}]},
+    )
+    assert r.status_code == 404
+
+
+def test_collar_screen_too_many_positions_400() -> None:
+    positions = [
+        {"symbol": f"T{i}", "spot": 100.0, "sigma": 0.3, "expiry_days": 30} for i in range(26)
+    ]
+    r = _client().post(_COLLAR_SCREEN, json={"positions": positions})
+    assert r.status_code == 400
+
+
+def test_collar_screen_malformed_entries_400() -> None:
+    c = _client()
+    bad_bodies = [
+        {},  # positions missing
+        {"positions": []},  # empty list
+        {"positions": ["not-an-object"]},
+        {"positions": [{"symbol": "AAPL"}]},  # expiry_days missing
+        {"positions": [{"symbol": "", "expiry_days": 30}]},  # empty symbol
+        {"positions": [{"symbol": "AAPL", "expiry_days": 0}]},  # tenor < 1
+        {"positions": [{"symbol": "AAPL", "expiry_days": 2000}]},  # tenor > 1095
+        {"positions": [{"symbol": "AAPL", "expiry_days": 30, "spot": "x"}]},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 30, "spot": -1}]},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 30, "sigma": 0}]},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 30, "dividend_yield": 1.5}]},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 30}], "target_call_delta": 1.5},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 30}], "put_otm_pct": 100},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 30}], "call_min_otm_pct": -1},
+    ]
+    for body in bad_bodies:
+        assert c.post(_COLLAR_SCREEN, json=body).status_code == 400, body
+
+
 def test_crypto_currencies() -> None:
     r = _client().get("/api/options/crypto/currencies")
     assert r.status_code == 200

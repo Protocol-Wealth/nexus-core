@@ -42,6 +42,7 @@ server hosting the FastAPI application from `nexus_core.app:create_app`:
 | `GET /api/economic/{series_id}` | FRED economic series |
 | `GET /api/options/price` | Black-Scholes option pricing + Greeks |
 | `GET /api/options/overlay/{strategy}` | Educational covered-call / cash-secured-put / collar overlays |
+| `POST /api/options/overlay/collar-screen` | Batch equity collar screen (≤25 positions; dividend-aware theoretical pricing) |
 | `GET /api/options/crypto/currencies` | Deribit-supported crypto option underliers |
 | `GET /api/options/crypto/{currency}/instruments` | Deribit crypto option instruments |
 | `GET /api/options/crypto/instrument/{instrument_name}` | Deribit crypto option detail |

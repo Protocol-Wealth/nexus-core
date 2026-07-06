@@ -12,6 +12,12 @@
   payoff (net premium, breakevens, max profit/loss, static / if-assigned /
   annualized returns, downside protection), using a theoretical premium from
   :mod:`black_scholes` when a market premium isn't supplied.
+- :mod:`collar_select` — batch equity collar screening: per-position strike
+  selection (put % below spot; call by target delta with a minimum-OTM floor)
+  on an approximate strike-increment grid, dividend-aware THEORETICAL
+  Black-Scholes premiums, and a ranked ``screen_collars`` helper.
+  ``CollarScreenPosition``, ``CollarScreenResult``, ``evaluate_collar_position``,
+  ``screen_collars``.
 
 Everything here is an **educational illustration** over public market parameters
 — not investment advice, a recommendation, or a suitability determination.
@@ -21,6 +27,12 @@ adds QuantLib + FinancePy; the vanilla-option math here needs neither.
 """
 
 from .black_scholes import Greeks, OptionKind, bs_price, greeks, implied_vol
+from .collar_select import (
+    CollarScreenPosition,
+    CollarScreenResult,
+    evaluate_collar_position,
+    screen_collars,
+)
 from .crypto_overlays import (
     CryptoCollarIllustration,
     CryptoCoveredCallIllustration,
@@ -74,6 +86,8 @@ __all__ = [
     "CashSecuredPutIllustration",
     "ChainQuote",
     "CollarIllustration",
+    "CollarScreenPosition",
+    "CollarScreenResult",
     "CoveredCallIllustration",
     "CoveredCallLadder",
     "CryptoCollarIllustration",
@@ -100,6 +114,7 @@ __all__ = [
     "crypto_collar",
     "crypto_covered_call",
     "crypto_protective_put",
+    "evaluate_collar_position",
     "greeks",
     "implied_vol",
     "iv_term_structure",
@@ -108,6 +123,7 @@ __all__ = [
     "regime_conditioned_overwrite",
     "roll_analysis",
     "scenario_stress",
+    "screen_collars",
     "select_by_delta",
     "vol_skew",
 ]
