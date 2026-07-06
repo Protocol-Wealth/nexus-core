@@ -49,6 +49,7 @@ from ...engine.planning.regime import to_generic_regime
 from ...engine.pricing import (
     BookPosition,
     ChainQuote,
+    CollarScreenPosition,
     LadderLeg,
     OptionKind,
     book_mtm,
@@ -63,6 +64,7 @@ from ...engine.pricing import (
     regime_conditioned_overwrite,
     roll_analysis,
     scenario_stress,
+    screen_collars,
     vol_skew,
 )
 from ...engine.pricing.crypto_overlays import Settlement
@@ -76,6 +78,9 @@ logger = logging.getLogger(__name__)
 
 #: Upper bound on option tenor (days), mirroring the REST surface's le=1095.
 _MAX_OPTION_DAYS = 1095
+
+#: Batch cap for the equity collar screen, mirroring the REST route.
+_COLLAR_SCREEN_MAX_POSITIONS = 25
 
 # Tool annotations (MCP spec hints). Every nexus-core tool is read-only — these
 # let clients (claude.ai, Cursor) show a read-only badge and auto-approve calls
@@ -270,7 +275,13 @@ def build_server(
                     "scoring": ["score_asset"],
                     "market": ["get_quote", "get_quotes", "get_price_history"],
                     "economic": ["get_economic_series"],
-                    "options": ["option_price", "covered_call", "cash_secured_put", "collar"],
+                    "options": [
+                        "option_price",
+                        "covered_call",
+                        "cash_secured_put",
+                        "collar",
+                        "equity_collar_screen",
+                    ],
                     "crypto_options": [
                         "crypto_option_instruments",
                         "crypto_option_ticker",
@@ -527,6 +538,122 @@ def _register_equity_options_tools(
         return _ok(
             "collar", {"symbol": symbol, "spot": quote.price, **asdict(result)}, filters, disclaimer
         )
+
+    @mcp.tool(annotations=_RO_OPEN)
+    def equity_collar_screen(
+        positions: list[dict[str, Any]],
+        put_otm_pct: float = 15.0,
+        call_min_otm_pct: float = 1.0,
+        target_call_delta: float = 0.30,
+        risk_free_rate: float = 0.04,
+    ) -> str:
+        """Batch educational collar screen over up to 25 public tickers. Each
+        position is {symbol, expiry_days, spot?, sigma?, dividend_yield?}; spot is
+        fetched live and sigma estimated when omitted. Premiums are THEORETICAL
+        dividend-aware Black-Scholes values; results rank net-credit first, then by
+        total annualized income. Not advice."""
+        if not isinstance(positions, list) or not positions:
+            return _err(
+                "equity_collar_screen", "'positions' must be a non-empty list", filters, disclaimer
+            )
+        if len(positions) > _COLLAR_SCREEN_MAX_POSITIONS:
+            return _err(
+                "equity_collar_screen",
+                f"'positions' accepts at most {_COLLAR_SCREEN_MAX_POSITIONS} entries",
+                filters,
+                disclaimer,
+            )
+        if not 0.0 < put_otm_pct < 100.0:
+            return _err(
+                "equity_collar_screen", "put_otm_pct must be in (0, 100)", filters, disclaimer
+            )
+        if not 0.0 <= call_min_otm_pct < 100.0:
+            return _err(
+                "equity_collar_screen", "call_min_otm_pct must be in [0, 100)", filters, disclaimer
+            )
+        if not 0.0 < target_call_delta < 1.0:
+            return _err(
+                "equity_collar_screen", "target_call_delta must be in (0, 1)", filters, disclaimer
+            )
+        parsed: list[CollarScreenPosition] = []
+        for entry in positions:
+            if not isinstance(entry, dict):
+                return _err(
+                    "equity_collar_screen", "each position must be an object", filters, disclaimer
+                )
+            symbol = entry.get("symbol")
+            if not isinstance(symbol, str) or not symbol.strip():
+                return _err(
+                    "equity_collar_screen",
+                    "position 'symbol' must be a non-empty string",
+                    filters,
+                    disclaimer,
+                )
+            expiry_days = entry.get("expiry_days")
+            if isinstance(expiry_days, bool) or not isinstance(expiry_days, int):
+                return _err(
+                    "equity_collar_screen",
+                    "position 'expiry_days' must be a whole number",
+                    filters,
+                    disclaimer,
+                )
+            bad = _validate_option_inputs(days=expiry_days, min_days=1)
+            if bad is not None:
+                return _err("equity_collar_screen", bad, filters, disclaimer)
+            spot, err = _position_opt_num(entry, "spot")
+            if err is None and spot is not None and spot <= 0.0:
+                err = "position 'spot' must be > 0 when supplied"
+            if err is not None:
+                return _err("equity_collar_screen", err, filters, disclaimer)
+            sigma, err = _position_opt_num(entry, "sigma")
+            if err is None and sigma is not None and sigma <= 0.0:
+                err = "position 'sigma' must be > 0 when supplied"
+            if err is not None:
+                return _err("equity_collar_screen", err, filters, disclaimer)
+            dividend_yield, err = _position_opt_num(entry, "dividend_yield")
+            if err is None and dividend_yield is not None and not 0.0 <= dividend_yield < 1.0:
+                err = "position 'dividend_yield' must be a decimal fraction in [0, 1) when supplied"
+            if err is not None:
+                return _err("equity_collar_screen", err, filters, disclaimer)
+            if spot is None:
+                quote = market.get_quote(symbol)
+                if quote is None:
+                    return _err(
+                        "equity_collar_screen", f"No quote for '{symbol}'", filters, disclaimer
+                    )
+                spot = float(quote.price)
+            parsed.append(
+                CollarScreenPosition(
+                    symbol=symbol,
+                    spot=spot,
+                    sigma=sigma if sigma is not None else _annualized_vol(market, symbol),
+                    expiry_days=expiry_days,
+                    dividend_yield=dividend_yield if dividend_yield is not None else 0.0,
+                )
+            )
+        results = screen_collars(
+            parsed,
+            put_otm_pct=put_otm_pct,
+            call_min_otm_pct=call_min_otm_pct,
+            target_call_delta=target_call_delta,
+            risk_free_rate=risk_free_rate,
+        )
+        return _ok(
+            "equity_collar_screen",
+            {"screen": [asdict(r) for r in results], "count": len(results)},
+            filters,
+            disclaimer,
+        )
+
+
+def _position_opt_num(entry: dict[str, Any], key: str) -> tuple[float | None, str | None]:
+    """Optional numeric field from a collar-screen position: ``(value, error)``."""
+    value = entry.get(key)
+    if value is None:
+        return None, None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None, f"position '{key}' must be a number or omitted"
+    return float(value), None
 
 
 def _register_crypto_options_tools(

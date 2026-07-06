@@ -9,6 +9,9 @@ client as a public, read-only API:
 * ``GET /api/options/overlay/{covered-call,cash-secured-put,collar}`` — payoff
   illustration of an equity/ETF overlay; spot is fetched live and volatility is
   estimated from recent history when neither a premium nor a sigma is supplied.
+* ``POST /api/options/overlay/collar-screen`` — batch (≤25 positions) equity
+  collar screen with dividend-aware THEORETICAL Black-Scholes premiums; spot /
+  sigma are fetched/estimated per position when omitted.
 * ``GET /api/options/crypto/currencies`` — supported crypto underliers +
   settlement model (Deribit).
 * ``GET /api/options/crypto/{currency}/instruments`` — listed option instruments
@@ -37,6 +40,7 @@ from ..engine.planning.regime import to_generic_regime
 from ..engine.pricing import (
     BookPosition,
     ChainQuote,
+    CollarScreenPosition,
     LadderLeg,
     book_mtm,
     bs_price,
@@ -53,6 +57,7 @@ from ..engine.pricing import (
     regime_conditioned_overwrite,
     roll_analysis,
     scenario_stress,
+    screen_collars,
     select_by_delta,
     vol_skew,
 )
@@ -67,6 +72,8 @@ _DEFAULT_RATE = 0.04
 _DEFAULT_SIGMA = 0.30
 _TRADING_DAYS = 252.0
 _DISCLAIMER = TERSE
+_MAX_EXPIRY_DAYS = 1095
+_COLLAR_SCREEN_MAX_POSITIONS = 25
 
 
 def _spot(market: MarketDataProvider, symbol: str) -> float:
@@ -200,6 +207,78 @@ def _book_positions(body: dict[str, Any]) -> list[BookPosition]:
                 iv=_body_opt_num(pos, "iv"),
                 mark_premium=_body_opt_num(pos, "mark_premium"),
                 label=pos.get("label") if isinstance(pos.get("label"), str) else None,
+            )
+        )
+    return positions
+
+
+def _collar_screen_params(body: dict[str, Any]) -> tuple[float, float, float, float]:
+    """Validated ``(put_otm_pct, call_min_otm_pct, target_call_delta, risk_free_rate)``."""
+    put_otm = _body_opt_num(body, "put_otm_pct")
+    put_otm = 15.0 if put_otm is None else put_otm
+    if not 0.0 < put_otm < 100.0:
+        raise HTTPException(status_code=400, detail="'put_otm_pct' must be in (0, 100)")
+    call_min_otm = _body_opt_num(body, "call_min_otm_pct")
+    call_min_otm = 1.0 if call_min_otm is None else call_min_otm
+    if not 0.0 <= call_min_otm < 100.0:
+        raise HTTPException(status_code=400, detail="'call_min_otm_pct' must be in [0, 100)")
+    target_delta = _body_opt_num(body, "target_call_delta")
+    target_delta = 0.30 if target_delta is None else target_delta
+    if not 0.0 < target_delta < 1.0:
+        raise HTTPException(status_code=400, detail="'target_call_delta' must be in (0, 1)")
+    rate = _body_opt_num(body, "risk_free_rate")
+    return put_otm, call_min_otm, target_delta, _DEFAULT_RATE if rate is None else rate
+
+
+def _collar_screen_positions(
+    market: MarketDataProvider, body: dict[str, Any]
+) -> list[CollarScreenPosition]:
+    """Parse + validate the collar-screen ``positions`` body list.
+
+    Spot is fetched via :func:`_spot` and sigma estimated via
+    :func:`_estimate_sigma` when a position omits them.
+    """
+    raw = body.get("positions")
+    if not isinstance(raw, list) or not raw:
+        raise HTTPException(status_code=400, detail="'positions' must be a non-empty list")
+    if len(raw) > _COLLAR_SCREEN_MAX_POSITIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"'positions' accepts at most {_COLLAR_SCREEN_MAX_POSITIONS} entries",
+        )
+    positions: list[CollarScreenPosition] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            raise HTTPException(status_code=400, detail="each position must be an object")
+        symbol = entry.get("symbol")
+        if not isinstance(symbol, str) or not symbol.strip():
+            raise HTTPException(
+                status_code=400, detail="position 'symbol' must be a non-empty string"
+            )
+        expiry_days = _body_int(entry, "expiry_days", ge=1)
+        if expiry_days > _MAX_EXPIRY_DAYS:
+            raise HTTPException(
+                status_code=400, detail=f"'expiry_days' must be <= {_MAX_EXPIRY_DAYS}"
+            )
+        spot = _body_opt_num(entry, "spot")
+        if spot is not None and spot <= 0.0:
+            raise HTTPException(status_code=400, detail="'spot' must be > 0 when supplied")
+        sigma = _body_opt_num(entry, "sigma")
+        if sigma is not None and sigma <= 0.0:
+            raise HTTPException(status_code=400, detail="'sigma' must be > 0 when supplied")
+        dividend_yield = _body_opt_num(entry, "dividend_yield")
+        if dividend_yield is not None and not 0.0 <= dividend_yield < 1.0:
+            raise HTTPException(
+                status_code=400,
+                detail="'dividend_yield' must be a decimal fraction in [0, 1) when supplied",
+            )
+        positions.append(
+            CollarScreenPosition(
+                symbol=symbol,
+                spot=spot if spot is not None else _spot(market, symbol),
+                sigma=sigma if sigma is not None else _estimate_sigma(market, symbol),
+                expiry_days=expiry_days,
+                dividend_yield=dividend_yield if dividend_yield is not None else 0.0,
             )
         )
     return positions
@@ -409,6 +488,48 @@ def build_options_router(
         )
         response.headers["Cache-Control"] = f"public, max-age={_OVERLAY_TTL}"
         return {"symbol": symbol, "spot": spot, **asdict(result)}
+
+    @router.post(
+        "/overlay/collar-screen",
+        summary="Batch equity collar screen (dividend-aware, theoretical)",
+    )
+    def collar_screen(
+        response: Response,
+        body: dict[str, Any] = Body(
+            ...,
+            description=(
+                "{positions:[{symbol, expiry_days, spot?, sigma?, dividend_yield?}] (max 25), "
+                "put_otm_pct?, call_min_otm_pct?, target_call_delta?, risk_free_rate?}"
+            ),
+        ),
+    ) -> dict[str, Any]:
+        """Screen up to 25 equity/ETF positions for theoretical protective collars.
+
+        Per position: the put strike sits ``put_otm_pct`` below spot and the call
+        strike targets ``target_call_delta`` (floored ``call_min_otm_pct`` above
+        spot), both snapped to an approximate strike grid; premiums are
+        THEORETICAL Black-Scholes values with each position's ``dividend_yield``
+        threaded through. Results are ranked net-credit-first, then by total
+        annualized income. Spot is fetched live and sigma estimated from recent
+        history when omitted.
+        """
+        put_otm_pct, call_min_otm_pct, target_call_delta, risk_free_rate = _collar_screen_params(
+            body
+        )
+        positions = _collar_screen_positions(market, body)
+        results = screen_collars(
+            positions,
+            put_otm_pct=put_otm_pct,
+            call_min_otm_pct=call_min_otm_pct,
+            target_call_delta=target_call_delta,
+            risk_free_rate=risk_free_rate,
+        )
+        response.headers["Cache-Control"] = f"public, max-age={_OVERLAY_TTL}"
+        return {
+            "screen": [asdict(r) for r in results],
+            "count": len(results),
+            "disclaimer": _DISCLAIMER,
+        }
 
     @router.get("/crypto/currencies", summary="Crypto option underliers (Deribit)")
     def crypto_currencies(response: Response) -> dict[str, Any]:
