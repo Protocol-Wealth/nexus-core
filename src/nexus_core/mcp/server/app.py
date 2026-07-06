@@ -51,9 +51,11 @@ from ...engine.planning.regime import to_generic_regime
 from ...engine.pricing import (
     BookPosition,
     ChainQuote,
+    CollarBookPosition,
     CollarScreenPosition,
     LadderLeg,
     OptionKind,
+    assemble_collar_book,
     book_mtm,
     bs_price,
     cash_secured_put_overlay,
@@ -83,6 +85,15 @@ _MAX_OPTION_DAYS = 1095
 
 #: Batch cap for the equity collar screen, mirroring the REST route.
 _COLLAR_SCREEN_MAX_POSITIONS = 25
+
+#: Bounds for the collar-book worksheet, mirroring the REST route.
+_COLLAR_BOOK_MAX_POSITIONS = 50
+_COLLAR_BOOK_NOTIONAL_MIN = 10_000.0
+_COLLAR_BOOK_NOTIONAL_MAX = 1e9
+_COLLAR_BOOK_N_MIN = 1
+_COLLAR_BOOK_N_MAX = 50
+_COLLAR_BOOK_WEIGHT_MIN = 1.0
+_COLLAR_BOOK_WEIGHT_MAX = 100.0
 
 #: Ticker shape for the equity option chain tools, mirroring the REST routes.
 _EQUITY_SYMBOL_RE = re.compile(r"^[A-Za-z0-9.\-]{1,10}$")
@@ -295,6 +306,7 @@ def build_server(
                         "cash_secured_put",
                         "collar",
                         "equity_collar_screen",
+                        "collar_book",
                         "equity_option_expirations",
                         "equity_option_chain",
                     ],
@@ -660,6 +672,158 @@ def _register_equity_options_tools(
             filters,
             disclaimer,
         )
+
+    @mcp.tool(annotations=_RO_CLOSED)
+    def collar_book(
+        positions: list[dict[str, Any]],
+        notional_target: float = 1_000_000.0,
+        n_positions_target: int = 15,
+        n_positions_min: int = 12,
+        n_positions_max: int = 25,
+        max_position_weight_pct: float = 12.0,
+        max_sector_weight_pct: float = 25.0,
+    ) -> str:
+        """Assemble a multi-name collar BOOK from up to 50 pre-screened candidates.
+
+        An ADVISOR RESEARCH WORKSHEET (basis: advisor_research_worksheet): sizes
+        whole-contract positions against a notional target with per-position and
+        per-sector caps and reports the arithmetic — deployed notional, cash
+        residual, income, capital-weighted floor/cap, and explicit exclusions.
+        Each position is {symbol, spot, dte, net_credit, dividend_income_window?,
+        score?, sector?, expiration?, put_strike?, call_strike?, floor_pct?,
+        cap_pct?}; dollar inputs are per share. Places no orders and produces no
+        execution instructions. Not advice."""
+        if not isinstance(positions, list) or not positions:
+            return _err("collar_book", "'positions' must be a non-empty list", filters, disclaimer)
+        if len(positions) > _COLLAR_BOOK_MAX_POSITIONS:
+            return _err(
+                "collar_book",
+                f"'positions' accepts at most {_COLLAR_BOOK_MAX_POSITIONS} entries",
+                filters,
+                disclaimer,
+            )
+        if not _COLLAR_BOOK_NOTIONAL_MIN <= notional_target <= _COLLAR_BOOK_NOTIONAL_MAX:
+            return _err(
+                "collar_book",
+                f"notional_target must be in [{_COLLAR_BOOK_NOTIONAL_MIN:.0f}, "
+                f"{_COLLAR_BOOK_NOTIONAL_MAX:.0f}]",
+                filters,
+                disclaimer,
+            )
+        for key, value in (
+            ("n_positions_min", n_positions_min),
+            ("n_positions_max", n_positions_max),
+            ("n_positions_target", n_positions_target),
+        ):
+            if not _COLLAR_BOOK_N_MIN <= value <= _COLLAR_BOOK_N_MAX:
+                return _err(
+                    "collar_book",
+                    f"{key} must be in [{_COLLAR_BOOK_N_MIN}, {_COLLAR_BOOK_N_MAX}]",
+                    filters,
+                    disclaimer,
+                )
+        if n_positions_min > n_positions_max:
+            return _err(
+                "collar_book",
+                "n_positions_min must be <= n_positions_max",
+                filters,
+                disclaimer,
+            )
+        for key, weight in (
+            ("max_position_weight_pct", max_position_weight_pct),
+            ("max_sector_weight_pct", max_sector_weight_pct),
+        ):
+            if not _COLLAR_BOOK_WEIGHT_MIN <= weight <= _COLLAR_BOOK_WEIGHT_MAX:
+                return _err(
+                    "collar_book",
+                    f"{key} must be in [{_COLLAR_BOOK_WEIGHT_MIN:.0f}, "
+                    f"{_COLLAR_BOOK_WEIGHT_MAX:.0f}]",
+                    filters,
+                    disclaimer,
+                )
+        parsed, err = _parse_collar_book_positions(positions)
+        if err is not None:
+            return _err("collar_book", err, filters, disclaimer)
+        result = assemble_collar_book(
+            parsed,
+            notional_target=notional_target,
+            n_positions_min=n_positions_min,
+            n_positions_max=n_positions_max,
+            n_positions_target=n_positions_target,
+            max_position_weight_pct=max_position_weight_pct,
+            max_sector_weight_pct=max_sector_weight_pct,
+        )
+        return _ok(
+            "collar_book",
+            {
+                "basis": "advisor_research_worksheet",
+                "book": asdict(result),
+                "count": len(positions),
+            },
+            filters,
+            disclaimer,
+        )
+
+
+def _parse_collar_book_positions(
+    positions: list[dict[str, Any]],
+) -> tuple[list[CollarBookPosition], str | None]:
+    """Parse collar-book position entries: ``(parsed, error)``.
+
+    ``symbol``, ``spot``, ``dte``, and ``net_credit`` are required; type errors
+    return an error string. Degenerate VALUES (``spot <= 0``, ``dte <= 0``)
+    pass through — the engine excludes them with a structured reason.
+    """
+    parsed: list[CollarBookPosition] = []
+    for entry in positions:
+        if not isinstance(entry, dict):
+            return [], "each position must be an object"
+        symbol = entry.get("symbol")
+        if not isinstance(symbol, str) or not symbol.strip():
+            return [], "position 'symbol' must be a non-empty string"
+        spot, err = _position_opt_num(entry, "spot")
+        if err is None and spot is None:
+            err = "position 'spot' must be a number"
+        if err is not None:
+            return [], err
+        dte = entry.get("dte")
+        if isinstance(dte, bool) or not isinstance(dte, int):
+            return [], "position 'dte' must be a whole number"
+        net_credit, err = _position_opt_num(entry, "net_credit")
+        if err is None and net_credit is None:
+            err = "position 'net_credit' must be a number"
+        if err is not None:
+            return [], err
+        optional: dict[str, float | None] = {}
+        for key in ("dividend_income_window", "score", "put_strike", "call_strike",
+                    "floor_pct", "cap_pct"):
+            optional[key], err = _position_opt_num(entry, key)
+            if err is not None:
+                return [], err
+        strings: dict[str, str | None] = {}
+        for key in ("sector", "expiration"):
+            value = entry.get(key)
+            if value is not None and not isinstance(value, str):
+                return [], f"position '{key}' must be a string or omitted"
+            strings[key] = value
+        dividend = optional["dividend_income_window"]
+        parsed.append(
+            CollarBookPosition(
+                symbol=symbol,
+                spot=spot if spot is not None else 0.0,
+                dte=dte,
+                net_credit=net_credit if net_credit is not None else 0.0,
+                dividend_income_window=0.0 if dividend is None else dividend,
+                score=optional["score"],
+                sector=strings["sector"],
+                expiration=strings["expiration"],
+                put_strike=optional["put_strike"],
+                call_strike=optional["call_strike"],
+                floor_pct=optional["floor_pct"],
+                cap_pct=optional["cap_pct"],
+            )
+        )
+    return parsed, None
 
 
 def _position_opt_num(entry: dict[str, Any], key: str) -> tuple[float | None, str | None]:

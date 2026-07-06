@@ -258,6 +258,120 @@ def test_collar_screen_malformed_entries_400() -> None:
         assert c.post(_COLLAR_SCREEN, json=body).status_code == 400, body
 
 
+# ── Collar book assembly (worksheet POST) ──
+
+_COLLAR_BOOK = "/api/options/overlay/collar-book"
+
+
+def test_collar_book_happy_path() -> None:
+    r = _client().post(
+        _COLLAR_BOOK,
+        json={
+            "positions": [
+                {
+                    "symbol": "AAA",
+                    "spot": 100.0,
+                    "dte": 30,
+                    "net_credit": 2.0,
+                    "dividend_income_window": 0.5,
+                    "sector": "Tech",
+                    "expiration": "2026-08-15",
+                    "put_strike": 85.0,
+                    "call_strike": 110.0,
+                },
+                {"symbol": "BBB", "spot": 50.0, "dte": 30, "net_credit": 1.0},
+            ],
+            "notional_target": 500_000.0,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["basis"] == "advisor_research_worksheet"
+    assert body["count"] == 2
+    assert "not investment, tax, legal, or financial advice" in body["disclaimer"].lower()
+    assert r.headers["cache-control"] == "public, max-age=300"
+    book = body["book"]
+    holdings = {h["symbol"]: h for h in book["positions"]}
+    assert set(holdings) == {"AAA", "BBB"}
+    # Whole contracts only; per-position cap (12% of $500K) honored.
+    for h in holdings.values():
+        assert h["contracts"] == int(h["contracts"]) and h["contracts"] >= 1
+        assert h["notional"] <= 500_000.0 * 0.12 + 1e-9
+    # Display passthrough + strike-derived floor/cap on AAA.
+    assert holdings["AAA"]["expiration"] == "2026-08-15"
+    assert holdings["AAA"]["floor_pct"] == 15.0
+    # BBB has no strike data, so the capital-weighted aggregates are None.
+    assert book["capital_weighted_floor_pct"] is None
+    assert book["notional_deployed"] > 0.0
+    assert book["counts"]["held"] == 2
+    assert "not investment advice" in book["disclaimer"].lower()
+
+
+def test_collar_book_params_respected_and_exclusions_reported() -> None:
+    # $950 name is price-tier infeasible in a $250K book; degenerate dte is
+    # excluded with a structured reason, not rejected.
+    r = _client().post(
+        _COLLAR_BOOK,
+        json={
+            "positions": [
+                {"symbol": "PRICY", "spot": 950.0, "dte": 30, "net_credit": 2.0},
+                {"symbol": "CHEAP", "spot": 40.0, "dte": 30, "net_credit": 1.0},
+                {"symbol": "BADDTE", "spot": 100.0, "dte": 0, "net_credit": 1.0},
+            ],
+            "notional_target": 250_000.0,
+            "n_positions_target": 10,
+            "n_positions_min": 2,
+            "n_positions_max": 10,
+        },
+    )
+    assert r.status_code == 200
+    book = r.json()["book"]
+    assert book["excluded_price_tier"] == [
+        {"symbol": "PRICY", "capital_per_contract": 95_000.0}
+    ]
+    assert book["excluded_degenerate"] == [
+        {"symbol": "BADDTE", "reason": "dte must be >= 1 (got 0)"}
+    ]
+    assert [h["symbol"] for h in book["positions"]] == ["CHEAP"]
+
+
+def test_collar_book_too_many_positions_400() -> None:
+    positions = [
+        {"symbol": f"T{i}", "spot": 100.0, "dte": 30, "net_credit": 1.0} for i in range(51)
+    ]
+    r = _client().post(_COLLAR_BOOK, json={"positions": positions})
+    assert r.status_code == 400
+
+
+def test_collar_book_malformed_400() -> None:
+    c = _client()
+    good = {"symbol": "AAA", "spot": 100.0, "dte": 30, "net_credit": 2.0}
+    bad_bodies: list[dict] = [
+        {},  # positions missing
+        {"positions": []},  # empty list
+        {"positions": ["not-an-object"]},
+        {"positions": [{"spot": 100.0, "dte": 30, "net_credit": 2.0}]},  # symbol missing
+        {"positions": [{"symbol": "", "spot": 100.0, "dte": 30, "net_credit": 2.0}]},
+        {"positions": [{"symbol": "AAA", "dte": 30, "net_credit": 2.0}]},  # spot missing
+        {"positions": [{"symbol": "AAA", "spot": "x", "dte": 30, "net_credit": 2.0}]},
+        {"positions": [{"symbol": "AAA", "spot": 100.0, "net_credit": 2.0}]},  # dte missing
+        {"positions": [{"symbol": "AAA", "spot": 100.0, "dte": 30.5, "net_credit": 2.0}]},
+        {"positions": [{"symbol": "AAA", "spot": 100.0, "dte": 30}]},  # net_credit missing
+        {"positions": [{**good, "score": "high"}]},
+        {"positions": [{**good, "sector": 7}]},
+        {"positions": [{**good, "put_strike": "x"}]},
+        {"positions": [good], "notional_target": 5_000},  # below 10,000
+        {"positions": [good], "notional_target": 2e9},  # above 1e9
+        {"positions": [good], "n_positions_target": 0},
+        {"positions": [good], "n_positions_target": 51},
+        {"positions": [good], "n_positions_min": 10, "n_positions_max": 5},
+        {"positions": [good], "max_position_weight_pct": 0},
+        {"positions": [good], "max_sector_weight_pct": 101},
+    ]
+    for body in bad_bodies:
+        assert c.post(_COLLAR_BOOK, json=body).status_code == 400, body
+
+
 def test_crypto_currencies() -> None:
     r = _client().get("/api/options/crypto/currencies")
     assert r.status_code == 200
