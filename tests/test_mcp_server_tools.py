@@ -122,6 +122,7 @@ def test_full_tool_set_registers() -> None:
         "cash_secured_put",
         "collar",
         "equity_collar_screen",
+        "collar_book",
         "crypto_option_instruments",
         "crypto_option_ticker",
         "crypto_covered_call",
@@ -320,6 +321,94 @@ def test_equity_collar_screen_tool_rejects_bad_inputs() -> None:
     for args in bad_calls:
         body = json.loads(_call_text(server, "equity_collar_screen", args))
         assert "error" in body, args
+
+
+def test_collar_book_tool() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket())  # type: ignore[arg-type]
+    body = json.loads(
+        _call_text(
+            server,
+            "collar_book",
+            {
+                "positions": [
+                    {
+                        "symbol": "AAA",
+                        "spot": 100.0,
+                        "dte": 30,
+                        "net_credit": 2.0,
+                        "sector": "Tech",
+                        "put_strike": 85.0,
+                        "call_strike": 110.0,
+                    },
+                    {"symbol": "BBB", "spot": 50.0, "dte": 30, "net_credit": 1.0},
+                ],
+                "notional_target": 500_000.0,
+            },
+        )
+    )
+    assert "error" not in body
+    assert body["basis"] == "advisor_research_worksheet"
+    assert body["count"] == 2
+    book = body["book"]
+    holdings = {h["symbol"]: h for h in book["positions"]}
+    assert set(holdings) == {"AAA", "BBB"}
+    assert all(h["contracts"] >= 1 for h in holdings.values())
+    assert holdings["AAA"]["floor_pct"] == 15.0  # derived from the put strike
+    assert book["notional_deployed"] > 0.0
+    assert "not investment advice" in body["disclaimer"].lower()
+
+
+def test_collar_book_tool_rejects_bad_inputs() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket())  # type: ignore[arg-type]
+    good = {"symbol": "AAA", "spot": 100.0, "dte": 30, "net_credit": 2.0}
+    too_many = [{**good, "symbol": f"T{i}"} for i in range(51)]
+    bad_calls: list[dict[str, object]] = [
+        {"positions": []},
+        {"positions": too_many},
+        # (a non-dict entry is rejected by FastMCP's schema validation itself)
+        {"positions": [{"spot": 100.0, "dte": 30, "net_credit": 2.0}]},  # symbol missing
+        {"positions": [{"symbol": "AAA", "dte": 30, "net_credit": 2.0}]},  # spot missing
+        {"positions": [{"symbol": "AAA", "spot": 100.0, "net_credit": 2.0}]},  # dte missing
+        {"positions": [{"symbol": "AAA", "spot": 100.0, "dte": 30}]},  # net_credit missing
+        {"positions": [{**good, "sector": 7}]},
+        {"positions": [{**good, "put_strike": "x"}]},
+        {"positions": [good], "notional_target": 5_000},
+        {"positions": [good], "notional_target": 2e9},
+        {"positions": [good], "n_positions_target": 0},
+        {"positions": [good], "n_positions_target": 51},
+        {"positions": [good], "n_positions_min": 10, "n_positions_max": 5},
+        {"positions": [good], "max_position_weight_pct": 0},
+        {"positions": [good], "max_sector_weight_pct": 101},
+    ]
+    for args in bad_calls:
+        body = json.loads(_call_text(server, "collar_book", args))
+        assert "error" in body, args
+
+
+def test_collar_book_tool_excludes_degenerates_not_errors() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket())  # type: ignore[arg-type]
+    body = json.loads(
+        _call_text(
+            server,
+            "collar_book",
+            {
+                "positions": [
+                    {"symbol": "BAD", "spot": 0.0, "dte": 30, "net_credit": 1.0},
+                    {"symbol": "GOOD", "spot": 100.0, "dte": 30, "net_credit": 2.0},
+                ]
+            },
+        )
+    )
+    assert "error" not in body
+    book = body["book"]
+    assert [e["symbol"] for e in book["excluded_degenerate"]] == ["BAD"]
+    assert [h["symbol"] for h in book["positions"]] == ["GOOD"]
 
 
 def test_crypto_covered_call_tool_inverse_yield() -> None:

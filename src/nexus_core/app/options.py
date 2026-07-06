@@ -12,6 +12,10 @@ client as a public, read-only API:
 * ``POST /api/options/overlay/collar-screen`` — batch (≤25 positions) equity
   collar screen with dividend-aware THEORETICAL Black-Scholes premiums; spot /
   sigma are fetched/estimated per position when omitted.
+* ``POST /api/options/overlay/collar-book`` — multi-name collar BOOK assembly
+  (≤50 pre-screened candidates): whole-contract sizing against a notional
+  target with per-position/per-sector caps. An advisor research WORKSHEET —
+  no orders, no execution instructions.
 * ``GET /api/options/equity/{symbol}/expirations`` — listed equity option
   expiration dates by bucket (weekly/monthly) via MBOUM.
 * ``GET /api/options/equity/{symbol}/chain`` — normalized single-expiration
@@ -47,8 +51,10 @@ from ..engine.planning.regime import to_generic_regime
 from ..engine.pricing import (
     BookPosition,
     ChainQuote,
+    CollarBookPosition,
     CollarScreenPosition,
     LadderLeg,
+    assemble_collar_book,
     book_mtm,
     bs_price,
     cash_secured_put_overlay,
@@ -85,6 +91,13 @@ _TRADING_DAYS = 252.0
 _DISCLAIMER = TERSE
 _MAX_EXPIRY_DAYS = 1095
 _COLLAR_SCREEN_MAX_POSITIONS = 25
+_COLLAR_BOOK_MAX_POSITIONS = 50
+_COLLAR_BOOK_NOTIONAL_MIN = 10_000.0
+_COLLAR_BOOK_NOTIONAL_MAX = 1e9
+_COLLAR_BOOK_N_MIN = 1
+_COLLAR_BOOK_N_MAX = 50
+_COLLAR_BOOK_WEIGHT_MIN = 1.0
+_COLLAR_BOOK_WEIGHT_MAX = 100.0
 
 
 def _spot(market: MarketDataProvider, symbol: str) -> float:
@@ -317,6 +330,124 @@ def _collar_screen_positions(
                 sigma=sigma if sigma is not None else _estimate_sigma(market, symbol),
                 expiry_days=expiry_days,
                 dividend_yield=dividend_yield if dividend_yield is not None else 0.0,
+            )
+        )
+    return positions
+
+
+def _body_opt_int(body: dict[str, Any], key: str, *, default: int) -> int:
+    value = body.get(key)
+    if value is None:
+        return default
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise HTTPException(status_code=400, detail=f"'{key}' must be a whole number or omitted")
+    return value
+
+
+def _body_opt_str(body: dict[str, Any], key: str) -> str | None:
+    value = body.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise HTTPException(status_code=400, detail=f"'{key}' must be a string or omitted")
+    return value
+
+
+def _collar_book_params(body: dict[str, Any]) -> dict[str, float | int]:
+    """Validated keyword arguments for :func:`assemble_collar_book`.
+
+    Bounds: ``notional_target`` in [10,000, 1e9]; the three ``n_positions_*``
+    counts in [1, 50] with ``min <= max``; the two weight caps in [1, 100].
+    """
+    notional = _body_opt_num(body, "notional_target")
+    notional = 1_000_000.0 if notional is None else notional
+    if not _COLLAR_BOOK_NOTIONAL_MIN <= notional <= _COLLAR_BOOK_NOTIONAL_MAX:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"'notional_target' must be in [{_COLLAR_BOOK_NOTIONAL_MIN:.0f}, "
+                f"{_COLLAR_BOOK_NOTIONAL_MAX:.0f}]"
+            ),
+        )
+    n_min = _body_opt_int(body, "n_positions_min", default=12)
+    n_max = _body_opt_int(body, "n_positions_max", default=25)
+    n_target = _body_opt_int(body, "n_positions_target", default=15)
+    for key, value in (
+        ("n_positions_min", n_min),
+        ("n_positions_max", n_max),
+        ("n_positions_target", n_target),
+    ):
+        if not _COLLAR_BOOK_N_MIN <= value <= _COLLAR_BOOK_N_MAX:
+            raise HTTPException(
+                status_code=400,
+                detail=f"'{key}' must be in [{_COLLAR_BOOK_N_MIN}, {_COLLAR_BOOK_N_MAX}]",
+            )
+    if n_min > n_max:
+        raise HTTPException(
+            status_code=400, detail="'n_positions_min' must be <= 'n_positions_max'"
+        )
+    weights: dict[str, float] = {}
+    for key, default in (("max_position_weight_pct", 12.0), ("max_sector_weight_pct", 25.0)):
+        weight = _body_opt_num(body, key)
+        weight = default if weight is None else weight
+        if not _COLLAR_BOOK_WEIGHT_MIN <= weight <= _COLLAR_BOOK_WEIGHT_MAX:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"'{key}' must be in [{_COLLAR_BOOK_WEIGHT_MIN:.0f}, "
+                    f"{_COLLAR_BOOK_WEIGHT_MAX:.0f}]"
+                ),
+            )
+        weights[key] = weight
+    return {
+        "notional_target": notional,
+        "n_positions_min": n_min,
+        "n_positions_max": n_max,
+        "n_positions_target": n_target,
+        "max_position_weight_pct": weights["max_position_weight_pct"],
+        "max_sector_weight_pct": weights["max_sector_weight_pct"],
+    }
+
+
+def _collar_book_positions(body: dict[str, Any]) -> list[CollarBookPosition]:
+    """Parse + validate the collar-book ``positions`` body list (1..50 entries).
+
+    ``symbol``, ``spot``, ``dte``, and ``net_credit`` are required per entry;
+    type errors 400. Degenerate VALUES (``spot <= 0``, ``dte <= 0``) pass
+    through — the engine excludes them with a structured reason.
+    """
+    raw = body.get("positions")
+    if not isinstance(raw, list) or not raw:
+        raise HTTPException(status_code=400, detail="'positions' must be a non-empty list")
+    if len(raw) > _COLLAR_BOOK_MAX_POSITIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"'positions' accepts at most {_COLLAR_BOOK_MAX_POSITIONS} entries",
+        )
+    positions: list[CollarBookPosition] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            raise HTTPException(status_code=400, detail="each position must be an object")
+        symbol = entry.get("symbol")
+        if not isinstance(symbol, str) or not symbol.strip():
+            raise HTTPException(
+                status_code=400, detail="position 'symbol' must be a non-empty string"
+            )
+        dividend = _body_opt_num(entry, "dividend_income_window")
+        positions.append(
+            CollarBookPosition(
+                symbol=symbol,
+                spot=_body_num(entry, "spot"),
+                dte=_body_int(entry, "dte"),
+                net_credit=_body_num(entry, "net_credit"),
+                dividend_income_window=0.0 if dividend is None else dividend,
+                score=_body_opt_num(entry, "score"),
+                sector=_body_opt_str(entry, "sector"),
+                expiration=_body_opt_str(entry, "expiration"),
+                put_strike=_body_opt_num(entry, "put_strike"),
+                call_strike=_body_opt_num(entry, "call_strike"),
+                floor_pct=_body_opt_num(entry, "floor_pct"),
+                cap_pct=_body_opt_num(entry, "cap_pct"),
             )
         )
     return positions
@@ -580,6 +711,55 @@ def build_options_router(
         return {
             "screen": [asdict(r) for r in results],
             "count": len(results),
+            "disclaimer": _DISCLAIMER,
+        }
+
+    @router.post(
+        "/overlay/collar-book",
+        summary="Multi-name collar book assembly (advisor research worksheet)",
+    )
+    def collar_book(
+        response: Response,
+        body: dict[str, Any] = Body(
+            ...,
+            description=(
+                "{positions:[{symbol, spot, dte, net_credit, dividend_income_window?, "
+                "score?, sector?, expiration?, put_strike?, call_strike?, floor_pct?, "
+                "cap_pct?}] (1..50), notional_target?, n_positions_target?, "
+                "n_positions_min?, n_positions_max?, max_position_weight_pct?, "
+                "max_sector_weight_pct?}"
+            ),
+        ),
+    ) -> dict[str, Any]:
+        """Assemble a multi-name collar BOOK from up to 50 pre-screened candidates.
+
+        THIS IS AN ADVISOR RESEARCH WORKSHEET (``basis:
+        advisor_research_worksheet``): it sizes whole-contract positions
+        against a notional target with per-position and per-sector caps and
+        reports the resulting arithmetic — deployed notional, cash residual,
+        income, capital-weighted floor/cap geometry, and every price-tier /
+        sector-cap / degenerate exclusion. It places NO orders and produces NO
+        execution instructions; the portfolio yield is reported without any
+        yield-band policing. Dollar inputs are per share; candidates with
+        ``spot <= 0`` or ``dte <= 0`` are excluded with a structured reason
+        rather than rejected.
+        """
+        params = _collar_book_params(body)
+        positions = _collar_book_positions(body)
+        result = assemble_collar_book(
+            positions,
+            notional_target=float(params["notional_target"]),
+            n_positions_min=int(params["n_positions_min"]),
+            n_positions_max=int(params["n_positions_max"]),
+            n_positions_target=int(params["n_positions_target"]),
+            max_position_weight_pct=float(params["max_position_weight_pct"]),
+            max_sector_weight_pct=float(params["max_sector_weight_pct"]),
+        )
+        response.headers["Cache-Control"] = f"public, max-age={_OVERLAY_TTL}"
+        return {
+            "basis": "advisor_research_worksheet",
+            "book": asdict(result),
+            "count": len(positions),
             "disclaimer": _DISCLAIMER,
         }
 

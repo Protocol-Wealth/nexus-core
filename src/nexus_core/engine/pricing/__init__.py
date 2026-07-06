@@ -18,6 +18,13 @@
   Black-Scholes premiums, and a ranked ``screen_collars`` helper.
   ``CollarScreenPosition``, ``CollarScreenResult``, ``evaluate_collar_position``,
   ``screen_collars``.
+- :mod:`collar_book` — multi-name collar BOOK assembly (advisor research
+  worksheet): a two-pass greedy allocator that sizes whole-contract positions
+  against a notional target with per-position and per-sector caps, reporting
+  explicit price-tier / sector-cap / degenerate exclusions and the book's
+  income + floor/cap geometry. No orders, no execution.
+  ``CollarBookPosition``, ``CollarBookHolding``, ``CollarBookResult``,
+  ``assemble_collar_book``.
 
 Everything here is an **educational illustration** over public market parameters
 — not investment advice, a recommendation, or a suitability determination.
@@ -27,6 +34,14 @@ adds QuantLib + FinancePy; the vanilla-option math here needs neither.
 """
 
 from .black_scholes import Greeks, OptionKind, bs_price, greeks, implied_vol
+from .collar_book import (
+    CollarBookHolding,
+    CollarBookPosition,
+    CollarBookResult,
+    DegenerateExclusion,
+    PriceTierExclusion,
+    assemble_collar_book,
+)
 from .collar_select import (
     CollarScreenPosition,
     CollarScreenResult,
@@ -85,9 +100,13 @@ __all__ = [
     "BookPosition",
     "CashSecuredPutIllustration",
     "ChainQuote",
+    "CollarBookHolding",
+    "CollarBookPosition",
+    "CollarBookResult",
     "CollarIllustration",
     "CollarScreenPosition",
     "CollarScreenResult",
+    "DegenerateExclusion",
     "CoveredCallIllustration",
     "CoveredCallLadder",
     "CryptoCollarIllustration",
@@ -97,6 +116,7 @@ __all__ = [
     "IvTermStructure",
     "LadderLeg",
     "OptionKind",
+    "PriceTierExclusion",
     "RegimeConditionedOverwrite",
     "RollAnalysis",
     "ScenarioCell",
@@ -105,6 +125,7 @@ __all__ = [
     "SkewPoint",
     "TermStructurePoint",
     "VolSkew",
+    "assemble_collar_book",
     "book_mtm",
     "bs_price",
     "cash_secured_put_overlay",
