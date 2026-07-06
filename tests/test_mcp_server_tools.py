@@ -582,3 +582,119 @@ def test_native_research_tools_carry_disclaimer() -> None:
         result = asyncio.run(server.call_tool(tool, args))  # type: ignore[attr-defined]
         text = result.content[0].text.lower()
         assert "not investment, tax, legal, or financial advice" in text, tool
+
+
+def _mboum_options_stub(payload: dict[str, object] | None) -> object:
+    import httpx
+
+    from nexus_core.data.derivatives import MboumOptionsClient
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if payload is None:
+            return httpx.Response(500, json={})
+        return httpx.Response(200, json=payload)
+
+    return MboumOptionsClient(
+        api_key="test-mboum-key",
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+
+_MBOUM_TOOL_PAYLOAD: dict[str, object] = {
+    "meta": {"expirations": {"monthly": ["2026-08-21"], "weekly": ["2026-08-07"]}},
+    "body": {
+        "Call": [
+            {
+                "strikePrice": "87.00",
+                "bidPrice": "0.62",
+                "askPrice": "0.70",
+                "midpoint": "0.66",
+                "openInterest": "2,400",
+                "volatility": "24.50%",
+                "delta": "0.2600",
+                "expirationDate": "08/07/26",
+                "expirationType": "weekly",
+            }
+        ],
+        "Put": [
+            {
+                "strikePrice": "70.00",
+                "bidPrice": "0.28",
+                "askPrice": "0.34",
+                "midpoint": "0.31",
+                "openInterest": "7,299",
+                "volatility": "28.19%",
+                "delta": "-0.0403",
+                "expirationDate": "08/07/26",
+                "expirationType": "weekly",
+            }
+        ],
+    },
+}
+
+
+def test_equity_option_chain_tools_registered_only_with_client() -> None:
+    default_server = build_server(market=_FakeMarket())  # type: ignore[arg-type]
+    default_tools = _tool_names(default_server)
+    assert "equity_option_expirations" not in default_tools
+    assert "equity_option_chain" not in default_tools
+
+    server = build_server(
+        market=_FakeMarket(),  # type: ignore[arg-type]
+        mboum_options=_mboum_options_stub(_MBOUM_TOOL_PAYLOAD),  # type: ignore[arg-type]
+    )
+    tools = _tool_names(server)
+    assert "equity_option_expirations" in tools
+    assert "equity_option_chain" in tools
+
+
+def test_equity_option_expirations_tool() -> None:
+    import json
+
+    server = build_server(
+        market=_FakeMarket(),  # type: ignore[arg-type]
+        mboum_options=_mboum_options_stub(_MBOUM_TOOL_PAYLOAD),  # type: ignore[arg-type]
+    )
+    body = json.loads(_call_text(server, "equity_option_expirations", {"symbol": "ko"}))
+    assert "error" not in body
+    assert body["symbol"] == "KO"
+    assert body["expirations"]["weekly"] == ["2026-08-07"]
+
+    bad = json.loads(_call_text(server, "equity_option_expirations", {"symbol": "K$O"}))
+    assert "error" in bad
+
+
+def test_equity_option_chain_tool() -> None:
+    import json
+
+    server = build_server(
+        market=_FakeMarket(),  # type: ignore[arg-type]
+        mboum_options=_mboum_options_stub(_MBOUM_TOOL_PAYLOAD),  # type: ignore[arg-type]
+    )
+    body = json.loads(
+        _call_text(
+            server, "equity_option_chain", {"symbol": "KO", "expiration": "2026-08-07"}
+        )
+    )
+    assert "error" not in body
+    assert body["count"] == {"calls": 1, "puts": 1}
+    assert body["puts"][0]["open_interest"] == 7299
+
+    bad_date = json.loads(
+        _call_text(server, "equity_option_chain", {"symbol": "KO", "expiration": "soon"})
+    )
+    assert "error" in bad_date
+
+
+def test_equity_option_chain_tools_degrade_without_key() -> None:
+    import json
+
+    from nexus_core.data.derivatives import MboumOptionsClient
+
+    server = build_server(
+        market=_FakeMarket(),  # type: ignore[arg-type]
+        mboum_options=MboumOptionsClient(api_key=None),  # type: ignore[arg-type]
+    )
+    body = json.loads(_call_text(server, "equity_option_expirations", {"symbol": "KO"}))
+    assert "error" in body
+    assert "MBOUM_API_KEY" in body["error"]

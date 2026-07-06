@@ -10,11 +10,16 @@ from __future__ import annotations
 
 import time
 
+import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from nexus_core.app.options import build_options_router
-from nexus_core.data.derivatives import OptionInstrument, OptionTicker
+from nexus_core.data.derivatives import (
+    MboumOptionsClient,
+    OptionInstrument,
+    OptionTicker,
+)
 from nexus_core.data.providers import PriceBar, Quote
 
 
@@ -523,3 +528,134 @@ def test_crypto_book_scenario_route() -> None:
     up = next(c for c in cells if c["spot_shock_pct"] == 25.0)
     assert up["short_calls_itm"] == 1
     assert up["underlying_pnl_usd"] == 25000.0
+
+
+# ── Equity option chain routes (MBOUM-backed) ────────────────────────────────
+def _mboum_payload(with_rows: bool = True) -> dict[str, object]:
+    calls: list[dict[str, str]] = []
+    puts: list[dict[str, str]] = []
+    if with_rows:
+        calls = [
+            {
+                "strikePrice": "87.00",
+                "bidPrice": "0.62",
+                "askPrice": "0.70",
+                "midpoint": "0.66",
+                "lastPrice": "0.65",
+                "volume": "25",
+                "openInterest": "2,400",
+                "volatility": "24.50%",
+                "delta": "0.2600",
+                "expirationDate": "08/07/26",
+                "expirationType": "weekly",
+                "baseNextEarningsDate": "07/28/26",
+                "dividendExDate": "N/A",
+            }
+        ]
+        puts = [
+            {
+                "strikePrice": "70.00",
+                "bidPrice": "0.28",
+                "askPrice": "$0.34",
+                "midpoint": "0.31",
+                "lastPrice": "unch",
+                "volume": "4",
+                "openInterest": "7,299",
+                "volatility": "28.19%",
+                "delta": "-0.0403",
+                "expirationDate": "08/07/26",
+                "expirationType": "weekly",
+                "baseNextEarningsDate": "07/28/26",
+                "dividendExDate": "N/A",
+            }
+        ]
+    return {
+        "meta": {"expirations": {"monthly": ["2026-08-21", "2026-07-17"], "weekly": ["2026-08-07"]}},
+        "body": {"Call": calls, "Put": puts},
+    }
+
+
+def _mboum_options_client(
+    payload: dict[str, object] | None = None, *, status_code: int = 200
+) -> MboumOptionsClient:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_code, json=payload if payload is not None else {})
+
+    return MboumOptionsClient(
+        api_key="test-mboum-key",
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+
+def _equity_client(mboum: MboumOptionsClient) -> TestClient:
+    app = FastAPI()
+    app.include_router(
+        build_options_router(
+            market=_FakeMarket(), deribit=_FakeDeribit(), mboum_options=mboum
+        )
+    )
+    return TestClient(app)
+
+
+def test_equity_expirations_route() -> None:
+    client = _equity_client(_mboum_options_client(_mboum_payload()))
+    resp = client.get("/api/options/equity/ko/expirations")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["symbol"] == "KO"
+    assert body["expirations"]["monthly"] == ["2026-07-17", "2026-08-21"]  # sorted
+    assert body["expirations"]["weekly"] == ["2026-08-07"]
+    assert "disclaimer" in body
+    assert resp.headers["cache-control"] == "public, max-age=3600"
+
+
+def test_equity_chain_route_parses_display_strings() -> None:
+    client = _equity_client(_mboum_options_client(_mboum_payload()))
+    resp = client.get("/api/options/equity/KO/chain?expiration=2026-08-07")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["count"] == {"calls": 1, "puts": 1}
+    put = body["puts"][0]
+    assert put["strike"] == 70.0
+    assert put["ask"] == 0.34  # "$" stripped
+    assert put["last"] is None  # "unch" sentinel
+    assert put["open_interest"] == 7299  # thousands separator
+    assert abs(put["iv"] - 0.2819) < 1e-9  # percent -> fraction
+    assert put["expiration"] == "2026-08-07"  # US date -> ISO
+    assert resp.headers["cache-control"] == "public, max-age=60"
+
+
+def test_equity_chain_requires_expiration_and_valid_inputs() -> None:
+    client = _equity_client(_mboum_options_client(_mboum_payload()))
+    assert client.get("/api/options/equity/KO/chain").status_code == 422
+    assert (
+        client.get("/api/options/equity/KO/chain?expiration=soonish").status_code == 422
+    )
+    assert (
+        client.get("/api/options/equity/KO/chain?expiration=2026-13-45").status_code == 422
+    )
+    assert (
+        client.get("/api/options/equity/K$O/chain?expiration=2026-08-07").status_code == 404
+    )
+
+
+def test_equity_routes_503_without_key() -> None:
+    client = _equity_client(MboumOptionsClient(api_key=None))
+    resp = client.get("/api/options/equity/KO/expirations")
+    assert resp.status_code == 503
+    assert "MBOUM_API_KEY" in resp.json()["detail"]
+    assert (
+        client.get("/api/options/equity/KO/chain?expiration=2026-08-07").status_code == 503
+    )
+
+
+def test_equity_chain_empty_is_404_and_upstream_failure_502() -> None:
+    empty = _equity_client(_mboum_options_client(_mboum_payload(with_rows=False)))
+    assert (
+        empty.get("/api/options/equity/KO/chain?expiration=2026-08-07").status_code == 404
+    )
+    broken = _equity_client(_mboum_options_client(None, status_code=500))
+    assert (
+        broken.get("/api/options/equity/KO/chain?expiration=2026-08-07").status_code == 502
+    )
+    assert broken.get("/api/options/equity/KO/expirations").status_code == 502

@@ -79,6 +79,8 @@ PWOS / pw-api / PWPortal.
 | `GET /api/options/overlay/cash-secured-put` | Cash-secured-put overlay illustration |
 | `GET /api/options/overlay/collar` | Protective-collar overlay illustration |
 | `POST /api/options/overlay/collar-screen` | Batch equity collar screen (≤25 positions; dividend-aware theoretical pricing) |
+| `GET /api/options/equity/{symbol}/expirations` | Listed equity option expirations by bucket (weekly/monthly; MBOUM-backed, 503 without key) |
+| `GET /api/options/equity/{symbol}/chain?expiration=` | Normalized single-expiration equity option chain — bid/ask, OI, IV, delta (expiration required) |
 | `GET /api/options/crypto/currencies` | Crypto option underliers + settlement model (Deribit) |
 | `GET /api/options/crypto/{currency}/instruments` | Deribit crypto options — BTC/ETH (inverse) + SOL/XRP/TRX/AVAX (USDC-linear) |
 | `GET /api/options/crypto/instrument/{instrument_name}` | Deribit crypto option detail |
