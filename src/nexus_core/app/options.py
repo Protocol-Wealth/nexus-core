@@ -12,6 +12,11 @@ client as a public, read-only API:
 * ``POST /api/options/overlay/collar-screen`` — batch (≤25 positions) equity
   collar screen with dividend-aware THEORETICAL Black-Scholes premiums; spot /
   sigma are fetched/estimated per position when omitted.
+* ``GET /api/options/equity/{symbol}/expirations`` — listed equity option
+  expiration dates by bucket (weekly/monthly) via MBOUM.
+* ``GET /api/options/equity/{symbol}/chain`` — normalized single-expiration
+  equity option chain (calls + puts) via MBOUM; ``expiration`` is required so
+  a request never dumps the full multi-expiry board.
 * ``GET /api/options/crypto/currencies`` — supported crypto underliers +
   settlement model (Deribit).
 * ``GET /api/options/crypto/{currency}/instruments`` — listed option instruments
@@ -26,14 +31,16 @@ investment advice, a recommendation, or a suitability determination.
 from __future__ import annotations
 
 import math
+import re
 import statistics
 import time
 from dataclasses import asdict
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, HTTPException, Path, Query, Response
 
-from ..data.derivatives import DeribitClient
+from ..data.derivatives import DeribitClient, MboumOptionsClient
 from ..data.providers import MarketDataProvider
 from ..disclaimers import TERSE
 from ..engine.planning.regime import to_generic_regime
@@ -68,6 +75,10 @@ from ..engine.regime import RegimeEngine
 _OVERLAY_TTL = 300
 _CRYPTO_TTL = 60
 _PRICE_TTL = 300
+#: Expiration lists move rarely (new weeklies appear weekly) — cache long-ish.
+_EQUITY_EXPIRATIONS_TTL = 3600
+#: A live chain is quote data — cache briefly, like the crypto surface.
+_EQUITY_CHAIN_TTL = 60
 _DEFAULT_RATE = 0.04
 _DEFAULT_SIGMA = 0.30
 _TRADING_DAYS = 252.0
@@ -111,6 +122,33 @@ def _sigma_for(
 #: a chain request to a bounded number of Deribit round-trips.
 _CHAIN_LIMIT = 24
 _MS_PER_DAY = 86_400_000.0
+
+#: Ticker shape accepted by the equity option chain routes (Yahoo-style
+#: symbols: AAPL, BRK.B, BF-B). Anything else 404s before touching the vendor.
+_EQUITY_SYMBOL_RE = re.compile(r"^[A-Za-z0-9.\-]{1,10}$")
+
+
+def _equity_option_symbol(symbol: str) -> str:
+    """Validate + upper-case an equity option symbol; 404 on a bad shape."""
+    if not _EQUITY_SYMBOL_RE.fullmatch(symbol):
+        raise HTTPException(status_code=404, detail=f"Unknown symbol '{symbol}'")
+    return symbol.upper()
+
+
+def _equity_option_expiration(expiration: str) -> str:
+    """Validate an ``expiration`` query value as a real ISO date; 422 otherwise.
+
+    FastAPI's pattern check already rejects non-``YYYY-MM-DD`` shapes with a
+    422; this catches shape-valid non-dates (e.g. ``2026-13-45``) at the same
+    status so the client sees one consistent validation contract.
+    """
+    try:
+        return datetime.strptime(expiration, "%Y-%m-%d").date().isoformat()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="'expiration' must be a calendar date in YYYY-MM-DD format",
+        ) from exc
 
 
 def _crypto_spot_settlement(deribit: DeribitClient, currency: str) -> tuple[str, float, Settlement]:
@@ -397,6 +435,7 @@ def build_options_router(
     market: MarketDataProvider,
     deribit: DeribitClient | None = None,
     regime_engine: RegimeEngine | None = None,
+    mboum_options: MboumOptionsClient | None = None,
 ) -> APIRouter:
     """Build the educational options router around the market provider.
 
@@ -406,9 +445,22 @@ def build_options_router(
             client; inject one wired to a mock transport for hermetic tests.
         regime_engine: Live regime classifier. Required for the regime-conditioned
             overwrite endpoint; that route 503s when it is not wired.
+        mboum_options: MBOUM equity option chain client. Defaults to one built
+            from ``MBOUM_API_KEY``; the equity chain routes 503 when no key is
+            configured. Inject one wired to a mock transport for hermetic tests.
     """
     router = APIRouter(prefix="/api/options", tags=["options"])
     deribit = deribit or DeribitClient()
+    mboum_options = mboum_options or MboumOptionsClient()
+
+    def _require_equity_options() -> MboumOptionsClient:
+        """The configured equity chain client, or a 503 when the key is absent."""
+        if not mboum_options.is_configured():
+            raise HTTPException(
+                status_code=503,
+                detail="Equity option chain data unavailable: no MBOUM_API_KEY configured",
+            )
+        return mboum_options
 
     @router.get("/price", summary="Black-Scholes price + Greeks (educational)")
     def price(
@@ -528,6 +580,80 @@ def build_options_router(
         return {
             "screen": [asdict(r) for r in results],
             "count": len(results),
+            "disclaimer": _DISCLAIMER,
+        }
+
+    @router.get(
+        "/equity/{symbol}/expirations",
+        summary="Listed equity option expirations (MBOUM)",
+    )
+    def equity_option_expirations(
+        response: Response,
+        symbol: str = Path(description="Stock/ETF ticker, e.g. AAPL"),
+    ) -> dict[str, Any]:
+        """Expiration dates with listed options for one equity/ETF, by bucket.
+
+        Public read-only vendor (MBOUM) data behind the service's per-IP rate
+        limiter. Returns ``{"weekly": [...], "monthly": [...]}`` ISO dates —
+        feed one into ``/equity/{symbol}/chain?expiration=`` for the board.
+        503 when the server has no MBOUM key configured.
+        """
+        sym = _equity_option_symbol(symbol)
+        provider = _require_equity_options()
+        expirations = provider.list_expirations(sym)
+        if expirations is None:
+            raise HTTPException(
+                status_code=502, detail=f"No expiration data available for '{sym}'"
+            )
+        if not any(expirations.values()):
+            raise HTTPException(
+                status_code=404, detail=f"No listed option expirations for '{sym}'"
+            )
+        response.headers["Cache-Control"] = f"public, max-age={_EQUITY_EXPIRATIONS_TTL}"
+        return {"symbol": sym, "expirations": expirations, "disclaimer": _DISCLAIMER}
+
+    @router.get(
+        "/equity/{symbol}/chain",
+        summary="Equity option chain for ONE expiration (MBOUM)",
+    )
+    def equity_option_chain(
+        response: Response,
+        symbol: str = Path(description="Stock/ETF ticker, e.g. AAPL"),
+        expiration: str = Query(
+            pattern=r"^\d{4}-\d{2}-\d{2}$",
+            description="Expiration date (YYYY-MM-DD) from /equity/{symbol}/expirations",
+        ),
+    ) -> dict[str, Any]:
+        """Normalized calls/puts board for one equity/ETF at one expiration.
+
+        Public read-only vendor (MBOUM) data behind the service's per-IP rate
+        limiter; ``expiration`` is REQUIRED — a request is always bounded to a
+        single expiration (never the full board), which caps both the payload
+        and vendor usage. Rows carry parsed floats/ints/ISO dates only (strike,
+        bid/ask/mid/last, volume, open interest, iv as a decimal fraction,
+        delta, expiration + type, next earnings, ex-dividend date), sorted by
+        strike. 503 when the server has no MBOUM key configured.
+        """
+        sym = _equity_option_symbol(symbol)
+        exp = _equity_option_expiration(expiration)
+        provider = _require_equity_options()
+        chain = provider.get_chain(sym, exp)
+        if chain is None:
+            raise HTTPException(
+                status_code=502, detail=f"No option chain data available for '{sym}'"
+            )
+        if not chain.calls and not chain.puts:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No option chain for '{sym}' at expiration {exp}",
+            )
+        response.headers["Cache-Control"] = f"public, max-age={_EQUITY_CHAIN_TTL}"
+        return {
+            "symbol": sym,
+            "expiration": exp,
+            "count": {"calls": len(chain.calls), "puts": len(chain.puts)},
+            "calls": [asdict(q) for q in chain.calls],
+            "puts": [asdict(q) for q in chain.puts],
             "disclaimer": _DISCLAIMER,
         }
 

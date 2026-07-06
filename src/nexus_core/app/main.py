@@ -33,6 +33,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from .. import __version__
 from ..data import db
+from ..data.derivatives import MboumOptionsClient
 from ..data.macro import FredMacroData
 from ..data.market import (
     CachedMarketData,
@@ -248,7 +249,11 @@ def create_app(
     app.add_middleware(SecurityHeadersMiddleware)
 
     app.include_router(build_router(engine=engine, market=market, macro=macro))
-    app.include_router(build_options_router(market=market, regime_engine=engine))
+    app.include_router(
+        build_options_router(
+            market=market, regime_engine=engine, mboum_options=MboumOptionsClient()
+        )
+    )
     app.include_router(build_score_router(market=market, regime_engine=engine))
     app.include_router(build_wallet_router(debank=DeBankClient()))
     app.include_router(build_chain_router(tatum=TatumClient()))

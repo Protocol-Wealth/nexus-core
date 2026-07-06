@@ -13,7 +13,7 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from ..data.derivatives import DeribitClient
+from ..data.derivatives import DeribitClient, MboumOptionsClient
 from ..data.onchain import DefiLlamaClient
 from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..disclaimers import MC_DISCLAIMER, TERSE
@@ -299,6 +299,7 @@ def build_configured_server(
         market=market,
         macro=macro,
         deribit=DeribitClient(),
+        mboum_options=MboumOptionsClient(),
         defillama=DefiLlamaClient(),
         disclaimer=TERSE,
         extra_tools=_build_planning_mcp_tools(market, regime_engine),

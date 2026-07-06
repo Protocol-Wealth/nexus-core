@@ -29,9 +29,11 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import asdict
+from datetime import datetime
 from typing import Any, Protocol
 
 try:
@@ -42,7 +44,7 @@ except ImportError:  # pragma: no cover
     ToolAnnotations = None  # type: ignore[assignment,misc]
 
 from ... import __version__
-from ...data.derivatives import DeribitClient
+from ...data.derivatives import DeribitClient, MboumOptionsClient
 from ...data.onchain import DefiLlamaClient
 from ...data.providers import MacroDataProvider, MarketDataProvider
 from ...engine.planning.regime import to_generic_regime
@@ -81,6 +83,9 @@ _MAX_OPTION_DAYS = 1095
 
 #: Batch cap for the equity collar screen, mirroring the REST route.
 _COLLAR_SCREEN_MAX_POSITIONS = 25
+
+#: Ticker shape for the equity option chain tools, mirroring the REST routes.
+_EQUITY_SYMBOL_RE = re.compile(r"^[A-Za-z0-9.\-]{1,10}$")
 
 # Tool annotations (MCP spec hints). Every nexus-core tool is read-only — these
 # let clients (claude.ai, Cursor) show a read-only badge and auto-approve calls
@@ -123,6 +128,7 @@ def build_server(
     market: MarketDataProvider | None = None,
     macro: MacroDataProvider | None = None,
     deribit: DeribitClient | None = None,
+    mboum_options: MboumOptionsClient | None = None,
     defillama: DefiLlamaClient | None = None,
     filters: list[ResponseFilter] | None = None,
     disclaimer: str | None = None,
@@ -138,6 +144,10 @@ def build_server(
             scoring tools are not registered.
         score_context_factory: Callable mapping a ticker to a scoring context.
             Required if ``scoring_framework`` is passed.
+        mboum_options: MBOUM equity option chain client. If None, the equity
+            option chain tools are not registered; if supplied but unkeyed the
+            tools register and report the missing key per call (degrade, never
+            fake data).
         filters: Response post-processors applied before return.
         disclaimer: Appended to every financial-content tool response. Keep
             this aligned with your regulator's disclosure requirements.
@@ -213,6 +223,8 @@ def build_server(
     if market is not None:
         _register_market_tools(mcp, market, disclaimer, filters)
         _register_equity_options_tools(mcp, market, disclaimer, filters)
+    if mboum_options is not None:
+        _register_equity_option_chain_tools(mcp, mboum_options, disclaimer, filters)
     if macro is not None:
         _register_economic_tools(mcp, macro, disclaimer, filters)
     if deribit is not None:
@@ -251,6 +263,8 @@ def build_server(
                 upstreams["crypto_options"] = {"currencies": list(deribit.supported_currencies())}
             except Exception:  # pragma: no cover
                 upstreams["crypto_options"] = {"status": "error"}
+        if mboum_options is not None:
+            upstreams["equity_option_chains"] = {"configured": bool(mboum_options.is_configured())}
         if defillama is not None:
             upstreams["defi"] = {"status": "configured"}
         return _ok(
@@ -281,6 +295,8 @@ def build_server(
                         "cash_secured_put",
                         "collar",
                         "equity_collar_screen",
+                        "equity_option_expirations",
+                        "equity_option_chain",
                     ],
                     "crypto_options": [
                         "crypto_option_instruments",
@@ -654,6 +670,122 @@ def _position_opt_num(entry: dict[str, Any], key: str) -> tuple[float | None, st
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None, f"position '{key}' must be a number or omitted"
     return float(value), None
+
+
+def _register_equity_option_chain_tools(
+    mcp: FastMCP, mboum: MboumOptionsClient, disclaimer: str, filters: list[ResponseFilter]
+) -> None:
+    """Equity option chain tools (MBOUM). Validation mirrors the REST routes."""
+
+    def _bad_symbol(symbol: Any) -> bool:
+        return not isinstance(symbol, str) or not _EQUITY_SYMBOL_RE.fullmatch(symbol)
+
+    def _unconfigured(tool: str) -> str:
+        return _err(
+            tool,
+            "Equity option chain data unavailable: the server has no MBOUM_API_KEY configured.",
+            filters,
+            disclaimer,
+        )
+
+    @mcp.tool(annotations=_RO_OPEN)
+    def equity_option_expirations(symbol: str) -> str:
+        """Listed option expiration dates (weekly + monthly buckets) for a stock/ETF
+        ticker, e.g. AAPL. Feed one date into equity_option_chain. Public vendor
+        (MBOUM) market data — educational, not advice."""
+        if _bad_symbol(symbol):
+            return _err(
+                "equity_option_expirations",
+                "symbol must be a ticker of 1-10 letters/digits/./-",
+                filters,
+                disclaimer,
+            )
+        if not mboum.is_configured():
+            return _unconfigured("equity_option_expirations")
+        sym = symbol.upper()
+        try:
+            expirations = mboum.list_expirations(sym)
+        except Exception:  # pragma: no cover — provider already degrades to None
+            logger.exception("equity_option_expirations failed for %s", sym)
+            expirations = None
+        if expirations is None:
+            return _err(
+                "equity_option_expirations",
+                "upstream equity option data unavailable",
+                filters,
+                disclaimer,
+            )
+        if not any(expirations.values()):
+            return _err(
+                "equity_option_expirations",
+                f"No listed option expirations for '{sym}'",
+                filters,
+                disclaimer,
+            )
+        return _ok(
+            "equity_option_expirations",
+            {"symbol": sym, "expirations": expirations},
+            filters,
+            disclaimer,
+        )
+
+    @mcp.tool(annotations=_RO_OPEN)
+    def equity_option_chain(symbol: str, expiration: str) -> str:
+        """Normalized equity option chain (calls + puts, sorted by strike) for ONE
+        expiration (YYYY-MM-DD, from equity_option_expirations) — bid/ask/mid/last,
+        volume, open interest, iv (decimal fraction), delta. The expiration is
+        required so a call never pulls the full multi-expiry board. Public vendor
+        (MBOUM) market data — educational, not advice."""
+        if _bad_symbol(symbol):
+            return _err(
+                "equity_option_chain",
+                "symbol must be a ticker of 1-10 letters/digits/./-",
+                filters,
+                disclaimer,
+            )
+        try:
+            exp = datetime.strptime(str(expiration), "%Y-%m-%d").date().isoformat()
+        except ValueError:
+            return _err(
+                "equity_option_chain",
+                "expiration must be a calendar date in YYYY-MM-DD format",
+                filters,
+                disclaimer,
+            )
+        if not mboum.is_configured():
+            return _unconfigured("equity_option_chain")
+        sym = symbol.upper()
+        try:
+            chain = mboum.get_chain(sym, exp)
+        except Exception:  # pragma: no cover — provider already degrades to None
+            logger.exception("equity_option_chain failed for %s %s", sym, exp)
+            chain = None
+        if chain is None:
+            return _err(
+                "equity_option_chain",
+                "upstream equity option data unavailable",
+                filters,
+                disclaimer,
+            )
+        if not chain.calls and not chain.puts:
+            return _err(
+                "equity_option_chain",
+                f"No option chain for '{sym}' at expiration {exp}",
+                filters,
+                disclaimer,
+            )
+        return _ok(
+            "equity_option_chain",
+            {
+                "symbol": sym,
+                "expiration": exp,
+                "count": {"calls": len(chain.calls), "puts": len(chain.puts)},
+                "calls": [asdict(q) for q in chain.calls],
+                "puts": [asdict(q) for q in chain.puts],
+            },
+            filters,
+            disclaimer,
+        )
 
 
 def _register_crypto_options_tools(
