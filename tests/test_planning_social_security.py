@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from nexus_core.engine.planning import social_security_claiming
+from nexus_core.engine.planning import household_social_security_benefits, social_security_claiming
 
 
 def test_known_factors_for_fra_67() -> None:
@@ -30,6 +30,36 @@ def test_breakeven_ages() -> None:
     assert be[(62, 67)] == 78.7  # (2000*67 - 1400*62) / 600
     assert be[(67, 70)] == 82.5  # (2480*70 - 2000*67) / 480
     assert be[(62, 70)] == 80.4  # (2480*70 - 1400*62) / 1080
+
+
+def test_household_social_security_spousal_and_survivor_benefits() -> None:
+    out = household_social_security_benefits(
+        primary_pia_monthly=3_000.0,
+        spouse_pia_monthly=800.0,
+        primary_claim_age=67,
+        spouse_claim_age=67,
+    )
+
+    assert out["primary"]["ownMonthlyBenefit"] == 3_000.0
+    assert out["spouse"]["ownMonthlyBenefit"] == 800.0
+    assert out["spouse"]["spousalMonthlyBenefit"] == 1_500.0
+    assert out["spouse"]["payableMonthlyBenefit"] == 1_500.0
+    assert out["householdMonthlyBenefit"] == 4_500.0
+    assert out["survivorIfPrimaryDiesMonthlyBenefit"] == 3_000.0
+
+
+def test_household_social_security_reduces_early_spousal_benefit() -> None:
+    out = household_social_security_benefits(
+        primary_pia_monthly=3_000.0,
+        spouse_pia_monthly=800.0,
+        primary_claim_age=67,
+        spouse_claim_age=62,
+        spouse_fra_age=67,
+    )
+
+    assert out["spouse"]["spousalReductionFactor"] == pytest.approx(0.65)
+    assert out["spouse"]["spousalMonthlyBenefit"] == 975.0
+    assert out["spouse"]["payableMonthlyBenefit"] == 975.0
 
 
 @pytest.mark.parametrize(

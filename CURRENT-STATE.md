@@ -17,12 +17,18 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   bearer key opened the then-current 27-tool planning contract; hosted native `/mcp` keeps
   transparent OAuth active and exposes only the demo MCP tools
   `option_price`, `collar_book`, `health`, and `describe`.
-- **Last local update:** 2026-07-07 — current branch adds the S7 illustrative
-  state-tax layer: `tax_aware_withdrawal` and `income_layering` accept optional
-  2-letter `state` plus deterministic `residencyChange` inputs, expose
-  federal/state tax splits and table versions when a reference rule is modeled,
-  and keep unknown states explicitly unmodeled instead of assuming zero. `main`
-  also adds the S3 `historical_blend` planning tool: public proxy histories are
+- **Last local update:** 2026-07-07 — current branch adds the S9 household /
+  survivor layer: `household_social_security_benefits` provides a simplified
+  two-person Social Security own, age-reduced spousal, and survivor snapshot,
+  and `income_layering` accepts optional spouse Social Security plus
+  survivor-year transition inputs where `survivorYear` is the first
+  survivor-only modeling / filing-status year. `main` also adds the S7
+  illustrative state-tax layer: `tax_aware_withdrawal` and `income_layering`
+  accept optional 2-letter
+  `state` plus deterministic `residencyChange` inputs, expose federal/state tax
+  splits and table versions when a reference rule is modeled, and keep unknown
+  states explicitly unmodeled instead of assuming zero. `main` also adds the S3
+  `historical_blend` planning tool: public proxy histories are
   converted to aligned monthly returns in the wrapper, while the pure engine
   emits calendar-year returns, trailing windows, growth-of-dollar, and annualized
   mean/sigma bands for Wealth Roadmap historical-context exhibits. `main` also
@@ -376,6 +382,16 @@ key is absent.
   full-retirement-exclusion states it can represent. Raw addresses, account
   identifiers, household records, approvals, and audit state stay outside the
   public engine.
+- **S9 household/survivor state** — `social_security.py` exports
+  `household_social_security_benefits` for simplified two-person Social Security
+  own, age-reduced spousal, and survivor benefit snapshots. `income_layering`
+  accepts optional `spouseSocialSecurity`, `survivorYear`, and
+  `survivorFilingStatus`, treats `survivorYear` as the first survivor-only
+  modeling / filing-status year, and models survivor Social Security as the
+  larger claimed benefit after that year. Inputs
+  remain ages, claim ages, PIAs, filing statuses, and numeric assumptions only;
+  names, household identifiers, permissions, approvals, and audit records stay
+  private-stack concerns.
 - **Planning surface now 31 tools in current source** — includes `solve_goal`,
   `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio,
   `education_funding`, `education_vehicle_rules`, `income_layering`,

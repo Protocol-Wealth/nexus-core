@@ -127,8 +127,9 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "streams, forced RMDs, and tax-aware portfolio withdrawals. Optional "
         "bracket-fill shows additional traditional withdrawals up to a target "
         "federal marginal rate; optional state/residency fields add illustrative "
-        "state-tax layers. De-identified numeric inputs only. JSON request object "
-        "in `body`."
+        "state-tax layers; optional spouse/survivor fields model household Social "
+        "Security and filing-status transitions. De-identified numeric inputs only. "
+        "JSON request object in `body`."
     ),
     "glide_path": "Equity-weight glide path by age across the horizon. JSON request object in `body`.",
     "tax_aware_withdrawal": (

@@ -345,6 +345,8 @@ def income_layering_result_schema() -> dict[str, Any]:
             "stateTax": _MONEY,
             "stateTaxTableVersion": {"type": ["string", "null"]},
             "stateTaxNotes": _STRING_ARRAY,
+            "filingStatus": {"type": "string"},
+            "survivorActive": {"type": "boolean"},
         },
     }
     source_total = {
@@ -422,7 +424,11 @@ def income_layering_result_schema() -> dict[str, Any]:
             "withdrawalOrder": _STRING_ARRAY,
             "socialSecurityClaimAge": {"type": ["integer", "null"]},
             "socialSecurityFraAge": {"type": ["integer", "null"]},
+            "spouseSocialSecurityClaimAge": {"type": ["integer", "null"]},
+            "spouseSocialSecurityFraAge": {"type": ["integer", "null"]},
             "bracketFillTargetRate": {"type": ["number", "null"]},
+            "survivorYear": {"type": ["integer", "null"]},
+            "survivorFilingStatus": {"type": ["string", "null"]},
             "state": {"type": ["string", "null"]},
             "residencyChange": {
                 "type": ["object", "null"],
@@ -438,7 +444,7 @@ def income_layering_result_schema() -> dict[str, Any]:
     }
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://nexusmcp.site/schemas/income-layering-result-0.1.1.json",
+        "$id": "https://nexusmcp.site/schemas/income-layering-result-0.1.2.json",
         "title": "IncomeLayeringResult",
         "description": "PII-free output of the income_layering planning tool.",
         "type": "object",

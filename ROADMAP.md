@@ -85,6 +85,14 @@ and state codes, never raw addresses or private account records. The Roth
 composite's older conversion-rule table is aligned for the no-income and
 full-retirement-exclusion states that fit that simpler rule shape.
 
+Current source also adds the S9 household/survivor layer. `social_security.py`
+now has a simplified two-person Social Security helper for own, age-reduced
+spousal, household, and survivor benefit snapshots. `income_layering` can accept
+optional spouse Social Security and first-survivor-year filing-status inputs,
+then show survivor benefit continuity and joint-to-single tax compression in the
+yearly timeline. The public boundary remains de-identified: PIAs, claim ages,
+filing statuses, ages, and numeric assumptions only.
+
 The collar-book realistic-fill layer is part of current source. The engine plus
 REST/MCP parsers accept midpoint `net_credit` and optional executable pricing
 (`executable_net_credit` or `call_bid` minus `put_ask`) and return stock price,
@@ -193,7 +201,7 @@ gracefully to `None` / empty / `503` when its key is absent.
 - **`GET /api/usage`** — provider usage / quota report.
 - **`POST /mcp`** — MCP-over-HTTP transport (FastMCP, also `nexus-core mcp` over
   stdio) exposing the above as tools, plus `health` / `describe` / `get_quotes`
-  and the 30 current-source planning tools in full mode; demo mode registers
+  and the 31 current-source planning tools in full mode; demo mode registers
   only closed-world demo tools. `GET /api/planning/tools` +
   `POST /api/planning/tools/{id}` are the REST planning gateway
   (contractVersion `0.1.0`) for service/browser callers, with `/mcp/tools`

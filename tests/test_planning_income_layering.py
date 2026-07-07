@@ -130,6 +130,72 @@ def test_rmd_withdrawal_increases_taxable_social_security() -> None:
     assert first["totalTax"] > 5_000.0
 
 
+def test_household_social_security_survivor_step_down_and_filing_status() -> None:
+    result = income_layering(
+        current_age=67,
+        terminal_age=70,
+        spending_target=0.0,
+        filing_status="married_joint",
+        base_year=2026,
+        social_security=SocialSecurityIncome(pia_monthly=3_000.0, claim_age=67),
+        spouse_social_security=SocialSecurityIncome(pia_monthly=800.0, claim_age=67),
+        survivor_year=2028,
+        survivor_filing_status="single",
+    )
+
+    first_ss = next(
+        layer for layer in result["years"][0]["layers"] if layer["source"] == "social_security"
+    )
+    survivor_ss = next(
+        layer for layer in result["years"][2]["layers"] if layer["source"] == "social_security"
+    )
+    assert first_ss["gross"] == pytest.approx(54_000.0)
+    assert survivor_ss["gross"] == pytest.approx(36_000.0)
+    assert result["years"][0]["filingStatus"] == "married_joint"
+    assert result["years"][2]["filingStatus"] == "single"
+    assert result["years"][2]["survivorActive"] is True
+
+
+def test_survivor_year_uses_tax_year_when_base_year_is_omitted() -> None:
+    result = income_layering(
+        current_age=67,
+        terminal_age=70,
+        spending_target=0.0,
+        filing_status="married_joint",
+        tax_year=2026,
+        social_security=SocialSecurityIncome(pia_monthly=3_000.0, claim_age=67),
+        spouse_social_security=SocialSecurityIncome(pia_monthly=800.0, claim_age=67),
+        survivor_year=2028,
+        survivor_filing_status="single",
+    )
+
+    survivor_ss = next(
+        layer for layer in result["years"][2]["layers"] if layer["source"] == "social_security"
+    )
+    assert result["years"][2]["year"] == 2
+    assert survivor_ss["gross"] == pytest.approx(36_000.0)
+    assert result["years"][2]["filingStatus"] == "single"
+    assert result["years"][2]["survivorActive"] is True
+
+
+def test_survivor_single_filing_status_increases_tax_vs_joint() -> None:
+    common = {
+        "current_age": 67,
+        "terminal_age": 70,
+        "spending_target": 0.0,
+        "filing_status": "married_joint",
+        "base_year": 2026,
+        "income_streams": (IncomeStream("pension", 150_000.0, 67),),
+        "social_security": SocialSecurityIncome(pia_monthly=3_000.0, claim_age=67),
+        "spouse_social_security": SocialSecurityIncome(pia_monthly=800.0, claim_age=67),
+        "survivor_year": 2028,
+    }
+    single = income_layering(**common, survivor_filing_status="single")
+    joint = income_layering(**common, survivor_filing_status="married_joint")
+
+    assert single["years"][2]["totalTax"] > joint["years"][2]["totalTax"]
+
+
 def test_state_tax_layers_pa_excludes_retirement_income() -> None:
     pa = income_layering(
         current_age=65,
@@ -332,6 +398,29 @@ def test_income_layering_gateway_accepts_state_and_residency_change() -> None:
     assert body["assumptions"]["residencyChange"] == {"year": 2027, "from": "PA", "to": "FL"}
 
 
+def test_income_layering_gateway_accepts_spouse_and_survivor_fields() -> None:
+    status, body = _call_gateway_tool(
+        "income_layering",
+        {
+            "currentAge": 67,
+            "terminalAge": 70,
+            "spendingTarget": 0,
+            "filingStatus": "married_joint",
+            "baseYear": 2026,
+            "socialSecurity": {"piaMonthly": 3_000, "claimAge": 67},
+            "spouseSocialSecurity": {"piaMonthly": 800, "claimAge": 67},
+            "survivorYear": 2028,
+            "survivorFilingStatus": "single",
+        },
+    )
+
+    assert status == 200
+    assert body["years"][2]["survivorActive"] is True
+    assert body["years"][2]["filingStatus"] == "single"
+    assert body["assumptions"]["spouseSocialSecurityClaimAge"] == 67
+    assert body["assumptions"]["survivorYear"] == 2028
+
+
 def test_income_layering_gateway_rejects_stream_labels() -> None:
     status, body = _call_gateway_tool(
         "income_layering",
@@ -390,6 +479,22 @@ def test_income_layering_gateway_rejects_extra_residency_change_fields() -> None
     assert "identity fields are not accepted" in body
 
 
+def test_income_layering_gateway_rejects_spouse_identity_fields() -> None:
+    status, body = _call_gateway_tool(
+        "income_layering",
+        {
+            "currentAge": 67,
+            "terminalAge": 68,
+            "spendingTarget": 0,
+            "socialSecurity": {"piaMonthly": 3_000, "claimAge": 67},
+            "spouseSocialSecurity": {"piaMonthly": 800, "claimAge": 67, "name": "Spouse"},
+        },
+    )
+
+    assert status == 400
+    assert "identity fields are not accepted" in body
+
+
 def test_income_layering_gateway_rejects_explicit_invalid_fra_age() -> None:
     status, body = _call_gateway_tool(
         "income_layering",
@@ -409,7 +514,7 @@ def test_income_layering_schema_exposes_wire_shape() -> None:
     schema = income_layering_result_schema()
 
     assert schema["title"] == "IncomeLayeringResult"
-    assert schema["$id"].endswith("income-layering-result-0.1.1.json")
+    assert schema["$id"].endswith("income-layering-result-0.1.2.json")
     assert "years" in schema["properties"]
     assert "rollups" in schema["properties"]
     layer_props = schema["properties"]["years"]["items"]["properties"]["layers"]["items"][
@@ -418,3 +523,5 @@ def test_income_layering_schema_exposes_wire_shape() -> None:
     assert "source" in layer_props
     assert "stateTax" in schema["properties"]["years"]["items"]["properties"]
     assert "residencyChange" in schema["properties"]["assumptions"]["properties"]
+    assert "survivorActive" in schema["properties"]["years"]["items"]["properties"]
+    assert "spouseSocialSecurityClaimAge" in schema["properties"]["assumptions"]["properties"]

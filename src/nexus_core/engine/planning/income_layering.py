@@ -24,7 +24,7 @@ from typing import Any, Literal
 
 from .bracket_headroom import bracket_headroom
 from .income_model import ss_taxable
-from .social_security import social_security_claiming
+from .social_security import social_security_claiming, spouse_benefit_reduction_factor
 from .state_tax import (
     IncomeSource,
     StateResidencyChange,
@@ -168,6 +168,42 @@ def _ss_annual_benefit(ss: SocialSecurityIncome | None) -> float:
         if row["claimAge"] == ss.claim_age:
             return float(row["annualBenefit"])
     raise ValueError("social_security.claim_age must be between 62 and 70")
+
+
+def _ss_annual_at_age(ss: SocialSecurityIncome | None, age: int) -> float:
+    if ss is None or age < ss.claim_age:
+        return 0.0
+    return _ss_annual_benefit(ss) * (1.0 + ss.cola_rate) ** (age - ss.claim_age)
+
+
+def _household_ss_annual_at_age(
+    *,
+    primary: SocialSecurityIncome | None,
+    spouse: SocialSecurityIncome | None,
+    age: int,
+    survivor_active: bool,
+) -> float:
+    primary_own = _ss_annual_at_age(primary, age)
+    spouse_own = _ss_annual_at_age(spouse, age)
+    if spouse is None:
+        return primary_own
+    if survivor_active:
+        return max(primary_own, spouse_own)
+    spouse_spousal = 0.0
+    if primary is not None and age >= primary.claim_age and age >= spouse.claim_age:
+        spouse_factor = spouse_benefit_reduction_factor(
+            claim_age=spouse.claim_age,
+            fra_age=spouse.fra_age,
+        )
+        spouse_spousal = (
+            primary.pia_monthly
+            * 0.5
+            * spouse_factor
+            * 12.0
+            * (1.0 + spouse.cola_rate) ** (age - spouse.claim_age)
+        )
+    spouse_payable = max(spouse_own, spouse_spousal)
+    return primary_own + spouse_payable
 
 
 def _stream_amount(stream: IncomeStream, age: int) -> float:
@@ -609,12 +645,20 @@ def income_layering(
     birth_year: int | None = None,
     state: str | None = None,
     residency_change: StateResidencyChange | None = None,
+    spouse_social_security: SocialSecurityIncome | None = None,
+    survivor_year: int | None = None,
+    survivor_filing_status: FilingStatus = "single",
 ) -> dict[str, Any]:
     """Return a deterministic stacked-income timeline.
 
     The account waterfall uses the existing ``tax_aware_withdrawal`` kernel:
     RMDs first, then taxable -> traditional -> Roth. Optional bracket fill draws
     additional traditional dollars up to a requested federal marginal rate.
+    ``survivor_year`` is the first year to model survivor-only benefits and the
+    requested survivor filing status; it is not a date-of-death final-return
+    model. If ``base_year`` is omitted, survivor-year comparisons use
+    ``tax_year + offset`` while returned row ``year`` values keep legacy offset
+    semantics.
     """
     _check_int("current_age", current_age)
     _check_int("terminal_age", terminal_age)
@@ -647,6 +691,23 @@ def income_layering(
         _check_int("social_security.claim_age", social_security.claim_age)
         _check_int("social_security.fra_age", social_security.fra_age)
         _check_rate("social_security.cola_rate", social_security.cola_rate)
+        _ss_annual_benefit(social_security)
+    if spouse_social_security is not None:
+        if social_security is None:
+            raise ValueError("spouse_social_security requires social_security")
+        _check_non_negative(
+            "spouse_social_security.pia_monthly", spouse_social_security.pia_monthly
+        )
+        _check_int("spouse_social_security.claim_age", spouse_social_security.claim_age)
+        _check_int("spouse_social_security.fra_age", spouse_social_security.fra_age)
+        _check_rate("spouse_social_security.cola_rate", spouse_social_security.cola_rate)
+        _ss_annual_benefit(spouse_social_security)
+    if survivor_filing_status not in _FILING_STATUSES:
+        raise ValueError(f"survivor_filing_status must be one of {', '.join(_FILING_STATUSES)}")
+    if survivor_year is not None:
+        _check_int("survivor_year", survivor_year)
+        if spouse_social_security is None:
+            raise ValueError("survivor_year requires spouse_social_security")
     for index, stream in enumerate(income_streams):
         if stream.kind not in ("pension", "annuity"):
             raise ValueError(f"income_streams[{index}].kind must be pension or annuity")
@@ -665,7 +726,6 @@ def income_layering(
         account_returns=account_returns,
     )
     starting_balances = dict(balances)
-    ss_base_annual = _ss_annual_benefit(social_security)
     rows: list[dict[str, Any]] = []
     source_rollups: dict[str, dict[str, float]] = {}
     total_spending = 0.0
@@ -682,13 +742,19 @@ def income_layering(
         age = current_age + offset
         year = base_year + offset if base_year is not None else offset
         state_projection_year = year if base_year is not None else tax_year + offset
+        survivor_projection_year = state_projection_year
+        survivor_active = (
+            survivor_year is not None and survivor_projection_year >= survivor_year
+        )
+        year_filing_status = survivor_filing_status if survivor_active else filing_status
         spending = spending_target * (1.0 + spending_inflation_rate) ** offset
         earned = earned_income * (1.0 + wage_growth_rate) ** offset if age < retirement_age else 0.0
-        ss_gross = 0.0
-        if social_security is not None and age >= social_security.claim_age:
-            ss_gross = ss_base_annual * (1.0 + social_security.cola_rate) ** (
-                age - social_security.claim_age
-            )
+        ss_gross = _household_ss_annual_at_age(
+            primary=social_security,
+            spouse=spouse_social_security,
+            age=age,
+            survivor_active=survivor_active,
+        )
         stream_by_kind = {"pension": 0.0, "annuity": 0.0}
         for stream in income_streams:
             stream_by_kind[stream.kind] += _stream_amount(stream, age)
@@ -707,7 +773,7 @@ def income_layering(
             annuity_gross=annuity_gross,
             ss_gross=ss_gross,
             age=age,
-            filing_status=filing_status,
+            filing_status=year_filing_status,
             tax_year=tax_year,
             birth_year=birth_year,
             state=state,
@@ -731,7 +797,7 @@ def income_layering(
             ss_gross=ss_gross,
             non_ss_ordinary=non_ss_ordinary,
             target_rate=bracket_fill_target_rate,
-            filing_status=filing_status,
+            filing_status=year_filing_status,
             tax_year=tax_year,
         )
         if bracket_fill_gross > 0.004:
@@ -746,7 +812,7 @@ def income_layering(
             ss_gross=ss_gross,
             non_ss_ordinary=non_ss_ordinary,
             withdrawals=withdrawals,
-            filing_status=filing_status,
+            filing_status=year_filing_status,
             tax_year=tax_year,
         )
         state_code, state_rule = _state_rule_for_year(
@@ -758,7 +824,7 @@ def income_layering(
         state_tax_by_source, state_notes, state_table_version = _state_tax_by_source(
             state_rule=state_rule,
             age=age,
-            filing_status=filing_status,
+            filing_status=year_filing_status,
             earned=earned,
             ss_gross=ss_gross,
             pension_gross=pension_gross,
@@ -881,6 +947,9 @@ def income_layering(
                     f"No reference state-tax rule registered for {state_code}; state tax is not modeled."
                 ]
             )
+        if survivor_year is not None:
+            row["filingStatus"] = year_filing_status
+            row["survivorActive"] = survivor_active
         rows.append(row)
 
     ending_balances = {
@@ -940,7 +1009,15 @@ def income_layering(
             if social_security is None
             else social_security.claim_age,
             "socialSecurityFraAge": None if social_security is None else social_security.fra_age,
+            "spouseSocialSecurityClaimAge": None
+            if spouse_social_security is None
+            else spouse_social_security.claim_age,
+            "spouseSocialSecurityFraAge": None
+            if spouse_social_security is None
+            else spouse_social_security.fra_age,
             "bracketFillTargetRate": bracket_fill_target_rate,
+            "survivorYear": survivor_year,
+            "survivorFilingStatus": survivor_filing_status if survivor_year is not None else None,
             **(
                 {
                     "state": state.upper() if state is not None else None,

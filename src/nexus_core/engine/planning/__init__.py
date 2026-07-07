@@ -67,7 +67,7 @@ from .rmd import rmd
 from .roth_analysis import analyze_roth_conversion, sequence_conversions
 from .roth_conversion import roth_conversion
 from .sequence_risk import sequence_of_returns_stress
-from .social_security import social_security_claiming
+from .social_security import household_social_security_benefits, social_security_claiming
 from .state_tax import (
     StateResidencyChange,
     StateRetirementExclusion,
@@ -150,6 +150,7 @@ __all__ = [
     "estimate_state_income_tax_components",
     "historical_blend",
     "historical_blend_result_schema",
+    "household_social_security_benefits",
     "irmaa_headroom",
     "income_layering",
     "income_layering_result_schema",
