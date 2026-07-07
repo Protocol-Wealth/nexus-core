@@ -10,9 +10,9 @@ notes, transactions, or storage hooks belong here.
 
 The tax model is a planning illustration, not advice: US federal ordinary brackets
 plus the existing simplified withdrawal kernel, with Social Security taxable
-benefits computed through the shared provisional-income helper. State taxes,
-phaseouts beyond that helper, and account-specific cost basis are deliberately
-outside this slice.
+benefits computed through the shared provisional-income helper. Optional state
+tax uses the reference table in ``state_tax.py``; account-specific cost basis and
+local tax hooks remain outside this slice.
 """
 
 from __future__ import annotations
@@ -25,6 +25,15 @@ from typing import Any, Literal
 from .bracket_headroom import bracket_headroom
 from .income_model import ss_taxable
 from .social_security import social_security_claiming
+from .state_tax import (
+    IncomeSource,
+    StateResidencyChange,
+    StateTaxRule,
+    estimate_state_income_tax_components,
+    reference_state_tax_rule,
+    state_code_for_year,
+    state_tax_notes,
+)
 from .tables import reference_bracket_table
 from .tax import (
     RMD_START_AGE_POLICY_VERSION,
@@ -85,6 +94,17 @@ class _YearTaxPicture:
     @property
     def total_tax(self) -> float:
         return self.ordinary_tax + self.taxable_withdrawal_tax
+
+
+@dataclass(frozen=True, slots=True)
+class _CombinedTaxPicture:
+    taxable_ss: float
+    federal_tax: float
+    state_tax: float
+
+    @property
+    def total_tax(self) -> float:
+        return self.federal_tax + self.state_tax
 
 
 def _check_int(name: str, value: int) -> None:
@@ -205,6 +225,9 @@ def _tax_aware_plan(
     filing_status: FilingStatus,
     tax_year: int,
     birth_year: int | None,
+    state: str | None,
+    residency_change: StateResidencyChange | None,
+    projection_year: int,
 ) -> dict[str, Any]:
     available = sum(balances.values())
     bounded_need = min(max(0.0, gross_need), available)
@@ -228,6 +251,79 @@ def _tax_aware_plan(
         age=age,
         other_taxable_income=taxable_ordinary,
         birth_year=birth_year,
+        state=state,
+        residency_change=residency_change,
+        projection_year=projection_year,
+    )
+
+
+def _state_rule_for_year(
+    *,
+    state: str | None,
+    residency_change: StateResidencyChange | None,
+    projection_year: int,
+    tax_year: int,
+) -> tuple[str | None, StateTaxRule | None]:
+    state_code = state_code_for_year(
+        base_state=state,
+        residency_change=residency_change,
+        year=projection_year,
+    )
+    if state_code is None:
+        return None, None
+    return state_code, reference_state_tax_rule(state_code, tax_year)
+
+
+def _state_tax_by_source(
+    *,
+    state_rule: StateTaxRule | None,
+    age: int,
+    filing_status: FilingStatus,
+    earned: float,
+    ss_gross: float,
+    pension_gross: float,
+    annuity_gross: float,
+    forced_rmd: float,
+    discretionary_trad: float,
+    bracket_fill_gross: float,
+    taxable_gross: float,
+    roth_gross: float,
+) -> tuple[dict[str, float], tuple[str, ...], str | None]:
+    if state_rule is None:
+        return {}, (), None
+    taxable_gain = taxable_gross * TAXABLE_WITHDRAWAL_GAIN_FRACTION
+    components: list[tuple[str, IncomeSource, float]] = [
+        ("earned_income", "earned_income", earned),
+        ("social_security", "social_security", ss_gross),
+        ("pension", "pension", pension_gross),
+        ("annuity", "annuity", annuity_gross),
+        ("rmd", "traditional_distribution", forced_rmd),
+        ("traditional_withdrawal", "traditional_distribution", discretionary_trad),
+        ("bracket_fill", "traditional_distribution", bracket_fill_gross),
+        ("taxable_withdrawal", "taxable_gain", taxable_gain),
+        ("roth_withdrawal", "roth_distribution", roth_gross),
+    ]
+    total_income = (
+        earned
+        + ss_gross
+        + pension_gross
+        + annuity_gross
+        + forced_rmd
+        + discretionary_trad
+        + bracket_fill_gross
+        + taxable_gain
+    )
+    estimates = estimate_state_income_tax_components(
+        state_rule,
+        components,
+        age=age,
+        filing_status=filing_status,
+        total_income=total_income,
+    )
+    return (
+        {source: estimate.tax for source, estimate in estimates.items()},
+        state_tax_notes(state_rule, tuple(estimates.values())),
+        state_rule.table_version,
     )
 
 
@@ -279,24 +375,81 @@ def _year_tax_picture(
     )
 
 
+def _combined_tax_picture(
+    *,
+    ss_gross: float,
+    earned: float,
+    pension_gross: float,
+    annuity_gross: float,
+    withdrawals: Mapping[str, float],
+    filing_status: FilingStatus,
+    tax_year: int,
+    age: int,
+    state_rule: StateTaxRule | None,
+) -> _CombinedTaxPicture:
+    non_ss_ordinary = earned + pension_gross + annuity_gross
+    federal = _year_tax_picture(
+        ss_gross=ss_gross,
+        non_ss_ordinary=non_ss_ordinary,
+        withdrawals=withdrawals,
+        filing_status=filing_status,
+        tax_year=tax_year,
+    )
+    state_tax_by_source, _, _ = _state_tax_by_source(
+        state_rule=state_rule,
+        age=age,
+        filing_status=filing_status,
+        earned=earned,
+        ss_gross=ss_gross,
+        pension_gross=pension_gross,
+        annuity_gross=annuity_gross,
+        forced_rmd=0.0,
+        discretionary_trad=withdrawals.get("traditional", 0.0),
+        bracket_fill_gross=0.0,
+        taxable_gross=withdrawals.get("taxable", 0.0),
+        roth_gross=withdrawals.get("roth", 0.0),
+    )
+    return _CombinedTaxPicture(
+        taxable_ss=federal.taxable_ss,
+        federal_tax=federal.total_tax,
+        state_tax=sum(state_tax_by_source.values()),
+    )
+
+
 def _gross_up_withdrawal_need(
     *,
     balances: dict[AccountType, float],
     spending_target: float,
     base_gross: float,
-    non_ss_ordinary: float,
+    earned: float,
+    pension_gross: float,
+    annuity_gross: float,
     ss_gross: float,
     age: int,
     filing_status: FilingStatus,
     tax_year: int,
     birth_year: int | None,
+    state: str | None,
+    residency_change: StateResidencyChange | None,
+    projection_year: int,
 ) -> dict[str, Any]:
-    base_picture = _year_tax_picture(
+    non_ss_ordinary = earned + pension_gross + annuity_gross
+    _, state_rule = _state_rule_for_year(
+        state=state,
+        residency_change=residency_change,
+        projection_year=projection_year,
+        tax_year=tax_year,
+    )
+    base_picture = _combined_tax_picture(
         ss_gross=ss_gross,
-        non_ss_ordinary=non_ss_ordinary,
+        earned=earned,
+        pension_gross=pension_gross,
+        annuity_gross=annuity_gross,
         withdrawals={"taxable": 0.0, "traditional": 0.0, "roth": 0.0},
         filing_status=filing_status,
         tax_year=tax_year,
+        age=age,
+        state_rule=state_rule,
     )
     target = max(0.0, spending_target - base_gross + base_picture.total_tax)
     plan = _tax_aware_plan(
@@ -307,18 +460,25 @@ def _gross_up_withdrawal_need(
         filing_status=filing_status,
         tax_year=tax_year,
         birth_year=birth_year,
+        state=state,
+        residency_change=residency_change,
+        projection_year=projection_year,
     )
     for _ in range(6):
         withdrawals: dict[str, float] = {
             account_type: gross
             for account_type, (gross, _) in _withdrawal_rows_by_type(plan["withdrawals"]).items()
         }
-        picture = _year_tax_picture(
+        picture = _combined_tax_picture(
             ss_gross=ss_gross,
-            non_ss_ordinary=non_ss_ordinary,
+            earned=earned,
+            pension_gross=pension_gross,
+            annuity_gross=annuity_gross,
             withdrawals=withdrawals,
             filing_status=filing_status,
             tax_year=tax_year,
+            age=age,
+            state_rule=state_rule,
         )
         next_target = max(0.0, spending_target - base_gross + picture.total_tax)
         if abs(next_target - target) < 0.005:
@@ -332,6 +492,9 @@ def _gross_up_withdrawal_need(
             filing_status=filing_status,
             tax_year=tax_year,
             birth_year=birth_year,
+            state=state,
+            residency_change=residency_change,
+            projection_year=projection_year,
         )
     return plan
 
@@ -444,6 +607,8 @@ def income_layering(
     expected_return: float = 0.05,
     bracket_fill_target_rate: float | None = None,
     birth_year: int | None = None,
+    state: str | None = None,
+    residency_change: StateResidencyChange | None = None,
 ) -> dict[str, Any]:
     """Return a deterministic stacked-income timeline.
 
@@ -506,13 +671,17 @@ def income_layering(
     total_spending = 0.0
     total_gross = 0.0
     total_tax = 0.0
+    total_federal_tax = 0.0
+    total_state_tax = 0.0
     total_gap = 0.0
     total_surplus = 0.0
     first_gap_age: int | None = None
+    state_requested = state is not None or residency_change is not None
 
     for offset in range(terminal_age - current_age + 1):
         age = current_age + offset
         year = base_year + offset if base_year is not None else offset
+        state_projection_year = year if base_year is not None else tax_year + offset
         spending = spending_target * (1.0 + spending_inflation_rate) ** offset
         earned = earned_income * (1.0 + wage_growth_rate) ** offset if age < retirement_age else 0.0
         ss_gross = 0.0
@@ -533,12 +702,17 @@ def income_layering(
             balances=balances,
             spending_target=spending,
             base_gross=base_gross,
-            non_ss_ordinary=non_ss_ordinary,
+            earned=earned,
+            pension_gross=pension_gross,
+            annuity_gross=annuity_gross,
             ss_gross=ss_gross,
             age=age,
             filing_status=filing_status,
             tax_year=tax_year,
             birth_year=birth_year,
+            state=state,
+            residency_change=residency_change,
+            projection_year=state_projection_year,
         )
         by_type = _withdrawal_rows_by_type(plan["withdrawals"])
         forced_rmd = min(
@@ -575,6 +749,26 @@ def income_layering(
             filing_status=filing_status,
             tax_year=tax_year,
         )
+        state_code, state_rule = _state_rule_for_year(
+            state=state,
+            residency_change=residency_change,
+            projection_year=state_projection_year,
+            tax_year=tax_year,
+        )
+        state_tax_by_source, state_notes, state_table_version = _state_tax_by_source(
+            state_rule=state_rule,
+            age=age,
+            filing_status=filing_status,
+            earned=earned,
+            ss_gross=ss_gross,
+            pension_gross=pension_gross,
+            annuity_gross=annuity_gross,
+            forced_rmd=forced_rmd,
+            discretionary_trad=discretionary_trad,
+            bracket_fill_gross=bracket_fill_gross,
+            taxable_gross=taxable_gross,
+            roth_gross=roth_gross,
+        )
         ordinary_components = [
             ("earned_income", earned, earned),
             ("social_security", ss_gross, tax_picture.taxable_ss),
@@ -600,28 +794,36 @@ def income_layering(
                 layers,
                 source,
                 gross_by_source.get(source, 0.0),
-                ordinary_tax_by_source.get(source, 0.0),
+                ordinary_tax_by_source.get(source, 0.0) + state_tax_by_source.get(source, 0.0),
             )
         if taxable_gross > 0.004:
             _add_layer(
                 layers,
                 "taxable_withdrawal",
                 taxable_gross,
-                tax_picture.taxable_withdrawal_tax,
+                tax_picture.taxable_withdrawal_tax
+                + state_tax_by_source.get("taxable_withdrawal", 0.0),
             )
         _add_layer(
             layers,
             "traditional_withdrawal",
             gross_by_source.get("traditional_withdrawal", 0.0),
-            ordinary_tax_by_source.get("traditional_withdrawal", 0.0),
+            ordinary_tax_by_source.get("traditional_withdrawal", 0.0)
+            + state_tax_by_source.get("traditional_withdrawal", 0.0),
         )
         if roth_gross > 0.004:
-            _add_layer(layers, "roth_withdrawal", roth_gross, 0.0)
+            _add_layer(
+                layers,
+                "roth_withdrawal",
+                roth_gross,
+                state_tax_by_source.get("roth_withdrawal", 0.0),
+            )
         _add_layer(
             layers,
             "bracket_fill",
             gross_by_source.get("bracket_fill", 0.0),
-            ordinary_tax_by_source.get("bracket_fill", 0.0),
+            ordinary_tax_by_source.get("bracket_fill", 0.0)
+            + state_tax_by_source.get("bracket_fill", 0.0),
         )
         for account_type in _ACCOUNT_TYPES:
             balances[account_type] = max(0.0, balances[account_type] - withdrawals[account_type])
@@ -629,6 +831,8 @@ def income_layering(
 
         year_gross = sum(layer["gross"] for layer in layers)
         year_tax = sum(layer["tax"] for layer in layers)
+        year_state_tax = sum(state_tax_by_source.values())
+        year_federal_tax = year_tax - year_state_tax
         net_income = year_gross - year_tax
         gap = max(0.0, spending - net_income)
         surplus = max(0.0, net_income - spending)
@@ -638,6 +842,8 @@ def income_layering(
         total_spending += spending
         total_gross += year_gross
         total_tax += year_tax
+        total_federal_tax += year_federal_tax
+        total_state_tax += year_state_tax
         total_gap += gap
         total_surplus += surplus
         for layer in layers:
@@ -662,6 +868,19 @@ def income_layering(
         }
         if headroom is not None:
             row["bracketHeadroom"] = headroom
+        if state_requested:
+            row["stateCode"] = state_code
+            row["stateTaxModeled"] = state_rule is not None
+            row["federalTax"] = round(year_federal_tax, 2)
+            row["stateTax"] = round(year_state_tax, 2)
+            row["stateTaxTableVersion"] = state_table_version
+            row["stateTaxNotes"] = (
+                list(state_notes)
+                if state_rule is not None
+                else [
+                    f"No reference state-tax rule registered for {state_code}; state tax is not modeled."
+                ]
+            )
         rows.append(row)
 
     ending_balances = {
@@ -685,6 +904,14 @@ def income_layering(
             "totalSpendingTarget": round(total_spending, 2),
             "totalGrossIncome": round(total_gross, 2),
             "totalTax": round(total_tax, 2),
+            **(
+                {
+                    "totalFederalTax": round(total_federal_tax, 2),
+                    "totalStateTax": round(total_state_tax, 2),
+                }
+                if state_requested
+                else {}
+            ),
             "totalNetIncome": round(total_gross - total_tax, 2),
             "totalGap": round(total_gap, 2),
             "totalSurplusAfterTax": round(total_surplus, 2),
@@ -714,6 +941,20 @@ def income_layering(
             else social_security.claim_age,
             "socialSecurityFraAge": None if social_security is None else social_security.fra_age,
             "bracketFillTargetRate": bracket_fill_target_rate,
+            **(
+                {
+                    "state": state.upper() if state is not None else None,
+                    "residencyChange": None
+                    if residency_change is None
+                    else {
+                        "year": residency_change.year,
+                        "from": residency_change.from_state,
+                        "to": residency_change.to_state,
+                    },
+                }
+                if state_requested
+                else {}
+            ),
         },
     }
 

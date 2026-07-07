@@ -74,6 +74,17 @@ sigma-band exhibits from aligned monthly public proxy returns. The wrapper
 sources public asset-class histories; the pure engine sees only de-identified
 return series and weights.
 
+Current source also adds the S7 illustrative state/local tax layer. The
+data-driven 2026 table covers no-income-tax states, PA/IL/MS/IA full retirement
+exclusions, and selected partial/senior exclusions for CO/NY/VA/NJ/MD/DE.
+`tax_aware_withdrawal` and `income_layering` accept optional 2-letter `state`
+and deterministic `residencyChange` inputs, expose federal/state tax splits and
+table versions when modeled, and mark unknown states unmodeled rather than
+assuming zero. The public engine still accepts only de-identified numeric inputs
+and state codes, never raw addresses or private account records. The Roth
+composite's older conversion-rule table is aligned for the no-income and
+full-retirement-exclusion states that fit that simpler rule shape.
+
 The collar-book realistic-fill layer is part of current source. The engine plus
 REST/MCP parsers accept midpoint `net_credit` and optional executable pricing
 (`executable_net_credit` or `call_bid` minus `put_ask`) and return stock price,

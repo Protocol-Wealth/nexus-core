@@ -669,13 +669,22 @@ _NO_INCOME_TAX_STATES = frozenset({"AK", "FL", "NV", "NH", "SD", "TN", "TX", "WA
 _REFERENCE_STATE_RATES: dict[str, float] = {
     "AZ": 0.025,
     "CO": 0.044,
+    "DE": 0.066,
+    "MD": 0.0575,
     "IL": 0.0495,
     "MA": 0.05,
     "MI": 0.0425,
     "NC": 0.045,
+    "NJ": 0.05525,
     "NY": 0.0685,
     "OH": 0.035,
     "VA": 0.0575,
+}
+_REFERENCE_RETIREMENT_EXEMPT_STATES: dict[str, tuple[float, int]] = {
+    "PA": (0.0307, 59),
+    "IL": (0.0495, 0),
+    "MS": (0.044, 59),
+    "IA": (0.038, 55),
 }
 
 
@@ -687,8 +696,9 @@ def reference_state_rule(state_code: str) -> StateConversionRule | None:
     documented exempt-past-retirement-age case.
     """
     code = state_code.upper()
-    if code == "PA":
-        return StateConversionRule("PA", "exempt_retirement", rate=0.0307, retirement_exempt_age=59)
+    if code in _REFERENCE_RETIREMENT_EXEMPT_STATES:
+        rate, age = _REFERENCE_RETIREMENT_EXEMPT_STATES[code]
+        return StateConversionRule(code, "exempt_retirement", rate=rate, retirement_exempt_age=age)
     if code in _NO_INCOME_TAX_STATES:
         return StateConversionRule(code, "none")
     if code in _REFERENCE_STATE_RATES:

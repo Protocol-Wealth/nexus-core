@@ -44,6 +44,29 @@ def test_tax_aware_withdrawal_tool_accepts_birth_year_policy() -> None:
     assert out["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
 
 
+def test_tax_aware_withdrawal_tool_accepts_state_tax_fields() -> None:
+    out = tax_aware_withdrawal_tool(
+        {
+            "year": 2026,
+            "filingStatus": "single",
+            "accounts": [{"type": "traditional", "balance": 500_000, "allocation": {"x": 1.0}}],
+            "grossNeed": 50_000,
+            "age": 50,
+            "otherTaxableIncome": 0,
+            "state": "PA",
+            "residencyChange": {"year": 2027, "from": "PA", "to": "FL"},
+            "projectionYear": 2026,
+        }
+    )
+
+    assert out["stateCode"] == "PA"
+    assert out["stateTaxModeled"] is True
+    assert out["stateTax"] > 0.0
+    assert out["withdrawals"][0]["tax"] == pytest.approx(
+        out["withdrawals"][0]["federalTax"] + out["withdrawals"][0]["stateTax"]
+    )
+
+
 def test_tax_bracket_headroom_tool_stamps_table_version() -> None:
     out = tax_bracket_headroom_tool(
         {"taxableIncome": 100_000, "filingStatus": "single", "year": 2026}

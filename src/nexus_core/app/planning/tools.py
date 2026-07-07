@@ -35,6 +35,7 @@ from ...engine.planning import (
     InfeasiblePlanError,
     SocialSecurityIncome,
     SolveResult,
+    StateResidencyChange,
     analyze_goals,
     analyze_roth_conversion,
     bracket_headroom,
@@ -184,6 +185,46 @@ def _as_str(body: dict[str, Any], key: str) -> str:
     if not isinstance(value, str):
         raise PlanningInputError(f"field '{key}' must be a string; got {value!r}")
     return value
+
+
+def _optional_state_code(body: dict[str, Any], key: str) -> str | None:
+    value = body.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or len(value) != 2 or not value.isalpha():
+        raise PlanningInputError(f"{key} must be a 2-letter state code or omitted")
+    return value.upper()
+
+
+def _optional_residency_change(body: dict[str, Any]) -> StateResidencyChange | None:
+    value = body.get("residencyChange")
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise PlanningInputError("residencyChange must be an object or omitted")
+    allowed = {"year", "from", "to"}
+    extra = set(value) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"residencyChange only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
+        )
+    for key in allowed:
+        if key not in value:
+            raise PlanningInputError(f"residencyChange missing required field '{key}'")
+    if (
+        isinstance(value["year"], bool)
+        or not isinstance(value["year"], (int, float))
+        or value["year"] != int(value["year"])
+    ):
+        raise PlanningInputError("residencyChange.year must be a whole number")
+    for key in ("from", "to"):
+        if not isinstance(value[key], str) or len(value[key]) != 2 or not value[key].isalpha():
+            raise PlanningInputError(f"residencyChange.{key} must be a 2-letter state code")
+    return StateResidencyChange(
+        year=int(value["year"]),
+        from_state=value["from"].upper(),
+        to_state=value["to"].upper(),
+    )
 
 
 def _as_str_list(body: dict[str, Any], key: str) -> list[str]:
@@ -355,6 +396,9 @@ def tax_aware_withdrawal_tool(body: dict[str, Any]) -> dict[str, Any]:
             age=_as_int(body, "age"),
             other_taxable_income=float(other),
             birth_year=_optional_int(body, "birthYear"),
+            state=_optional_state_code(body, "state"),
+            residency_change=_optional_residency_change(body),
+            projection_year=_optional_int(body, "projectionYear"),
         )
     except InfeasiblePlanError as exc:
         raise PlanningInfeasibleError(str(exc)) from exc
@@ -684,6 +728,8 @@ def income_layering_tool(body: dict[str, Any]) -> dict[str, Any]:
         "expectedReturn",
         "bracketFillTargetRate",
         "birthYear",
+        "state",
+        "residencyChange",
     }
     extra = set(body) - allowed
     if extra:
@@ -722,6 +768,8 @@ def income_layering_tool(body: dict[str, Any]) -> dict[str, Any]:
             expected_return=_optional_number(body, "expectedReturn", 0.05),
             bracket_fill_target_rate=float(bracket_fill) if bracket_fill is not None else None,
             birth_year=_optional_int(body, "birthYear"),
+            state=_optional_state_code(body, "state"),
+            residency_change=_optional_residency_change(body),
         )
     except InfeasiblePlanError as exc:
         raise PlanningInfeasibleError(str(exc)) from exc

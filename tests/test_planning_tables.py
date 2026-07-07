@@ -21,6 +21,7 @@ from nexus_core.engine.planning.tables import (
     TableError,
     reference_bracket_table,
     reference_irmaa_table,
+    reference_state_rule,
 )
 
 
@@ -76,6 +77,16 @@ def test_state_rule_from_dict() -> None:
     )
     assert rule.state_code == "PA"
     assert rule.treatment == "exempt_retirement"
+
+
+def test_reference_state_rule_covers_s7_retirement_exclusion_states() -> None:
+    pa = reference_state_rule("PA")
+    il = reference_state_rule("IL")
+    ia = reference_state_rule("IA")
+    assert pa is not None and pa.treatment == "exempt_retirement"
+    assert il is not None and il.treatment == "exempt_retirement"
+    assert ia is not None and ia.treatment == "exempt_retirement"
+    assert ia.retirement_exempt_age == 55
 
 
 def test_bracket_table_from_dict_rejects_missing_filing_status() -> None:

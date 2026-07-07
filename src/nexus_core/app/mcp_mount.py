@@ -126,13 +126,15 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "a spending target with earned income, Social Security, pension/annuity "
         "streams, forced RMDs, and tax-aware portfolio withdrawals. Optional "
         "bracket-fill shows additional traditional withdrawals up to a target "
-        "federal marginal rate. De-identified numeric inputs only. JSON request "
-        "object in `body`."
+        "federal marginal rate; optional state/residency fields add illustrative "
+        "state-tax layers. De-identified numeric inputs only. JSON request object "
+        "in `body`."
     ),
     "glide_path": "Equity-weight glide path by age across the horizon. JSON request object in `body`.",
     "tax_aware_withdrawal": (
         "RMD-first, tax-efficient withdrawal sequencing with optional birthYear "
-        "RMD start-age policy. JSON request object in `body`."
+        "RMD start-age policy and optional state/residency tax layer. JSON request "
+        "object in `body`."
     ),
     "correlation_matrix": (
         "Real-data return correlation across asset classes (Ledoit-Wolf shrinkage). "
