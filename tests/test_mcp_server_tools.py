@@ -191,6 +191,8 @@ _PLANNING_TOOL_IDS = {
     "social_security_claiming",
     "regime_conditioned_swr",
     "portfolio_xray",
+    "optimize_allocation",
+    "risk_profile_score",
     "fire",
     "risk_metrics",
     "rebalance",

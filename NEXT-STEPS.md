@@ -18,7 +18,8 @@ output quality, plus S1 education funding tools and S8 multi-account
 waterfall / Monte Carlo goal-schedule support, S2 income layering, and the
 current S3 historical-blend exhibit plus the current S7 illustrative state-tax
 layer, current S9 household/survivor modeling, and the current S6 PW Wealth
-Roadmap report preset. Live endpoints were not re-smoked._
+Roadmap report preset, plus current S5 risk-profile scoring. Live endpoints
+were not re-smoked._
 
 ## Orient yourself in 5 minutes
 
@@ -88,6 +89,13 @@ Roadmap report preset. Live endpoints were not re-smoked._
   year, input order, and funding-year index, then the engine funds them
   path-by-path after base spending and before growth, echoing
   `goalFundingSchedule` and per-goal funding statistics.
+- **Current S5 risk-profile state:** `risk_profile_score` lives in
+  `engine/planning/risk_profile.py`, is exported from
+  `nexus_core.engine.planning`, and is exposed through the planning
+  gateway/native MCP registry. It scores fixed question ids and answer ids into
+  the optimizer-compatible `riskProfile` enum, annual volatility band, suggested
+  model weights, and canonical planning disclaimer. Advisor overrides,
+  suitability approvals, and audit records stay private.
 - **Current S2 income-layering state:** `income_layering` composes earned income,
   Social Security, pension/annuity streams, forced RMDs, tax-aware withdrawals,
   and optional bracket-fill analysis into a stacked per-year income timeline.
@@ -166,11 +174,12 @@ so pace the calls.
 
 The first correctness items have landed locally: Student-t covariance scaling,
 single-kernel RMD start-age policy, shared tax/IRMAA table providers, Monte
-Carlo report diagnostics, S1 education funding, and S8 multi-account waterfall /
-Monte Carlo goal scheduling. Continue with the consolidated Wealth Roadmap
-sequence: income layering, historical blend, state/local tax coverage, and
-household/survivor modeling. Keep each item one PR and preserve the public/private
-planning boundary.
+Carlo report diagnostics, S1 education funding, S8 multi-account waterfall /
+Monte Carlo goal scheduling, S2 income layering, S3 historical blend, S7
+state/local tax coverage, S9 household/survivor modeling, S6 Wealth Roadmap
+report assembly, and S5 risk-profile scoring. Continue with the consolidated
+Wealth Roadmap sequence from the next unmerged slice; keep each item one PR and
+preserve the public/private planning boundary.
 
 ### Public-safe planning/report analytics extraction (#197)
 

@@ -199,6 +199,12 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "macro regime. Optional `assetClassIds`, `weightBounds`, `riskFreeRate`. "
         "Illustration only, not advice. JSON request object in `body`."
     ),
+    "risk_profile_score": (
+        "Score a fixed, PII-free risk questionnaire into the optimizer-compatible "
+        "`riskProfile` enum, annual volatility band, and suggested asset-class "
+        "weights. Illustration only, not advice. Advisor override/audit workflow "
+        "stays private. JSON request object in `body`."
+    ),
     "build_planning_report": (
         "Assemble the de-identified outputs of the other planning tools into one "
         "ordered, render-ready report envelope: canonical section order, "
@@ -305,7 +311,7 @@ def build_configured_server(
     the EMF ``score_asset`` (sharing the REST ``/api/score`` context builder +
     framework, so MCP and REST return identical scores), market quotes/history,
     FRED economic series, DefiLlama TVL, the options pricing/overlay + Deribit
-    crypto-option tools, and the 31 planning tools (monte_carlo_decumulation,
+    crypto-option tools, and the 32 planning tools (monte_carlo_decumulation,
     solve_goal, analyze_goals, project_cash_flow, cashflow_planning_bridge,
     cash_reserve_analysis, budget_pacing_projection, education_funding,
     education_vehicle_rules, income_layering, glide_path, tax_aware_withdrawal,
@@ -314,7 +320,7 @@ def build_configured_server(
     regime_return_generator,
     capital_market_assumptions, roth_conversion, sequence_of_returns_stress, rmd,
     tax_bracket_headroom, social_security_claiming, regime_conditioned_swr,
-    portfolio_xray, optimize_allocation, fire, risk_metrics, rebalance, the
+    portfolio_xray, optimize_allocation, risk_profile_score, fire, risk_metrics, rebalance, the
     composite Roth/IRMAA trio analyze_roth_conversion, sequence_conversions,
     irmaa_headroom, plus build_planning_report) — the same handlers the REST
     planning gateway serves, so the MCP transport and ``POST /mcp/tools/{id}``
