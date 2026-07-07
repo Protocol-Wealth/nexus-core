@@ -25,6 +25,7 @@ SECTION_ORDER: tuple[str, ...] = (
     "executive_summary",
     "regime_context",
     "capital_market_assumptions",
+    "historical_blend",
     "asset_allocation",
     "portfolio_analytics",
     "retirement_projection",
@@ -44,6 +45,7 @@ _DEFAULT_TITLES: dict[str, str] = {
     "executive_summary": "Executive Summary",
     "regime_context": "Market Regime Context",
     "capital_market_assumptions": "Capital Market Assumptions",
+    "historical_blend": "Historical Context",
     "asset_allocation": "Recommended Asset Allocation",
     "portfolio_analytics": "Portfolio Analytics",
     "retirement_projection": "Retirement Projection",
@@ -76,7 +78,9 @@ def _allocation_findings(data: dict[str, Any]) -> list[str]:
     if isinstance(er, (int, float)) and isinstance(vol, (int, float)):
         sharpe = data.get("sharpeRatio")
         tail = f", Sharpe {float(sharpe):.2f}" if isinstance(sharpe, (int, float)) else ""
-        out.append(f"Expected return {_fmt_pct(float(er))} at {_fmt_pct(float(vol))} volatility{tail}.")
+        out.append(
+            f"Expected return {_fmt_pct(float(er))} at {_fmt_pct(float(vol))} volatility{tail}."
+        )
     objective = data.get("objective")
     if isinstance(objective, str):
         regime = data.get("regime")
@@ -108,6 +112,29 @@ def _cma_findings(data: dict[str, Any]) -> list[str]:
     return out
 
 
+def _historical_blend_findings(data: dict[str, Any]) -> list[str]:
+    """Findings for a ``historical_blend`` output."""
+    out: list[str] = []
+    months = data.get("months")
+    start = data.get("startMonth")
+    end = data.get("endMonth")
+    if isinstance(months, int) and isinstance(start, str) and isinstance(end, str):
+        out.append(
+            f"Hypothetical historical index-blend illustration covers {months} "
+            f"monthly returns from {start} through {end}."
+        )
+    stats = data.get("statistics")
+    if isinstance(stats, dict):
+        mean = stats.get("annualizedMean")
+        vol = stats.get("annualizedVolatility")
+        if isinstance(mean, (int, float)) and isinstance(vol, (int, float)):
+            out.append(
+                f"Illustrative annualized historical blend return {_fmt_pct(float(mean))} "
+                f"with {_fmt_pct(float(vol))} volatility."
+            )
+    return out
+
+
 def _regime_findings(data: dict[str, Any]) -> list[str]:
     """Findings for a live-regime context section."""
     out: list[str] = []
@@ -128,6 +155,7 @@ def _regime_findings(data: dict[str, Any]) -> list[str]:
 _AUTO_FINDINGS = {
     "asset_allocation": _allocation_findings,
     "capital_market_assumptions": _cma_findings,
+    "historical_blend": _historical_blend_findings,
     "regime_context": _regime_findings,
 }
 

@@ -106,6 +106,7 @@ def test_mcp_guide_documents_pwplan_core_integration() -> None:
         "tax_aware_withdrawal",
         "correlation_matrix",
         "capital_market_assumptions",
+        "historical_blend",
         "regime_return_generator",
         "roth_conversion",
         "sequence_of_returns_stress",

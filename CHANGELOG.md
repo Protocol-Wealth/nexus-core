@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Historical blend S3
+
+#### Added
+
+- Added the public-safe `historical_blend` planning tool for Wealth Roadmap
+  historical-context exhibits: calendar-year returns, YTD / last-quarter
+  non-annualized windows, trailing 1/3/5/7/10-year annualized windows,
+  growth-of-dollar, and annualized mean / ±2σ / ±4σ bands.
+- Added a dedicated hypothetical index-blend disclaimer covering reinvested
+  income, excluded fees/taxes/costs, non-direct index investability, and past
+  performance language.
+
 ### Income layering S2
 
 #### Added

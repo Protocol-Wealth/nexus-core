@@ -46,6 +46,7 @@ from ...engine.planning import (
     education_funding,
     education_result_to_wire,
     fire,
+    historical_blend,
     income_layering,
     irmaa_headroom,
     monte_carlo_decumulation,
@@ -143,6 +144,7 @@ class _SpendScheduleEntry:
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
 
 _DEFAULT_LOOKBACK_DAYS = 1260  # ~5 trading years
+_HISTORICAL_BLEND_LOOKBACK_DAYS = 3650  # ~10 trading years
 _MIN_LOOKBACK_DAYS = 30
 _MAX_LOOKBACK_DAYS = 3650
 _TRADING_DAYS = 252.0
@@ -248,6 +250,73 @@ def _fetch_aligned_returns(
             math.log(series[k] / series[k - 1]) for k in range(1, len(series))
         ]
     return returns_by_id, dates[-1][:10]
+
+
+def _fetch_aligned_monthly_returns(
+    market: MarketDataProvider,
+    tickers_by_id: dict[str, str],
+    *,
+    lookback: int,
+    as_of: str | None = None,
+) -> tuple[dict[str, list[float]], list[str], str]:
+    """Fetch daily closes, align common month-ends, and build simple monthly returns."""
+
+    month_closes_by_id: dict[str, dict[str, tuple[str, float]]] = {}
+    for asset_id, ticker in tickers_by_id.items():
+        bars = sorted(
+            market.get_price_history(ticker, days=lookback, interval="1d"),
+            key=lambda b: b.timestamp,
+        )
+        month_closes: dict[str, tuple[str, float]] = {}
+        for bar in bars:
+            date = bar.timestamp[:10]
+            if len(date) < 10 or date[4] != "-" or date[7] != "-":
+                continue
+            if as_of is not None and date > as_of:
+                continue
+            if not bar.close or bar.close <= 0:
+                continue
+            month_closes[date[:7]] = (date, float(bar.close))
+        if len(month_closes) < 4:
+            raise PlanningInfeasibleError(
+                f"insufficient monthly price history for '{asset_id}' ({ticker})"
+            )
+        month_closes_by_id[asset_id] = month_closes
+
+    common_months = set.intersection(*(set(c) for c in month_closes_by_id.values()))
+    if len(common_months) < 4:
+        raise PlanningInfeasibleError(
+            "not enough overlapping monthly history across the requested asset classes"
+        )
+    months = sorted(common_months)
+
+    returns_by_id: dict[str, list[float]] = {}
+    for asset_id, closes in month_closes_by_id.items():
+        series = [closes[month][1] for month in months]
+        returns_by_id[asset_id] = [series[k] / series[k - 1] - 1.0 for k in range(1, len(series))]
+
+    final_month = months[-1]
+    resolved_as_of = min(closes[final_month][0] for closes in month_closes_by_id.values())
+    return returns_by_id, months[1:], resolved_as_of
+
+
+def _validate_iso_date(value: str, field: str) -> str:
+    """Validate a YYYY-MM-DD date string for lexical date comparisons."""
+
+    if (
+        len(value) != 10
+        or value[4] != "-"
+        or value[7] != "-"
+        or not value[:4].isdigit()
+        or not value[5:7].isdigit()
+        or not value[8:10].isdigit()
+    ):
+        raise PlanningInputError(f"{field} must be a YYYY-MM-DD date string")
+    month = int(value[5:7])
+    day = int(value[8:10])
+    if not 1 <= month <= 12 or not 1 <= day <= 31:
+        raise PlanningInputError(f"{field} must be a valid YYYY-MM-DD date string")
+    return value
 
 
 def glide_path_tool(body: dict[str, Any]) -> dict[str, Any]:
@@ -905,6 +974,103 @@ def _capital_market_assumptions_tool(
 
     correlations = correlation_matrix(returns_by_id, shrinkage=True)
     return {"assetClasses": asset_classes, "correlations": correlations, "asOf": resolved_as_of}
+
+
+def _historical_blend_tool(body: dict[str, Any], market: MarketDataProvider) -> dict[str, Any]:
+    """``historical_blend`` — monthly historical index-blend exhibit."""
+
+    allowed = {
+        "contractVersion",
+        "assetClassIds",
+        "weights",
+        "lookbackDays",
+        "asOf",
+        "rebalanceFrequency",
+        "initialValue",
+    }
+    extra = set(body) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"historical_blend only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
+        )
+
+    raw_weights = _require(body, "weights")
+    if not isinstance(raw_weights, dict) or not raw_weights:
+        raise PlanningInputError("weights must be a non-empty object keyed by asset class id")
+
+    raw_ids = body.get("assetClassIds")
+    if raw_ids is None or raw_ids == []:
+        ids = list(raw_weights)
+    elif isinstance(raw_ids, list) and all(isinstance(x, str) for x in raw_ids):
+        ids = raw_ids
+    else:
+        raise PlanningInputError("assetClassIds must be a list of strings (or omitted)")
+    if len(set(ids)) != len(ids):
+        raise PlanningInputError("assetClassIds must be unique")
+    if len(ids) > _MAX_ASSET_CLASSES:
+        raise PlanningInputError(f"at most {_MAX_ASSET_CLASSES} asset classes are supported")
+
+    unknown = [i for i in ids if i not in ASSET_UNIVERSE]
+    if unknown:
+        raise PlanningInputError(
+            f"unknown asset class id(s): {', '.join(unknown)}. "
+            f"Known asset classes: {', '.join(universe_ids())}."
+        )
+    if set(raw_weights) != set(ids):
+        raise PlanningInputError("weights must contain exactly the selected assetClassIds")
+
+    weights: dict[str, float] = {}
+    for asset_id in ids:
+        value = raw_weights[asset_id]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise PlanningInputError("weights values must be numbers")
+        weights[asset_id] = float(value)
+
+    lookback = body.get("lookbackDays", _HISTORICAL_BLEND_LOOKBACK_DAYS)
+    if (
+        isinstance(lookback, bool)
+        or not isinstance(lookback, int)
+        or not _MIN_LOOKBACK_DAYS <= lookback <= _MAX_LOOKBACK_DAYS
+    ):
+        raise PlanningInputError(
+            f"lookbackDays must be an integer in [{_MIN_LOOKBACK_DAYS}, {_MAX_LOOKBACK_DAYS}]"
+        )
+    as_of = body.get("asOf")
+    if as_of is not None and not isinstance(as_of, str):
+        raise PlanningInputError("asOf must be an ISO date string (or omitted)")
+    if isinstance(as_of, str):
+        as_of = _validate_iso_date(as_of, "asOf")
+    rebalance_frequency = body.get("rebalanceFrequency", "monthly")
+    if not isinstance(rebalance_frequency, str):
+        raise PlanningInputError("rebalanceFrequency must be monthly, annual, none, or omitted")
+    initial_value = body.get("initialValue", 1.0)
+    if isinstance(initial_value, bool) or not isinstance(initial_value, (int, float)):
+        raise PlanningInputError("initialValue must be a number or omitted")
+
+    tickers = {i: ASSET_UNIVERSE[i].ticker for i in ids}
+    returns_by_id, months, resolved_as_of = _fetch_aligned_monthly_returns(
+        market, tickers, lookback=lookback, as_of=as_of
+    )
+    try:
+        payload = historical_blend(
+            monthly_returns_by_id=returns_by_id,
+            weights=weights,
+            month_labels=months,
+            rebalance_frequency=rebalance_frequency,
+            initial_value=float(initial_value),
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+    payload["asOf"] = resolved_as_of
+    payload["assetClasses"] = [
+        {
+            "id": asset_id,
+            "label": ASSET_UNIVERSE[asset_id].label,
+            "weight": round(weights[asset_id], 6),
+        }
+        for asset_id in ids
+    ]
+    return payload
 
 
 #: ``riskProfile`` → mean-variance risk-aversion (lambda) for max_quadratic_utility.
@@ -2407,6 +2573,9 @@ def build_tool_handlers(
     def capital_market_assumptions_tool(body: dict[str, Any]) -> dict[str, Any]:
         return _capital_market_assumptions_tool(body, market)
 
+    def historical_blend_tool(body: dict[str, Any]) -> dict[str, Any]:
+        return _historical_blend_tool(body, market)
+
     def regime_return_generator_tool(body: dict[str, Any]) -> dict[str, Any]:
         return _regime_return_generator_tool(body, regime_engine)
 
@@ -2443,6 +2612,7 @@ def build_tool_handlers(
         "tax_aware_withdrawal": tax_aware_withdrawal_tool,
         "correlation_matrix": correlation_matrix_tool,
         "capital_market_assumptions": capital_market_assumptions_tool,
+        "historical_blend": historical_blend_tool,
         "regime_return_generator": regime_return_generator_tool,
         "roth_conversion": roth_conversion_tool,
         "sequence_of_returns_stress": sequence_of_returns_stress_tool,

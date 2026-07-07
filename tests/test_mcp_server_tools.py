@@ -182,6 +182,7 @@ _PLANNING_TOOL_IDS = {
     "tax_aware_withdrawal",
     "correlation_matrix",
     "capital_market_assumptions",
+    "historical_blend",
     "regime_return_generator",
     "roth_conversion",
     "sequence_of_returns_stress",

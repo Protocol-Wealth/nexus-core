@@ -15,8 +15,8 @@ covariance-scaling correction plus the RMD start-age policy kernel shared by
 centralizes federal tax/IRMAA reference-table lookup behind a version-stamped
 provider registry and adds Monte Carlo report diagnostics for Wealth Roadmap
 output quality, plus S1 education funding tools and S8 multi-account
-waterfall / Monte Carlo goal-schedule support. Live endpoints were not
-re-smoked._
+waterfall / Monte Carlo goal-schedule support, S2 income layering, and the
+current S3 historical-blend exhibit. Live endpoints were not re-smoked._
 
 ## Orient yourself in 5 minutes
 
@@ -92,6 +92,11 @@ re-smoked._
   Inputs are numeric assumptions and account-type buckets only; private labels,
   account identifiers, raw transactions, approvals, and release/audit state stay
   outside the public repo.
+- **Current S3 historical-blend state:** `historical_blend` converts public
+  asset-class proxy histories into aligned monthly return exhibits: calendar-year
+  returns, trailing windows, growth-of-dollar, and annualized mean/sigma bands.
+  The wrapper does provider I/O; the engine remains pure and receives only
+  de-identified return series and weights.
 
 ## Before you commit (the gate — mirrors CI)
 

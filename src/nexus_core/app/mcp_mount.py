@@ -142,6 +142,12 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "Forward return/volatility/correlation assumptions per asset class. "
         "JSON request object in `body`."
     ),
+    "historical_blend": (
+        "Historical index-blend exhibit: calendar-year returns, trailing "
+        "annualized windows, growth-of-dollar series, and annualized mean / "
+        "sigma bands from public asset-class proxy histories. JSON request "
+        "object in `body`."
+    ),
     "regime_return_generator": (
         "Live macro regime + transition matrix + path cache key for regime-aware "
         "return generation. JSON request object in `body`."
@@ -293,11 +299,12 @@ def build_configured_server(
     the EMF ``score_asset`` (sharing the REST ``/api/score`` context builder +
     framework, so MCP and REST return identical scores), market quotes/history,
     FRED economic series, DefiLlama TVL, the options pricing/overlay + Deribit
-    crypto-option tools, and the 30 planning tools (monte_carlo_decumulation,
+    crypto-option tools, and the 31 planning tools (monte_carlo_decumulation,
     solve_goal, analyze_goals, project_cash_flow, cashflow_planning_bridge,
     cash_reserve_analysis, budget_pacing_projection, education_funding,
     education_vehicle_rules, income_layering, glide_path, tax_aware_withdrawal,
     correlation_matrix,
+    historical_blend,
     regime_return_generator,
     capital_market_assumptions, roth_conversion, sequence_of_returns_stress, rmd,
     tax_bracket_headroom, social_security_claiming, regime_conditioned_swr,
