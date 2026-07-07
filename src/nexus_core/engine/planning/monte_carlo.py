@@ -22,7 +22,9 @@ analysis — not advice, not a projection of any specific person's outcome.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import hashlib
+import json
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np
@@ -51,6 +53,8 @@ _REGIME_VOL_MULT = {
 }
 
 _REGIME_AWARE = {"markov_regime", "emf_regime"}
+_WILSON_Z_95 = 1.959963984540054
+_SUCCESS_CI_MAX_HALF_WIDTH = 0.015
 
 
 @dataclass(frozen=True)
@@ -167,6 +171,176 @@ def _regime_paths(
     return idx
 
 
+def _wilson_interval(successes: int, total: int) -> dict[str, Any]:
+    """Wilson score interval for a binomial success rate.
+
+    The Wealth Roadmap uses high success probabilities where the simple Wald
+    interval is too optimistic near the boundaries. Wilson stays bounded in
+    ``[0, 1]`` and behaves well for small or highly successful path sets.
+    """
+    if total <= 0:
+        return {
+            "method": "wilson",
+            "confidenceLevel": 0.95,
+            "successes": successes,
+            "paths": total,
+            "lower": None,
+            "upper": None,
+            "halfWidth": None,
+        }
+    p_hat = successes / total
+    z2 = _WILSON_Z_95 * _WILSON_Z_95
+    denominator = 1.0 + z2 / total
+    center = (p_hat + z2 / (2.0 * total)) / denominator
+    margin = (
+        _WILSON_Z_95 * np.sqrt((p_hat * (1.0 - p_hat) + z2 / (4.0 * total)) / total) / denominator
+    )
+    lower = max(0.0, float(center - margin))
+    upper = min(1.0, float(center + margin))
+    return {
+        "method": "wilson",
+        "confidenceLevel": 0.95,
+        "successes": successes,
+        "paths": total,
+        "lower": round(lower, 4),
+        "upper": round(upper, 4),
+        "halfWidth": round((upper - lower) / 2.0, 4),
+    }
+
+
+def _engine_version() -> str:
+    from nexus_core import __version__
+
+    return __version__
+
+
+def _assumptions_hash(
+    *,
+    years: int,
+    weights: list[float],
+    means: list[float],
+    vols: list[float],
+    lambdas: list[float],
+    correlation: list[list[float]],
+    initial_balance: float,
+    net_spend_by_year: list[float],
+    return_model: str,
+    current_regime: str,
+    guardrails: GuardrailParams | None,
+) -> str:
+    """Stable hash of de-identified numeric assumptions used by the run."""
+    payload = {
+        "years": years,
+        "weights": weights,
+        "means": means,
+        "vols": vols,
+        "lambdas": lambdas,
+        "correlation": correlation,
+        "initialBalance": initial_balance,
+        "netSpendByYear": net_spend_by_year,
+        "returnModel": return_model,
+        "currentRegime": current_regime,
+        "guardrails": asdict(guardrails) if guardrails is not None else None,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _depletion_curve(
+    *, first_depletion_year: np.ndarray, years: int, current_age: int | None
+) -> list[dict[str, float | int]]:
+    """Sticky first-passage depletion probability by projection year."""
+    depleted = first_depletion_year >= 0
+    out: list[dict[str, float | int]] = []
+    for year in range(years):
+        row: dict[str, float | int] = {
+            "projectionYear": year + 1,
+            "depletionProbability": round(
+                float(np.mean(depleted & (first_depletion_year <= year))), 4
+            ),
+        }
+        if current_age is not None:
+            row["age"] = current_age + year
+        out.append(row)
+    return out
+
+
+def _conditional_shortfall(
+    *, cumulative_shortfall: np.ndarray, failed: np.ndarray
+) -> dict[str, Any]:
+    """Failed-path cumulative unmet portfolio withdrawals in nominal dollars."""
+    values = cumulative_shortfall[failed]
+    if values.size == 0:
+        return {
+            "basis": "cumulative_unmet_portfolio_withdrawal_nominal",
+            "failedPathCount": 0,
+            "p50": None,
+            "p90": None,
+            "mean": 0.0,
+        }
+    p50, p90 = np.percentile(values, [50, 90])
+    return {
+        "basis": "cumulative_unmet_portfolio_withdrawal_nominal",
+        "failedPathCount": int(values.size),
+        "p50": round(float(p50), 2),
+        "p90": round(float(p90), 2),
+        "mean": round(float(np.mean(values)), 2),
+    }
+
+
+def _first_decade_deciles(
+    *, first_decade_returns: np.ndarray, success_mask: np.ndarray
+) -> list[dict[str, float | int]]:
+    """Return sorted first-decade deciles with per-decile success rates."""
+    if first_decade_returns.size == 0:
+        return []
+    order = np.argsort(first_decade_returns)
+    rows: list[dict[str, float | int]] = []
+    for decile, idx in enumerate(np.array_split(order, 10), start=1):
+        if idx.size == 0:
+            continue
+        returns = first_decade_returns[idx]
+        rows.append(
+            {
+                "decile": decile,
+                "pathCount": int(idx.size),
+                "returnMin": round(float(np.min(returns)), 4),
+                "returnMax": round(float(np.max(returns)), 4),
+                "medianAnnualReturn": round(float(np.median(returns)), 4),
+                "successProbability": round(float(np.mean(success_mask[idx])), 4),
+            }
+        )
+    return rows
+
+
+def _guardrail_stats(
+    *,
+    cut_count: np.ndarray,
+    raise_count: np.ndarray,
+    first_cut_year: np.ndarray,
+    current_age: int | None,
+) -> dict[str, Any]:
+    """Summarize path-level Guyton-Klinger activity for report exhibits."""
+
+    def _pcts(values: np.ndarray) -> dict[str, float]:
+        if values.size == 0:
+            return {}
+        pct = np.percentile(values.astype(float), [10, 50, 90])
+        return {f"p{p}": round(float(v), 2) for p, v in zip([10, 50, 90], pct, strict=True)}
+
+    cut_paths = first_cut_year >= 0
+    first_cut_projection_year = first_cut_year[cut_paths] + 1
+    out: dict[str, Any] = {
+        "cutCountPercentiles": _pcts(cut_count),
+        "raiseCountPercentiles": _pcts(raise_count),
+        "pathsWithMultipleCuts": round(float(np.mean(cut_count >= 2)), 4),
+        "firstCutProjectionYearPercentiles": _pcts(first_cut_projection_year),
+    }
+    if current_age is not None:
+        out["firstCutAgePercentiles"] = _pcts(first_cut_year[cut_paths] + current_age)
+    return out
+
+
 def monte_carlo_decumulation(
     *,
     years: int,
@@ -190,8 +364,8 @@ def monte_carlo_decumulation(
     When ``guardrails`` is supplied, withdrawals follow the Guyton-Klinger
     decision rules (path-dependent) instead of the static ``net_spend_by_year``
     schedule, and the response gains ``spendingByYear`` percentile bands plus a
-    ``guardrailActivity`` summary. Omitted ⇒ the static-withdrawal behavior is
-    byte-identical to before.
+    ``guardrailActivity`` summary. Omitted ⇒ static-withdrawal mechanics are
+    unchanged and guardrail-only fields are omitted.
     """
     w = np.asarray(weights, dtype=float)
     mu = np.asarray(means, dtype=float)
@@ -245,6 +419,10 @@ def monte_carlo_decumulation(
     spending_by_year = np.zeros((years, len(spend_pcts)))
     ever_cut = np.zeros(paths, dtype=bool)
     ever_raise = np.zeros(paths, dtype=bool)
+    cut_count = np.zeros(paths, dtype=int)
+    raise_count = np.zeros(paths, dtype=int)
+    first_cut_year = np.full(paths, -1, dtype=int)
+    cumulative_shortfall = np.zeros(paths, dtype=float)
 
     for year in range(years):
         if guardrails is None:
@@ -271,9 +449,16 @@ def monte_carlo_decumulation(
             )
             ever_cut |= cut_mask
             ever_raise |= raise_mask
+            cut_count += cut_mask.astype(int)
+            raise_count += raise_mask.astype(int)
+            first_cut_year[(first_cut_year < 0) & cut_mask] = year
             this_w = withdrawal
 
         balance_before = balance
+        requested = np.asarray(this_w, dtype=float)
+        requested_by_path = np.full(paths, float(requested)) if requested.ndim == 0 else requested
+        positive_request = np.maximum(requested_by_path, 0.0)
+        cumulative_shortfall += np.maximum(positive_request - np.maximum(balance_before, 0.0), 0.0)
         balance = (balance - this_w) * (1.0 + port_returns[:, year])
         np.maximum(balance, 0.0, out=balance)
         newly_depleted = (first_depletion_year < 0) & (balance <= 0.0)
@@ -292,6 +477,8 @@ def monte_carlo_decumulation(
     percentiles = np.percentile(terminal, [10, 25, 50, 75, 90])
     failed = first_depletion_year >= 0
     failed_years = first_depletion_year[failed]
+    success_mask = ~failed
+    successes = int(success_mask.sum())
 
     def _percentile_map(values: np.ndarray) -> dict[str, float]:
         if values.size == 0:
@@ -301,7 +488,6 @@ def monte_carlo_decumulation(
 
     first_decade_years = min(10, years)
     first_decade_returns = np.mean(port_returns[:, :first_decade_years], axis=1)
-    survived = terminal > 0.0
 
     def _median_or_none(values: np.ndarray) -> float | None:
         if values.size == 0:
@@ -318,8 +504,15 @@ def monte_carlo_decumulation(
             (failed_years + current_age).astype(float)
         )
 
+    success_ci = _wilson_interval(successes, paths)
+    ci_half_width = success_ci["halfWidth"]
+    ci_within_report_tolerance = (
+        ci_half_width is not None and ci_half_width <= _SUCCESS_CI_MAX_HALF_WIDTH
+    )
+
     response: dict[str, Any] = {
-        "successProbability": round(float(np.mean(terminal > 0.0)), 4),
+        "successProbability": round(float(successes / paths), 4),
+        "successProbabilityConfidenceInterval": success_ci,
         "terminalValues": {
             f"p{p}": round(float(v), 2)
             for p, v in zip([10, 25, 50, 75, 90], percentiles, strict=True)
@@ -330,14 +523,49 @@ def monte_carlo_decumulation(
             for i, p in enumerate(band_pcts)
         },
         "depletionStats": depletion_stats,
+        "depletionCurve": _depletion_curve(
+            first_depletion_year=first_depletion_year, years=years, current_age=current_age
+        ),
+        "conditionalShortfall": _conditional_shortfall(
+            cumulative_shortfall=cumulative_shortfall, failed=failed
+        ),
         "firstDecadeReturnVsOutcome": {
             "years": first_decade_years,
-            "successfulMedianAnnualReturn": _median_or_none(first_decade_returns[survived]),
-            "failedMedianAnnualReturn": _median_or_none(first_decade_returns[~survived]),
+            "successfulMedianAnnualReturn": _median_or_none(first_decade_returns[success_mask]),
+            "failedMedianAnnualReturn": _median_or_none(first_decade_returns[failed]),
+            "deciles": _first_decade_deciles(
+                first_decade_returns=first_decade_returns, success_mask=success_mask
+            ),
         },
         "worstPathTerminal": round(float(terminal.min()), 2),
         "regimePathSummary": regime_summary,
         "seedUsed": seed,
+        "runManifest": {
+            "manifestVersion": "monte_carlo_run_manifest_0.1.0",
+            "engineVersion": _engine_version(),
+            "assumptionsHash": _assumptions_hash(
+                years=years,
+                weights=weights,
+                means=means,
+                vols=vols,
+                lambdas=lambdas,
+                correlation=correlation,
+                initial_balance=initial_balance,
+                net_spend_by_year=net_spend_by_year,
+                return_model=return_model,
+                current_regime=current_regime,
+                guardrails=guardrails,
+            ),
+            "returnModel": return_model,
+            "paths": paths,
+            "years": years,
+            "seed": seed,
+            "regimeSeed": regime_seed,
+            "studentTDegreesOfFreedom": _T_DOF if return_model == "student_t" else None,
+            "successProbabilityCiHalfWidth": ci_half_width,
+            "successProbabilityCiMaxReportHalfWidth": _SUCCESS_CI_MAX_HALF_WIDTH,
+            "successProbabilityCiWithinReportTolerance": ci_within_report_tolerance,
+        },
     }
     if guardrails is not None:
         # The dynamic-withdrawal layer: per-year spending distribution (so the
@@ -354,6 +582,12 @@ def monte_carlo_decumulation(
             "cut": guardrails.cut,
             "raise": guardrails.raise_pct,
         }
+        response["guardrailStats"] = _guardrail_stats(
+            cut_count=cut_count,
+            raise_count=raise_count,
+            first_cut_year=first_cut_year,
+            current_age=current_age,
+        )
     return response
 
 

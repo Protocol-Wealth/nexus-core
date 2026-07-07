@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Monte Carlo report diagnostics
+
+#### Added
+
+- Added report-grade diagnostics to `monte_carlo_decumulation`: a Wilson 95%
+  confidence interval around `successProbability`, a sticky first-passage
+  `depletionCurve`, failed-path `conditionalShortfall` percentiles, first-decade
+  return deciles with per-decile success rates, and a deterministic
+  `runManifest` carrying engine version, a de-identified assumptions hash, path
+  count, horizon, seeds, return model, and whether the Wilson half-width meets
+  the 1.5 percentage-point report tolerance.
+- Added `guardrailStats` when Guyton-Klinger guardrails are enabled, summarizing
+  cut/raise counts and first-cut timing without changing the existing
+  `guardrailActivity` field.
+
 ### Tax table provider kernel
 
 #### Fixed
@@ -197,8 +212,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **New response fields when `guardrails` is supplied** — `withdrawalRule`,
   `spendingByYear` (p10/p50/p90 per-year realized-spend bands, so the dynamic
   cuts/raises are visible), and `guardrailActivity` (`pathsWithCut` /
-  `pathsWithRaise` + the band/cut/raise echo). Omitting `guardrails` is
-  **byte-identical** to the prior static-withdrawal behavior (no new fields).
+  `pathsWithRaise` + the band/cut/raise echo). Omitting `guardrails` leaves the
+  static-withdrawal mechanics unchanged and omits guardrail-only fields.
   `mypy --strict` + `ruff` clean; +13 tests (engine + gateway).
 
 ### Retired the FMP / FinanceToolkit path

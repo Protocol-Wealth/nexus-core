@@ -17,16 +17,17 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   bearer key opens the 27-tool planning contract; hosted native `/mcp` keeps
   transparent OAuth active and exposes only the demo MCP tools
   `option_price`, `collar_book`, `health`, and `describe`.
-- **Last local update:** 2026-07-07 — current branch centralizes the
+- **Last local update:** 2026-07-07 — current branch adds report-grade Monte
+  Carlo diagnostics for Wealth Roadmap consumers: Wilson confidence intervals
+  for `successProbability`, sticky depletion curves, failed-path conditional
+  shortfall percentiles, first-decade return deciles, a run manifest with a
+  de-identified assumptions hash and confidence-width quality flags, and
+  Guyton-Klinger cut/raise timing stats. `main` also centralizes the
   SECURE/SECURE 2.0 RMD start-age policy in `tax.rmd_start_age` and the
   illustrative federal tax/IRMAA reference tables in a version-stamped provider
-  registry. `rmd`, `tax_aware_withdrawal`, `tax_bracket_headroom`,
-  `roth_conversion`, `irmaa_headroom`, and the Roth composite now share one
-  explicit tax-table basis, with unregistered years failing closed and
-  table-version stamps returned in tax-sensitive outputs. `main` also includes
-  the Student-t Monte Carlo covariance-scaling correction, the 2026-07-05 Slice
-  0/1/2 cash-flow planning bridge work, collar-book executable-fill modeling,
-  and the restricted REST/JSON access gate.
+  registry, includes the Student-t Monte Carlo covariance-scaling correction,
+  the 2026-07-05 Slice 0/1/2 cash-flow planning bridge work, collar-book
+  executable-fill modeling, and the restricted REST/JSON access gate.
 - **Repo:** [github.com/Protocol-Wealth/nexus-core](https://github.com/Protocol-Wealth/nexus-core) — public, Apache-2.0
 - **Live:** [nexusmcp.site](https://nexusmcp.site) (Cloudflare → Cloud Run)
 - **Version:** 0.1.0
@@ -350,8 +351,8 @@ key is absent.
   caller supplies executable pricing. REST and MCP parsers accept the same
   optional fields; the output remains a public-safe advisor research worksheet.
 - **Guyton-Klinger dynamic withdrawals** — `monte_carlo_decumulation` accepts
-  optional `guardrails` and returns `withdrawalRule`, `spendingByYear`, and
-  `guardrailActivity` only when enabled.
+  optional `guardrails` and returns `withdrawalRule`, `spendingByYear`,
+  `guardrailActivity`, and report-oriented `guardrailStats` only when enabled.
 - **Planning surface now 27 tools in current source** — includes `solve_goal`,
   `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio,
   `optimize_allocation`, `build_planning_report`, and the composite Roth/IRMAA trio.

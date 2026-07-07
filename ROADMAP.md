@@ -38,6 +38,13 @@ fail closed for unregistered table years instead of silently reusing a stale
 basis, and outputs carry the table version needed for reproducible report
 manifests.
 
+Current source also adds Monte Carlo report diagnostics for Wealth Roadmap
+consumers: Wilson confidence intervals around success probability, sticky
+depletion curves, failed-path conditional shortfall, first-decade return decile
+exhibits, run manifests with de-identified assumption hashes and confidence
+quality flags, and Guyton-Klinger cut/raise timing stats. These are additive
+response fields; existing request shapes remain unchanged.
+
 The collar-book realistic-fill layer is part of current source. The engine plus
 REST/MCP parsers accept midpoint `net_credit` and optional executable pricing
 (`executable_net_credit` or `call_bid` minus `put_ask`) and return stock price,

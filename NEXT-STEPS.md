@@ -13,7 +13,8 @@ layer, an optional REST/JSON service-key gate, and the Student-t Monte Carlo
 covariance-scaling correction plus the RMD start-age policy kernel shared by
 `rmd`, `tax_aware_withdrawal`, and the Roth composite. Current branch also
 centralizes federal tax/IRMAA reference-table lookup behind a version-stamped
-provider registry. Live endpoints were not re-smoked._
+provider registry and adds Monte Carlo report diagnostics for Wealth Roadmap
+output quality. Live endpoints were not re-smoked._
 
 ## Orient yourself in 5 minutes
 
@@ -63,6 +64,12 @@ provider registry. Live endpoints were not re-smoked._
   composite share the reference-table provider in `engine/planning/tables.py`.
   Reference table years are explicit; missing years fail closed, and
   tax-sensitive outputs include table-version stamps for reproducible reports.
+- **Current Monte Carlo report state:** `monte_carlo_decumulation` returns the
+  existing headline fields plus Wilson confidence intervals, a sticky depletion
+  curve, failed-path conditional shortfall, first-decade return deciles, and a
+  run manifest with engine version, de-identified assumptions hash, and
+  confidence-width report-quality flags. Guardrail runs also return cut/raise
+  timing stats.
 
 ## Before you commit (the gate — mirrors CI)
 
@@ -105,13 +112,13 @@ so pace the calls.
 
 ### Planning engine correctness queue
 
-The first correctness item is the `student_t` Monte Carlo covariance fix: the
-Gaussian core must be pre-scaled by `sqrt((dof - 2) / dof)` before applying the
-chi-square draw so the realized Student-t covariance matches the stated CMA.
-Archived Student-t comparisons before this fix sit behind an engine-version
-boundary. After this lands, continue with the RMD start-age single-kernel fix:
-one birth-year policy in `tax.py`, with the 1959 cohort documented under the
-`secure2.0-goodfaith-73-per-89FR58644` policy basis.
+The first correctness items have landed locally: Student-t covariance scaling,
+single-kernel RMD start-age policy, shared tax/IRMAA table providers, and
+Monte Carlo report diagnostics. Continue with the consolidated Wealth Roadmap
+sequence: education funding, multi-account deterministic waterfall, income
+layering, historical blend, state/local tax coverage, and household/survivor
+modeling. Keep each item one PR and preserve the public/private planning
+boundary.
 
 ### Public-safe planning/report analytics extraction (#197)
 
