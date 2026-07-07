@@ -263,13 +263,13 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     <li><code>cash_reserve_analysis</code> — cash reserve coverage and funding status</li>
     <li><code>budget_pacing_projection</code> — month-end budget pace from aggregate spending</li>
     <li><code>glide_path</code> — equity weight by age across the horizon</li>
-    <li><code>tax_aware_withdrawal</code> — RMD-first, tax-efficient withdrawal sequencing</li>
+    <li><code>tax_aware_withdrawal</code> — RMD-first, tax-efficient withdrawal sequencing with optional birthYear policy</li>
     <li><code>correlation_matrix</code> — real-data return correlation across asset classes</li>
     <li><code>capital_market_assumptions</code> — forward return / volatility / correlation assumptions</li>
     <li><code>regime_return_generator</code> — live regime + transition matrix for path generation</li>
     <li><code>roth_conversion</code> — convert-now vs. leave-pre-tax after-tax comparison + breakeven rate</li>
     <li><code>sequence_of_returns_stress</code> — ordering effect on a fixed return set (worst/best/as-given)</li>
-    <li><code>rmd</code> — required minimum distribution (IRS Uniform Lifetime Table)</li>
+    <li><code>rmd</code> — required minimum distribution (IRS Uniform Lifetime Table; optional birthYear policy)</li>
     <li><code>tax_bracket_headroom</code> — marginal bracket + room before the next rate (Roth-fill)</li>
     <li><code>social_security_claiming</code> — benefit by claim age 62–70 + breakeven ages</li>
     <li><code>regime_conditioned_swr</code> — base safe withdrawal rate adjusted for the live regime</li>

@@ -3,9 +3,10 @@
 """Required Minimum Distribution (RMD) calculator (educational).
 
 A traditional (pre-tax) account holder must take an annual RMD starting at the
-SECURE 2.0 age (73). The amount is the prior-year-end balance divided by the IRS
-Uniform Lifetime Table distribution period for the account owner's age. This
-calculator reuses the engine's published factor table (``tax.rmd_factor``).
+SECURE/SECURE 2.0 applicable age. The amount is the prior-year-end balance
+divided by the IRS Uniform Lifetime Table distribution period for the account
+owner's age. This calculator reuses the engine's published factor table
+(``tax.rmd_factor``) and start-age policy (``tax.rmd_start_age``).
 
 Documented simplifications (planning illustration, not tax advice): the IRS
 Uniform Lifetime Table only (the Joint Life table for a >10-years-younger spouse
@@ -17,15 +18,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from .tax import RMD_START_AGE, rmd_factor
+from .tax import RMD_START_AGE_POLICY_VERSION, rmd_factor, rmd_start_age
 
 
-def rmd(*, age: int, balance: float) -> dict[str, Any]:
+def rmd(*, age: int, balance: float, birth_year: int | None = None) -> dict[str, Any]:
     """Required minimum distribution for an owner of ``age`` with ``balance``.
 
     Args:
         age: The owner's age at year end (the year the RMD is for).
         balance: The prior-year-end traditional account balance (>= 0).
+        birth_year: Optional birth year for SECURE 2.0 start-age policy. When
+            omitted, the legacy age-only contract defaults to age 73.
 
     Returns:
         ``rmdStartAge``, whether an RMD ``applies`` this year, the IRS
@@ -40,13 +43,15 @@ def rmd(*, age: int, balance: float) -> dict[str, Any]:
     if balance < 0.0:
         raise ValueError("balance must be non-negative")
 
-    applies = age >= RMD_START_AGE
+    start_age = rmd_start_age(birth_year)
+    applies = age >= start_age
     period = rmd_factor(age)
     amount = balance / period if applies else 0.0
     effective_rate = amount / balance if balance > 0 else 0.0
 
     return {
-        "rmdStartAge": RMD_START_AGE,
+        "rmdStartAge": start_age,
+        "rmdStartAgePolicyVersion": RMD_START_AGE_POLICY_VERSION,
         "applies": applies,
         "distributionPeriod": period,
         "rmdAmount": round(amount, 2),

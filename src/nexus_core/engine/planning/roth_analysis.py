@@ -22,6 +22,7 @@ analysis only — not investment, tax, or legal advice.
 from __future__ import annotations
 
 from collections.abc import Callable
+from math import ceil
 
 from ...disclaimers import MC_DISCLAIMER
 from .aca import aca_cliff_estimate
@@ -44,7 +45,7 @@ from .income_model import FederalPicture, federal_picture, marginal_ordinary_rat
 from .irmaa import irmaa_headroom
 from .rmd import rmd
 from .tables import AcaSituation, BracketTable, IrmaaTable, StateConversionRule
-from .tax import FilingStatus
+from .tax import FilingStatus, rmd_start_age
 
 _CONV_TOL = 1.0  # dollar tolerance for the conversion-ceiling solver
 
@@ -53,11 +54,6 @@ def _engine_version() -> str:
     from nexus_core import __version__  # lazy: avoid an import cycle at module load
 
     return __version__
-
-
-def _rmd_start_age(birth_year: int) -> int:
-    """SECURE 2.0 RMD start age: 75 for those born 1960+, else 73."""
-    return 75 if birth_year >= 1960 else 73
 
 
 def _largest_conversion(holds: Callable[[float], bool], hi: float) -> float:
@@ -287,7 +283,9 @@ def _analyze_year(
 
     def pic(conversion_gross: float) -> FederalPicture:
         return federal_picture(
-            income, fs, bracket_table,
+            income,
+            fs,
+            bracket_table,
             n_seniors=n_seniors,
             conversion_taxable=conversion_gross * taxable_fraction,
         )
@@ -625,23 +623,30 @@ def _do_nothing(
     contract: PlanningContract, bracket_table: BracketTable, *, growth_rate: float
 ) -> DoNothingProjection:
     self_birth = contract.birth_years[0]
-    start_age = _rmd_start_age(self_birth)
-    first_rmd_year = self_birth + start_age
+    start_age = rmd_start_age(self_birth)
+    first_rmd_age = ceil(start_age)
+    first_rmd_year = self_birth + first_rmd_age
     years_until = max(0, first_rmd_year - contract.tax_year)
     # The RMD-drag pool is the whole pre-tax balance subject to future RMDs: the
     # Traditional IRA + employer-plan (401k/403b) money (the latter added in v1.1.0).
     employer_plan = contract.accounts.employer_plan_aggregate
     pretax_pool = contract.accounts.trad_ira_aggregate + employer_plan
     projected = pretax_pool * (1.0 + growth_rate) ** years_until
-    first_rmd = rmd(age=start_age, balance=projected)
+    first_rmd = rmd(age=first_rmd_age, balance=projected, birth_year=self_birth)
     fs = contract.engine_filing_status
     base = federal_picture(
-        contract.income_ex_conversion, fs, bracket_table,
-        n_seniors=sum(1 for by in contract.birth_years if first_rmd_year - by >= bracket_table.senior_age),
+        contract.income_ex_conversion,
+        fs,
+        bracket_table,
+        n_seniors=sum(
+            1 for by in contract.birth_years if first_rmd_year - by >= bracket_table.senior_age
+        ),
         conversion_taxable=0.0,
     )
     rmd_amount = first_rmd["rmdAmount"]
-    rate = marginal_ordinary_rate(base.ordinary_taxable + rmd_amount, bracket_table.brackets_for(fs))
+    rate = marginal_ordinary_rate(
+        base.ordinary_taxable + rmd_amount, bracket_table.brackets_for(fs)
+    )
     # Survivor compression: for a married-joint plan, the surviving spouse files
     # single — the same RMD lands in the ~half-width single brackets.
     survivor_rate: float | None = None
@@ -659,7 +664,7 @@ def _do_nothing(
         else ""
     )
     return DoNothingProjection(
-        rmd_start_age=start_age,
+        rmd_start_age=float(start_age),
         first_rmd_year=first_rmd_year,
         years_until_rmd=years_until,
         growth_rate_assumption=growth_rate,

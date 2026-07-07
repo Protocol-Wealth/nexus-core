@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### RMD start-age policy kernel
+
+#### Fixed
+
+- Centralized the SECURE/SECURE 2.0 RMD start-age policy in `tax.rmd_start_age`
+  so `rmd`, `tax_aware_withdrawal`, and the Roth composite no longer carry
+  divergent age-73/age-75 logic.
+- Added optional `birthYear` support to the `rmd` and `tax_aware_withdrawal`
+  planning tool wrappers while preserving the age-only default for existing
+  callers.
+- Stamped RMD-aware outputs with `rmdStartAgePolicyVersion`
+  (`secure2.0-goodfaith-73-per-89FR58644`) and documented the 1959 cohort's
+  good-faith age-73 treatment pending final regulations.
+
 ### Monte Carlo Student-t covariance scaling
 
 #### Fixed

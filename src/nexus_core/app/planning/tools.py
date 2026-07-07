@@ -128,6 +128,7 @@ class _SpendScheduleEntry:
     amount: float
     cola_rate: float
 
+
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
 
 _DEFAULT_LOOKBACK_DAYS = 1260  # ~5 trading years
@@ -144,6 +145,15 @@ def _require(body: dict[str, Any], key: str) -> Any:
 
 def _as_int(body: dict[str, Any], key: str) -> int:
     value = _require(body, key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value != int(value):
+        raise PlanningInputError(f"field '{key}' must be a whole number; got {value!r}")
+    return int(value)
+
+
+def _optional_int(body: dict[str, Any], key: str) -> int | None:
+    if key not in body or body[key] is None:
+        return None
+    value = body[key]
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value != int(value):
         raise PlanningInputError(f"field '{key}' must be a whole number; got {value!r}")
     return int(value)
@@ -264,6 +274,7 @@ def tax_aware_withdrawal_tool(body: dict[str, Any]) -> dict[str, Any]:
             gross_need=_as_number(body, "grossNeed"),
             age=_as_int(body, "age"),
             other_taxable_income=float(other),
+            birth_year=_optional_int(body, "birthYear"),
         )
     except InfeasiblePlanError as exc:
         raise PlanningInfeasibleError(str(exc)) from exc
@@ -316,7 +327,11 @@ def sequence_of_returns_stress_tool(body: dict[str, Any]) -> dict[str, Any]:
 def rmd_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``rmd`` — required minimum distribution for a traditional account."""
     try:
-        return rmd(age=_as_int(body, "age"), balance=_as_number(body, "balance"))
+        return rmd(
+            age=_as_int(body, "age"),
+            balance=_as_number(body, "balance"),
+            birth_year=_optional_int(body, "birthYear"),
+        )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
 
@@ -499,7 +514,9 @@ def cashflow_planning_bridge_tool(body: dict[str, Any]) -> dict[str, Any]:
 def cash_reserve_analysis_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``cash_reserve_analysis`` — reserve coverage against essential spending."""
     secondary = body.get("secondaryTargetMonths")
-    if secondary is not None and (isinstance(secondary, bool) or not isinstance(secondary, (int, float))):
+    if secondary is not None and (
+        isinstance(secondary, bool) or not isinstance(secondary, (int, float))
+    ):
         raise PlanningInputError("secondaryTargetMonths must be a number or omitted")
     try:
         return cash_reserve_analysis(
@@ -807,9 +824,7 @@ def _resolve_allocation_objective(
         if risk_profile is not None:
             raise PlanningInputError("pass either objective or riskProfile, not both")
         if not isinstance(objective, str) or objective not in _ALLOCATION_OBJECTIVES:
-            raise PlanningInputError(
-                f"objective must be one of {sorted(_ALLOCATION_OBJECTIVES)}"
-            )
+            raise PlanningInputError(f"objective must be one of {sorted(_ALLOCATION_OBJECTIVES)}")
         if objective == "max_quadratic_utility":
             ra = body.get("riskAversion", 3.0)
             if isinstance(ra, bool) or not isinstance(ra, (int, float)) or ra <= 0:
@@ -1085,9 +1100,7 @@ def _validate_asset_classes(body: dict[str, Any], *, require_lambda: bool) -> li
     if not isinstance(raw, list) or not raw:
         raise PlanningInputError("assetClasses must be a non-empty list")
     if len(raw) > _MAX_ASSET_CLASSES:
-        raise PlanningInputError(
-            f"assetClasses must have at most {_MAX_ASSET_CLASSES} entries"
-        )
+        raise PlanningInputError(f"assetClasses must have at most {_MAX_ASSET_CLASSES} entries")
     for asset in raw:
         if not isinstance(asset, dict) or not isinstance(asset.get("id"), str):
             raise PlanningInputError("each assetClass must be an object with a string id")
@@ -1191,9 +1204,7 @@ def _parse_spend_schedule(body: dict[str, Any]) -> list[_SpendScheduleEntry]:
             raise PlanningInputError("each spendSchedule entry must be an object")
         mode = entry.get("mode", "delta")
         if not isinstance(mode, str) or mode not in _SPEND_SCHEDULE_MODES:
-            raise PlanningInputError(
-                "spendSchedule mode must be one of delta, override, one_time"
-            )
+            raise PlanningInputError("spendSchedule mode must be one of delta, override, one_time")
         start_age = _as_optional_age(entry, "startAge", 0)
         end_age = _as_optional_age(entry, "endAge", start_age)
         if end_age < start_age:
@@ -1684,10 +1695,15 @@ def _solve_goal_variable(
 
         result = solve_monotone(
             evaluate=lambda x: _mc_success(
-                ctx, initial_balance=ctx.initial_balance,
-                net_spend_by_year=_schedule_for(ctx, annual_spend=x), paths=solve_paths,
+                ctx,
+                initial_balance=ctx.initial_balance,
+                net_spend_by_year=_schedule_for(ctx, annual_spend=x),
+                paths=solve_paths,
             ),
-            lo=lo, hi=hi, target=target, direction=direction,
+            lo=lo,
+            hi=hi,
+            target=target,
+            direction=direction,
         )
         return result, direction, spend_inputs
 
@@ -1699,10 +1715,15 @@ def _solve_goal_variable(
 
         result = solve_monotone(
             evaluate=lambda x: _mc_success(
-                ctx, initial_balance=ctx.initial_balance,
-                net_spend_by_year=_schedule_for(ctx, annual_contribution=x), paths=solve_paths,
+                ctx,
+                initial_balance=ctx.initial_balance,
+                net_spend_by_year=_schedule_for(ctx, annual_contribution=x),
+                paths=solve_paths,
             ),
-            lo=lo, hi=hi, target=target, direction=direction,
+            lo=lo,
+            hi=hi,
+            target=target,
+            direction=direction,
         )
         return result, direction, contrib_inputs
 
@@ -1720,11 +1741,15 @@ def _solve_goal_variable(
 
         result = solve_monotone(
             evaluate=lambda x: _mc_success(
-                ctx, initial_balance=ctx.initial_balance,
+                ctx,
+                initial_balance=ctx.initial_balance,
                 net_spend_by_year=_schedule_for(ctx, annual_contribution=x * income_f),
                 paths=solve_paths,
             ),
-            lo=lo, hi=hi, target=target, direction=direction,
+            lo=lo,
+            hi=hi,
+            target=target,
+            direction=direction,
         )
         return result, direction, rate_inputs
 
@@ -1736,12 +1761,15 @@ def _solve_goal_variable(
 
         result = solve_integer_monotone(
             evaluate=lambda x: _mc_success(
-                ctx, initial_balance=ctx.initial_balance,
+                ctx,
+                initial_balance=ctx.initial_balance,
                 net_spend_by_year=_schedule_for(ctx, retirement_age=int(round(x))),
                 paths=solve_paths,
             ),
-            lo=int(round(lo)), hi=int(round(hi)),
-            target=target, direction=direction,
+            lo=int(round(lo)),
+            hi=int(round(hi)),
+            target=target,
+            direction=direction,
         )
         return result, direction, age_inputs
 
@@ -1753,9 +1781,15 @@ def _solve_goal_variable(
 
     result = solve_monotone(
         evaluate=lambda x: _mc_success(
-            ctx, initial_balance=x, net_spend_by_year=ctx.net_spend, paths=solve_paths,
+            ctx,
+            initial_balance=x,
+            net_spend_by_year=ctx.net_spend,
+            paths=solve_paths,
         ),
-        lo=lo, hi=hi, target=target, direction=direction,
+        lo=lo,
+        hi=hi,
+        target=target,
+        direction=direction,
     )
     return result, direction, balance_inputs
 
@@ -1785,9 +1819,7 @@ def _solve_goal_tool(
     ctx = _prepare_monte_carlo(mc_body, market, regime_engine)
 
     lo, hi = _parse_solve_bounds(body, solve_for, ctx)
-    result, direction, to_inputs = _solve_goal_variable(
-        ctx, solve_for, lo=lo, hi=hi, target=target
-    )
+    result, direction, to_inputs = _solve_goal_variable(ctx, solve_for, lo=lo, hi=hi, target=target)
 
     # One authoritative confirmation at the solved value, at full paths.
     confirm_balance, confirm_net = to_inputs(result.solved_value)

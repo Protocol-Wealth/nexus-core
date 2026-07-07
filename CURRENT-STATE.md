@@ -17,15 +17,14 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   bearer key opens the 27-tool planning contract; hosted native `/mcp` keeps
   transparent OAuth active and exposes only the demo MCP tools
   `option_price`, `collar_book`, `health`, and `describe`.
-- **Last local update:** 2026-07-07 — current branch corrects the
-  `student_t` Monte Carlo return model so the multivariate Student-t draw is
-  scaled to the caller-supplied covariance instead of inflating variance by
-  `dof / (dof - 2)`. `main` also includes the 2026-07-05 Slice 0/1/2
+- **Last local update:** 2026-07-07 — current branch centralizes the
+  SECURE/SECURE 2.0 RMD start-age policy in `tax.rmd_start_age` so `rmd`,
+  `tax_aware_withdrawal`, and the Roth composite share one kernel. It preserves
+  age-only defaults for existing callers and adds optional `birthYear` policy
+  handling plus `rmdStartAgePolicyVersion`. `main` also includes the Student-t
+  Monte Carlo covariance-scaling correction, the 2026-07-05 Slice 0/1/2
   cash-flow planning bridge work, collar-book executable-fill modeling, and the
-  restricted REST/JSON access gate. The collar-book engine and REST/MCP parsers
-  accept per-share `executable_net_credit` or `call_bid`/`put_ask` and report
-  stock price, share count, fill haircut, executable income, and executable
-  annualized yield.
+  restricted REST/JSON access gate.
 - **Repo:** [github.com/Protocol-Wealth/nexus-core](https://github.com/Protocol-Wealth/nexus-core) — public, Apache-2.0
 - **Live:** [nexusmcp.site](https://nexusmcp.site) (Cloudflare → Cloud Run)
 - **Version:** 0.1.0

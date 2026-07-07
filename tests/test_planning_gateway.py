@@ -107,12 +107,18 @@ def test_planning_error_public_messages_are_sanitized() -> None:
     assert PlanningInputError("  field 'age' must be a number  ").public_message == (
         "field 'age' must be a number"
     )
-    assert PlanningInputError(
-        "Traceback (most recent call last):\n  File \"engine.py\", line 1"
-    ).public_message == "invalid planning request"
-    assert PlanningInfeasibleError(
-        "Traceback (most recent call last):\n  File \"solver.py\", line 1"
-    ).public_message == "planning request infeasible"
+    assert (
+        PlanningInputError(
+            'Traceback (most recent call last):\n  File "engine.py", line 1'
+        ).public_message
+        == "invalid planning request"
+    )
+    assert (
+        PlanningInfeasibleError(
+            'Traceback (most recent call last):\n  File "solver.py", line 1'
+        ).public_message
+        == "planning request infeasible"
+    )
 
 
 def test_planning_input_error_response_uses_public_message(
@@ -123,7 +129,7 @@ def test_planning_input_error_response_uses_public_message(
             return {"contractVersion": "0.1.0"}
 
     def _bad_input(_body: dict[str, Any]) -> dict[str, Any]:
-        raise PlanningInputError("Traceback (most recent call last):\n  File \"engine.py\"")
+        raise PlanningInputError('Traceback (most recent call last):\n  File "engine.py"')
 
     monkeypatch.setattr(
         planning_gateway,
@@ -133,7 +139,9 @@ def test_planning_input_error_response_uses_public_message(
     router = planning_gateway.build_planning_router(
         market=_FakeMarket(), regime_engine=_FakeRegimeEngine()
     )
-    endpoint = next(route.endpoint for route in router.routes if route.path == "/mcp/tools/{tool_id}")
+    endpoint = next(
+        route.endpoint for route in router.routes if route.path == "/mcp/tools/{tool_id}"
+    )
 
     response = asyncio.run(endpoint("bad_input", _Request()))
 
@@ -159,7 +167,9 @@ def test_internal_engine_error_logs_without_traceback(
     router = planning_gateway.build_planning_router(
         market=_FakeMarket(), regime_engine=_FakeRegimeEngine()
     )
-    endpoint = next(route.endpoint for route in router.routes if route.path == "/mcp/tools/{tool_id}")
+    endpoint = next(
+        route.endpoint for route in router.routes if route.path == "/mcp/tools/{tool_id}"
+    )
 
     with caplog.at_level(logging.WARNING, logger=planning_gateway.__name__):
         response = asyncio.run(endpoint("explode", _Request()))
@@ -315,9 +325,7 @@ def test_monte_carlo_spend_schedule_late_ltc_bump_lowers_success() -> None:
     shocked = _monte_carlo_decumulation_tool(
         {
             **base_payload,
-            "spendSchedule": [
-                {"mode": "delta", "startAge": 91, "endAge": 95, "amount": 70000}
-            ],
+            "spendSchedule": [{"mode": "delta", "startAge": 91, "endAge": 95, "amount": 70000}],
         },
         market,
         regime,
@@ -524,6 +532,30 @@ def test_tax_aware_withdrawal_happy_path() -> None:
     assert "totalTax" in body and "effectiveRate" in body and body["rmdSatisfied"] is True
 
 
+def test_tax_aware_withdrawal_accepts_birth_year_policy() -> None:
+    r = _client().post(
+        "/mcp/tools/tax_aware_withdrawal",
+        json={
+            "contractVersion": "0.1.0",
+            "year": 2026,
+            "filingStatus": "single",
+            "accounts": [
+                {"type": "traditional", "balance": 1_000_000, "allocation": {"x": 1.0}},
+                {"type": "taxable", "balance": 500_000, "allocation": {"x": 1.0}},
+            ],
+            "grossNeed": 10_000,
+            "age": 73,
+            "birthYear": 1960,
+            "otherTaxableIncome": 0,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["rmdStartAge"] == 75
+    assert body["withdrawals"][0]["type"] == "taxable"
+    assert body["withdrawals"][0]["gross"] == 10_000
+
+
 def test_tax_aware_withdrawal_infeasible_returns_422() -> None:
     r = _client().post(
         "/mcp/tools/tax_aware_withdrawal",
@@ -706,6 +738,24 @@ def test_rmd_happy_path() -> None:
     assert body["applies"] is True
     assert body["distributionPeriod"] == 26.5
     assert body["rmdAmount"] == round(500_000 / 26.5, 2)
+    assert body["rmdStartAgePolicyVersion"] == "secure2.0-goodfaith-73-per-89FR58644"
+
+
+def test_rmd_accepts_birth_year_policy() -> None:
+    r = _client().post(
+        "/mcp/tools/rmd",
+        json={
+            "contractVersion": "0.1.0",
+            "age": 73,
+            "balance": 500_000,
+            "birthYear": 1960,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["rmdStartAge"] == 75
+    assert body["applies"] is False
+    assert body["rmdAmount"] == 0.0
 
 
 def test_rmd_negative_balance_400() -> None:
@@ -1324,9 +1374,7 @@ def test_budget_pacing_projection_invalid_date_400() -> None:
         ),
     ],
 )
-def test_cashflow_bridge_tools_reject_identity_keys(
-    tool_id: str, payload: dict[str, Any]
-) -> None:
+def test_cashflow_bridge_tools_reject_identity_keys(tool_id: str, payload: dict[str, Any]) -> None:
     r = _call_gateway_tool(tool_id, {**payload, "email": "client@example.com"})
     assert r.status_code == 400
     assert "identity" in _response_text(r).lower()
@@ -1342,7 +1390,11 @@ _SOLVE_BASE: dict[str, Any] = {
     "retirementAge": 65,
     "horizonAge": 95,
     "accounts": [
-        {"type": "traditional", "balance": 1_200_000, "allocation": {"us_equity": 0.6, "us_bonds": 0.4}},
+        {
+            "type": "traditional",
+            "balance": 1_200_000,
+            "allocation": {"us_equity": 0.6, "us_bonds": 0.4},
+        },
         {"type": "roth", "balance": 300_000, "allocation": {"us_equity": 0.8, "us_bonds": 0.2}},
     ],
     "assetClasses": [
@@ -1438,7 +1490,11 @@ def test_solve_goal_infeasible_reports_best_achievable() -> None:
         solveFor="annual_spend",
         annualSpend=400_000,
         accounts=[
-            {"type": "traditional", "balance": 500_000, "allocation": {"us_equity": 0.9, "us_bonds": 0.1}}
+            {
+                "type": "traditional",
+                "balance": 500_000,
+                "allocation": {"us_equity": 0.9, "us_bonds": 0.1},
+            }
         ],
         targetSuccess=0.999,
         bounds={"min": 350_000, "max": 800_000},
@@ -1451,7 +1507,8 @@ def test_solve_goal_infeasible_reports_best_achievable() -> None:
 
 def test_solve_goal_bad_solve_for_400() -> None:
     r = _client().post(
-        "/mcp/tools/solve_goal", json={**_SOLVE_BASE, "solveFor": "crystal_ball", "targetSuccess": 0.8}
+        "/mcp/tools/solve_goal",
+        json={**_SOLVE_BASE, "solveFor": "crystal_ball", "targetSuccess": 0.8},
     )
     assert r.status_code == 400
     assert "solveFor" in r.text
@@ -1460,7 +1517,8 @@ def test_solve_goal_bad_solve_for_400() -> None:
 def test_solve_goal_bad_target_400() -> None:
     for bad in (0.0, 1.5, -0.2):
         r = _client().post(
-            "/mcp/tools/solve_goal", json={**_SOLVE_BASE, "solveFor": "annual_spend", "targetSuccess": bad}
+            "/mcp/tools/solve_goal",
+            json={**_SOLVE_BASE, "solveFor": "annual_spend", "targetSuccess": bad},
         )
         assert r.status_code == 400
         assert "targetSuccess" in r.text
@@ -1493,7 +1551,11 @@ def test_solve_goal_rejects_invalid_base_body_400() -> None:
         "solveFor": "annual_spend",
         "targetSuccess": 0.80,
         "accounts": [
-            {"type": "traditional", "balance": 1000, "allocation": {"us_equity": 0.5, "us_bonds": 0.4}}
+            {
+                "type": "traditional",
+                "balance": 1000,
+                "allocation": {"us_equity": 0.5, "us_bonds": 0.4},
+            }
         ],
     }
     r = _client().post("/mcp/tools/solve_goal", json=bad)

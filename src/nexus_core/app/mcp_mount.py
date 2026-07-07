@@ -104,7 +104,8 @@ _PLANNING_TOOL_DESCRIPTIONS = {
     ),
     "glide_path": "Equity-weight glide path by age across the horizon. JSON request object in `body`.",
     "tax_aware_withdrawal": (
-        "RMD-first, tax-efficient withdrawal sequencing. JSON request object in `body`."
+        "RMD-first, tax-efficient withdrawal sequencing with optional birthYear "
+        "RMD start-age policy. JSON request object in `body`."
     ),
     "correlation_matrix": (
         "Real-data return correlation across asset classes (Ledoit-Wolf shrinkage). "
@@ -130,8 +131,8 @@ _PLANNING_TOOL_DESCRIPTIONS = {
     ),
     "rmd": (
         "Required Minimum Distribution: IRS Uniform Lifetime Table RMD for a "
-        "traditional account given age + prior-year-end balance. JSON request "
-        "object in `body`."
+        "traditional account given age + prior-year-end balance, with optional "
+        "birthYear start-age policy. JSON request object in `body`."
     ),
     "tax_bracket_headroom": (
         "Tax-bracket headroom / Roth-fill: marginal bracket + ordinary-income "
