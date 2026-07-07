@@ -163,7 +163,9 @@ def test_openapi_has_servers_and_tag_descriptions() -> None:
 def test_landing_has_curl_quickstart() -> None:
     html = render_landing(mcp_enabled=True)
     assert "Try it" in html
-    assert "curl" in html and "/mcp/tools/glide_path" in html
+    assert "curl" in html
+    assert "Authorization: Bearer $NEXUS_SERVICE_API_KEY" in html
+    assert "/api/planning/tools/glide_path" in html
 
 
 def test_mcp_guide_has_troubleshooting() -> None:

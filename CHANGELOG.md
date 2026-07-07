@@ -25,6 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   plus quote/history fallback coverage; MarketStack is a market quote/history
   fallback, not an options-chain provider.
 
+#### Fixed
+
+- Updated the source-rendered landing-page quickstart to show anonymous
+  `/health` plus service-key REST/JSON examples instead of unauthenticated
+  hosted `/api/*` calls.
+- Corrected the SHA-256 digest fixture in the access-gate test and updated the
+  landing-page quickstart test for the primary `/api/planning/tools/{tool_id}`
+  route.
+
 ### REST/JSON access boundary and public MCP demo profile
 
 #### Added

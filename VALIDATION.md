@@ -10,6 +10,18 @@ Docs/state closeout gate for the 2026-07-07 private-consumer-boundary update:
 ```bash
 git diff --check
 # clean
+
+.venv/bin/ruff check src/nexus_core/app/landing.py tests/test_access_gate.py tests/test_app.py
+# All checks passed!
+
+.venv/bin/mypy --strict src/nexus_core/app/landing.py src/nexus_core/app/access_gate.py
+# Success: no issues found in 2 source files
+
+.venv/bin/python -c "... render_landing restricted-REST quickstart assertions ..."
+# landing quickstart ok
+
+.venv/bin/python -c "... access_gate sha256 digest assertion ..."
+# digest auth ok
 ```
 
 Live smoke refreshed during the same closeout:
@@ -21,9 +33,11 @@ Live smoke refreshed during the same closeout:
 
 GitHub state at closeout: local `main` was even with `origin/main` before this
 docs update; nexus-core had only Dependabot PRs open (#205-#212) and roadmap
-issues #197-#203 open. Latest main CI for the prior docs/access-boundary push
-had one `ruff + mypy + pytest` failure in the pytest/coverage step; the failed
-log body was not available through `gh run view --log-failed` in this session.
+issues #197-#203 open. The first pushed closeout run failed in the
+pytest/coverage step because two existing tests were stale for the restricted
+REST boundary: the SHA-256 fixture did not hash `secret`, and the landing test
+expected the legacy `/mcp/tools/glide_path` quickstart. The follow-up fix updates
+those tests and the landing-page quickstart.
 
 Focused local gate for the 2026-07-06 collar-book executable-fill update:
 

@@ -63,8 +63,8 @@ def test_access_gate_accepts_sha256_digests(monkeypatch) -> None:
     monkeypatch.setenv("NEXUS_ACCESS_MODE", "restricted")
     monkeypatch.setenv(
         "NEXUS_API_KEYS",
-        "sha256:2bb80d537b1da3e38bd30361aa855686bde0baea7e69d9291e0f8d"
-        "5741a3a0d",
+        "sha256:2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6"
+        "a25fe97bf527a25b",
     )
     assert TestClient(_app()).get(
         "/api/regime", headers={"Authorization": "Bearer secret"}

@@ -3,9 +3,9 @@
 """Landing page for the nexus-core public deployment.
 
 A single self-contained HTML document — no template engine, no static-asset
-pipeline. The page describes the public analytical surface, which has no
-account/API-key gate, and points visitors at the interactive API docs and the
-source repository.
+pipeline. The page describes the split public-demo / restricted-REST analytical
+surface and points visitors at the interactive API docs and the source
+repository.
 """
 
 from __future__ import annotations
@@ -77,9 +77,9 @@ _PAGE = """\
       <div class="t">API documentation &rarr;</div>
       <div class="d">Interactive OpenAPI / Swagger explorer</div>
     </a>
-    <a class="card" href="/api/regime">
-      <div class="t">Current regime &rarr;</div>
-      <div class="d">Live macro regime classification</div>
+    <a class="card" href="/docs">
+      <div class="t">Restricted REST API &rarr;</div>
+      <div class="d">Service-key calculation endpoints for trusted callers</div>
     </a>
     <a class="card" href="{repo}">
       <div class="t">Source on GitHub &rarr;</div>
@@ -101,23 +101,28 @@ _PAGE = """\
     {mcp_line}
   </ul>
 
-  <h2>Try it — no setup</h2>
+  <h2>Try it</h2>
   <pre style="background:#111830;border:1px solid #1f2a48;border-radius:10px;padding:1rem 1.15rem;overflow-x:auto;font-size:.85rem;color:#d6def5"><code># current macro regime
-curl https://nexusmcp.site/api/regime
+curl https://nexusmcp.site/health
+curl -H "Authorization: Bearer $NEXUS_SERVICE_API_KEY" \\
+  https://nexusmcp.site/api/regime
 
 # planning tools: contract handshake, then invoke one (educational, PII-free)
-curl https://nexusmcp.site/api/planning/tools
+curl -H "Authorization: Bearer $NEXUS_SERVICE_API_KEY" \\
+  https://nexusmcp.site/api/planning/tools
 curl -X POST https://nexusmcp.site/api/planning/tools/glide_path \\
+  -H "Authorization: Bearer $NEXUS_SERVICE_API_KEY" \\
   -H 'Content-Type: application/json' \\
   -d '{{"currentAge": 40, "retirementAge": 65, "horizonAge": 95, "startEquityWeight": 0.8, "endEquityWeight": 0.4, "shape": "linear"}}'</code></pre>
 
   <h2>Public surface only</h2>
   <p style="color:#aab3cf">
-    This deployment exposes public data and educational analytical math. It
-    contains no client data, no account surfaces, no suitability logic, no report
-    production workflow, and no advisory workflow state — those live in Protocol
-    Wealth's closed systems. Planning endpoints accept de-identified inputs
-    only.
+    Native MCP can remain an OAuth-compatible public demo surface; hosted
+    REST/JSON calculation endpoints require a trusted service key. This
+    deployment contains no client data, no account surfaces, no suitability
+    logic, no report production workflow, and no advisory workflow state — those
+    live in Protocol Wealth's closed systems. Planning endpoints accept
+    de-identified inputs only.
   </p>
 
   <footer>
