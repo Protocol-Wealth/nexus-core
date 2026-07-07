@@ -285,7 +285,7 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     <li><code>irmaa_headroom</code> — projected Medicare IRMAA headroom</li>
     <li><code>analyze_roth_conversion</code> — composite Roth conversion analysis under tax + IRMAA ceilings</li>
     <li><code>sequence_conversions</code> — multi-year Roth conversion sequencing</li>
-    <li><code>build_planning_report</code> — ordered, render-ready envelope from de-identified planning outputs</li>
+    <li><code>build_planning_report</code> — ordered, render-ready envelope from de-identified planning outputs; optional PW Wealth Roadmap preset</li>
   </ul>
   <div class="note">
     <code>monte_carlo_decumulation</code> takes an optional <code>retirementAge</code>:

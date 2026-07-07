@@ -205,7 +205,10 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "auto-derived findings for recognized section kinds, consolidated "
         "assumptions, and the comprehensive disclaimer. Pass `sections` (each "
         "`{kind, title?, data?, findings?, assumptions?}`) + optional `title` / "
-        "`includeRegime`. PII-free; not an IPS. JSON request object in `body`."
+        "`includeRegime`; pass `preset: 'wealth_roadmap'` plus `scope` for the "
+        "PW Wealth Roadmap preset with required scope disclosures, replay "
+        "metadata, and priority-action release guard. PII-free; not an IPS. "
+        "JSON request object in `body`."
     ),
     "fire": (
         "FIRE / Coast-FIRE: the FIRE number (spend ÷ safe withdrawal rate), the "
