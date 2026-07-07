@@ -6,7 +6,11 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
+import pytest
+
 from nexus_core.engine.planning import GuardrailParams, monte_carlo_decumulation
+from nexus_core.engine.planning.monte_carlo import _T_DOF, _portfolio_returns
 from nexus_core.engine.planning.regime import GENERIC_REGIMES
 
 _MODELS = (
@@ -128,6 +132,52 @@ def test_all_return_models_produce_valid_output() -> None:
         assert 0.0 <= r["successProbability"] <= 1.0
         assert len(r["medianBalanceByYear"]) == 50
         assert r["seedUsed"] == 12345
+
+
+def test_student_t_model_matches_target_covariance() -> None:
+    means = np.array([0.07, 0.03])
+    vols = np.array([0.16, 0.05])
+    correlation = np.array([[1.0, 0.2], [0.2, 1.0]])
+    cov = np.outer(vols, vols) * correlation
+    paths = 200_000
+    years = 1
+    seed = 20260707
+
+    asset_0 = _portfolio_returns(
+        model="student_t",
+        means=means,
+        cov=cov,
+        weights=np.array([1.0, 0.0]),
+        paths=paths,
+        years=years,
+        rng=np.random.default_rng(seed),
+    ).reshape(paths)
+    asset_1 = _portfolio_returns(
+        model="student_t",
+        means=means,
+        cov=cov,
+        weights=np.array([0.0, 1.0]),
+        paths=paths,
+        years=years,
+        rng=np.random.default_rng(seed),
+    ).reshape(paths)
+
+    empirical = np.cov(np.column_stack([asset_0, asset_1]), rowvar=False, ddof=1)
+    assert empirical[0, 0] == pytest.approx(cov[0, 0], rel=0.06)
+    assert empirical[1, 1] == pytest.approx(cov[1, 1], rel=0.06)
+    assert empirical[0, 1] == pytest.approx(cov[0, 1], rel=0.10, abs=0.0001)
+
+
+def test_unscaled_student_t_shape_matrix_would_inflate_variance() -> None:
+    target_var = 0.16**2
+    paths = 200_000
+    rng = np.random.default_rng(20260707)
+    normal = rng.multivariate_normal(np.zeros(1), np.array([[target_var]]), size=(paths, 1))
+    chi2 = rng.chisquare(_T_DOF, size=(paths, 1, 1)) / _T_DOF
+    old_unscaled = normal[:, 0, 0] / np.sqrt(chi2[:, 0, 0])
+
+    inflation = float(np.var(old_unscaled, ddof=1) / target_var)
+    assert inflation == pytest.approx(_T_DOF / (_T_DOF - 2.0), rel=0.08)
 
 
 def test_regime_summary_only_for_regime_aware_models() -> None:
@@ -272,9 +322,10 @@ def test_guardrails_no_positive_draw_ever_is_pure_inflow() -> None:
         "seed": 313,
         "regime_seed": 313,
     }
-    assert _run(**kw)["medianBalanceByYear"] == _run(**kw, guardrails=GuardrailParams())[
-        "medianBalanceByYear"
-    ]
+    assert (
+        _run(**kw)["medianBalanceByYear"]
+        == _run(**kw, guardrails=GuardrailParams())["medianBalanceByYear"]
+    )
 
 
 def test_guardrails_respect_an_accumulation_phase() -> None:

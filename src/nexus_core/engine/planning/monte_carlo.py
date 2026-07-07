@@ -30,17 +30,24 @@ import numpy as np
 from .regime import GENERIC_REGIMES, transition_matrix
 
 _T_DOF = 5.0  # Student-t degrees of freedom
+_T_COVARIANCE_SCALE = float(np.sqrt((_T_DOF - 2.0) / _T_DOF))
 _BLOCK = 4  # moving-block bootstrap block length (years)
 _LAMBDA_REF = 0.35  # reference lambda; emf scales regime impact relative to this
 
 #: Per-regime annual mean shift (additive) and volatility multiplier.
 _REGIME_MEAN_SHIFT = {
-    "expansion": 0.015, "inflationary": -0.010, "deflationary": -0.020,
-    "stagflation": -0.030, "crisis": -0.080,
+    "expansion": 0.015,
+    "inflationary": -0.010,
+    "deflationary": -0.020,
+    "stagflation": -0.030,
+    "crisis": -0.080,
 }
 _REGIME_VOL_MULT = {
-    "expansion": 0.90, "inflationary": 1.10, "deflationary": 1.20,
-    "stagflation": 1.30, "crisis": 1.60,
+    "expansion": 0.90,
+    "inflationary": 1.10,
+    "deflationary": 1.20,
+    "stagflation": 1.30,
+    "crisis": 1.60,
 }
 
 _REGIME_AWARE = {"markov_regime", "emf_regime"}
@@ -125,7 +132,11 @@ def _portfolio_returns(
     if model == "student_t":
         normal = rng.multivariate_normal(np.zeros_like(means), cov, size=(paths, years))
         chi2 = rng.chisquare(_T_DOF, size=(paths, years, 1)) / _T_DOF
-        draws = means + normal / np.sqrt(chi2)
+        # A multivariate-t built as Z / sqrt(U / dof) has covariance
+        # dof / (dof - 2) times the Gaussian shape matrix. Shrink the Gaussian
+        # core so the realized Student-t covariance matches the caller's CMA
+        # covariance while retaining the fat-tailed draw shape.
+        draws = means + (normal * _T_COVARIANCE_SCALE) / np.sqrt(chi2)
         return np.asarray(draws @ weights)
     if model == "block_bootstrap":
         base = rng.multivariate_normal(means, cov, size=(paths, years))
@@ -195,7 +206,9 @@ def monte_carlo_decumulation(
     regime_summary: list[str] = []
     if return_model in _REGIME_AWARE:
         regime_idx = _regime_paths(
-            start_regime=current_regime, paths=paths, years=years,
+            start_regime=current_regime,
+            paths=paths,
+            years=years,
             rng=np.random.default_rng(regime_seed),
         )
         regimes = list(GENERIC_REGIMES)
@@ -204,7 +217,9 @@ def monte_carlo_decumulation(
         portfolio_lambda = float(w @ np.asarray(lambdas, dtype=float))
         lambda_scale = portfolio_lambda / _LAMBDA_REF if return_model == "emf_regime" else 1.0
         unconditional = float(w @ mu)
-        port_returns = unconditional + (base_returns - unconditional) * vmults + shifts * lambda_scale
+        port_returns = (
+            unconditional + (base_returns - unconditional) * vmults + shifts * lambda_scale
+        )
         regime_summary = [regimes[i] for i in regime_idx[0]]
     else:
         port_returns = base_returns
@@ -247,8 +262,11 @@ def monte_carlo_decumulation(
             this_w = withdrawal
         else:
             withdrawal, cut_mask, raise_mask = _guardrail_step(
-                withdrawal=withdrawal, balance=balance, initial_rate=initial_rate,
-                prev_return=prev_return, gr=guardrails,
+                withdrawal=withdrawal,
+                balance=balance,
+                initial_rate=initial_rate,
+                prev_return=prev_return,
+                gr=guardrails,
                 allow_cut=(years - year) > guardrails.preservation_final_years,
             )
             ever_cut |= cut_mask
@@ -263,7 +281,9 @@ def monte_carlo_decumulation(
         bands_by_year[year] = np.percentile(balance, band_pcts)
         if guardrails is not None:
             # The realized draw can't exceed what the portfolio held that year.
-            effective = np.clip(np.minimum(np.asarray(this_w, dtype=float), balance_before), 0.0, None)
+            effective = np.clip(
+                np.minimum(np.asarray(this_w, dtype=float), balance_before), 0.0, None
+            )
             spending_by_year[year] = np.percentile(effective, spend_pcts)
         prev_return = port_returns[:, year]
     median_by_year = bands_by_year[:, 2] if years > 0 else np.empty(0)
@@ -301,7 +321,8 @@ def monte_carlo_decumulation(
     response: dict[str, Any] = {
         "successProbability": round(float(np.mean(terminal > 0.0)), 4),
         "terminalValues": {
-            f"p{p}": round(float(v), 2) for p, v in zip([10, 25, 50, 75, 90], percentiles, strict=True)
+            f"p{p}": round(float(v), 2)
+            for p, v in zip([10, 25, 50, 75, 90], percentiles, strict=True)
         },
         "medianBalanceByYear": [round(float(v), 2) for v in median_by_year],
         "balancePercentilesByYear": {
