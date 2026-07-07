@@ -13,20 +13,27 @@ guarantees, no marketing.
 
 ## Landing Now
 
-Local source includes a collar-book realistic-fill layer that has not yet been
-smoked on the live deployment. The engine plus REST/MCP parsers accept midpoint
-`net_credit` and optional executable pricing (`executable_net_credit` or
-`call_bid` minus `put_ask`) and return stock price, share count, per-position
-fill haircut, executable income/yield, and portfolio-level executable yield only
-when every held line has executable pricing. This is still an educational
-advisor worksheet: no live-chain attestation, no custodian execution record, no
-orders, and no individualized advice.
+Production Nexus now runs as a split surface: hosted native `/mcp` can remain a
+public OAuth-compatible demo endpoint with only closed-world demo tools, while
+`/api/*`, `/api/planning/tools/*`, and legacy `/mcp/tools/*` are gated by
+`NEXUS_ACCESS_MODE=restricted` + `NEXUS_API_KEYS`. `pw-api` owns the
+server-to-server key path. Browser apps such as PWOS and PWPortal should call
+their own BFF/API routes and never hold Nexus service keys.
 
-Local source also includes an optional REST/JSON access boundary. Native `/mcp`
-can be deployed in `NEXUS_PUBLIC_MCP_PROFILE=demo` with only closed-world demo
-tools, while `/api/*`, `/api/planning/tools/*`, and legacy `/mcp/tools/*` can be
-gated by `NEXUS_ACCESS_MODE=restricted` + `NEXUS_API_KEYS`. Default mode remains
-public until production service keys are rolled.
+The collar-book realistic-fill layer is part of current source. The engine plus
+REST/MCP parsers accept midpoint `net_credit` and optional executable pricing
+(`executable_net_credit` or `call_bid` minus `put_ask`) and return stock price,
+share count, per-position fill haircut, executable income/yield, and
+portfolio-level executable yield only when every held line has executable
+pricing. This is still an educational advisor worksheet: no live-chain
+attestation, no custodian execution record, no orders, and no individualized
+advice.
+
+The private stock-screen import path lives outside this repo. PWOS `/market-data`
+now imports Seeking Alpha CSV/XLSX research screens and persisted a 380-row
+advisor-verified import (`7c30414f`) after PR #993. Nexus should only receive
+de-identified candidate symbols, pre-screened fields, and option-chain facts
+after private ingestion in PWOS/pw-api.
 
 ## Done
 
@@ -251,8 +258,12 @@ Today an MCP client can run a stock idea through the regime + EMF durability len
 (`current_regime` + `score_asset` + price), but nothing else — no fundamentals
 statements, valuation, analyst consensus, forward estimates, real equity options
 IV/skew (only crypto/Deribit has them), screener, ownership flows, or news. The
-keys for it are already held (the rich **MBOUM** surface is called only for
-quotes/history; **MarketStack** only for EOD; **SEC EDGAR** is keyless). The plan
+private PWOS import path can now stage advisor research screens, but public Nexus
+should still expose only licensed/public-safe calculations unless data-rights
+review clears a richer surface. The keys for it are already held (the rich
+**MBOUM** surface is used for quotes/history and equity option
+expirations/chains; **MarketStack** is a market quote/history fallback, not an
+options-chain provider; **SEC EDGAR** is keyless). The plan
 adds a sibling `ResearchDataProvider` protocol (modeled on `MacroDataProvider`) +
 a keyed MBOUM impl + a keyless-EDGAR impl, a set of read-only research MCP tools +
 REST routes, and a composite `stock_research_dossier` that fuses regime + score +

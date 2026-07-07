@@ -22,12 +22,20 @@ Provided as-is under Apache-2.0. Educational use only — nothing here is invest
 Current live status is tracked in [CURRENT-STATE.md](CURRENT-STATE.md). Future
 work is issue-linked in [ROADMAP.md](ROADMAP.md) and GitHub Issues.
 
-Local source as of 2026-07-06 includes a not-yet-deployed collar-book
-realistic-fill layer: the engine plus REST/MCP parsers can accept a midpoint
-`net_credit` and either explicit `executable_net_credit` or `call_bid` /
-`put_ask`, then report stock price, shares, fill haircut, executable income, and
-executable annualized yield. This remains an advisor research worksheet, not an
-order surface or advice engine.
+As of the 2026-07-07 closeout, the hosted production posture is a public demo
+MCP surface plus authenticated REST/JSON calculation endpoints. Anonymous MCP
+clients can use the low-risk demo tool set; `/api/*` and planning JSON paths are
+service-key gated in production and should be called server-to-server by
+`pw-api`, not directly from browser apps. PWOS/PWPortal browser code should call
+their own BFF/API layer, which keeps Nexus keys out of clients.
+
+The current options substrate includes the MBOUM equity option expiration/chain
+provider, batch collar screens, and a collar-book realistic-fill layer. The
+engine plus REST/MCP parsers can accept midpoint `net_credit` and either
+explicit `executable_net_credit` or executable leg prices (`call_bid` /
+`put_ask`), then report stock price, shares, fill haircut, executable income,
+and executable annualized yield. This remains an advisor research worksheet, not
+an order surface or advice engine.
 
 ## What This Is
 
@@ -49,11 +57,13 @@ its provider key is absent.
 
 For the PW Cash Flow OS + PW Planning Lab + PW Retirement Income Lab direction,
 Nexus Core is the public-safe calculation plane. It can accept de-identified
-planning inputs and derived monthly-close numbers, but it must not ingest Monarch
-CSV exports, raw transaction rows, merchant/payee strings, account nicknames,
-household records, advisor/client notes, approval state, release state, or
-books-and-records audit trails. Those production workflows belong in private
-PWOS / pw-api / PWPortal.
+planning inputs, derived monthly-close numbers, pre-screened stock symbols, and
+caller-supplied option-chain facts. It must not ingest Monarch CSV exports,
+Seeking Alpha workbooks, Schwab order/status files, raw transaction rows,
+merchant/payee strings, account nicknames, household records, advisor/client
+notes, approval state, release state, or books-and-records audit trails. Those
+production workflows belong in private PWOS / pw-api / PWPortal; Nexus should
+receive only de-identified calculation inputs after private ingestion.
 
 ### Meta
 
@@ -231,10 +241,11 @@ Nexus Core stands on a foundation of exceptional open-source projects. We bundle
 
 **Open (Apache 2.0):** Framework architecture, scoring structure, layer model, tool pattern, the public REST/MCP surface, caching patterns — **and Protocol Wealth's calibrated regime thresholds + scoring values**, which PW publishes openly as part of the EMF framework ([protocolwealthllc.com/framework](https://protocolwealthllc.com/framework)). All third-party integrations listed above.
 
-**Private:** API keys, client data, Monarch imports, raw transaction processing,
-household records, advisor/client planning workflows, suitability logic, report
-production, approvals, release workflow, books-and-records audit trail, the
-narrative/research pipeline, and any client-specific implementation.
+**Private:** API keys, client data, Monarch imports, Schwab/custodian files,
+Seeking Alpha CSV/XLSX imports, raw transaction processing, household records,
+advisor/client planning workflows, suitability logic, report production,
+approvals, release workflow, books-and-records audit trail, the narrative and
+research-ingestion pipeline, and any client-specific implementation.
 (Calibrations are *not* private — EMF is a published framework. Adopters with
 different signal sources should still re-fit.)
 
@@ -274,15 +285,20 @@ pip install -e ".[all]"
 
 ## Quick Start
 
-**Hosted — no install.** The server is live at `nexusmcp.site`:
+**Hosted — no install.** The server is live at `nexusmcp.site`. Public liveness
+and docs routes are anonymous; production `/api/*` examples require a service
+API key when the hosted deployment is in restricted mode:
 
 ```bash
 curl https://nexusmcp.site/health
-curl https://nexusmcp.site/api/regime          # current macro regime
-curl https://nexusmcp.site/api/planning/tools   # planning contract + tool ids
+curl -H "Authorization: Bearer $NEXUS_SERVICE_API_KEY" \
+  https://nexusmcp.site/api/regime              # current macro regime
+curl -H "Authorization: Bearer $NEXUS_SERVICE_API_KEY" \
+  https://nexusmcp.site/api/planning/tools      # planning contract + tool ids
 
 # a planning tool (educational, PII-free — send age, never date of birth)
 curl -X POST https://nexusmcp.site/api/planning/tools/glide_path \
+  -H "Authorization: Bearer $NEXUS_SERVICE_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{"currentAge": 40, "retirementAge": 65, "horizonAge": 95,
        "startEquityWeight": 0.8, "endEquityWeight": 0.4, "shape": "linear"}'
@@ -311,11 +327,12 @@ nexus-core mcp       # MCP server over stdio (for Claude Desktop)
 nexus-core snapshot  # Write a daily benchmark snapshot to the database
 ```
 
-`nexus-core serve` hosts the public surface deployed at
+`nexus-core serve` hosts the surface deployed at
 [nexusmcp.site](https://nexusmcp.site): the read-only REST API described above,
-interactive docs at `/docs`, and an MCP endpoint at `/mcp`. See
-[DEPLOY.md](DEPLOY.md) for the Cloud Run + Cloud SQL + Cloud Scheduler
-deployment.
+interactive docs at `/docs`, and an MCP endpoint at `/mcp`. In hosted
+production, `/mcp` may remain a public OAuth-compatible demo surface while
+REST/JSON calculation paths are service-key gated. See [DEPLOY.md](DEPLOY.md)
+for the Cloud Run + Cloud SQL + Cloud Scheduler deployment.
 
 ### Using with any MCP client
 

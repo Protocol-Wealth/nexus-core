@@ -13,6 +13,22 @@ nexus-core is a public, read-only, **educational** financial-analysis engine
 It holds **no client data and no PII**. Nothing here is investment advice.
 Operated by Protocol Wealth, LLC (SEC-registered RIA).
 
+## Hosted access model
+
+Production Nexus is a split surface. Hosted native `/mcp` may stay public as a
+low-risk demo endpoint (`NEXUS_PUBLIC_MCP_PROFILE=demo`, transparent OAuth for
+remote clients). Hosted REST/JSON calculation paths (`/api/*`,
+`/api/planning/tools/*`, and legacy `/mcp/tools/*`) are service-key gated with
+`NEXUS_ACCESS_MODE=restricted` + `NEXUS_API_KEYS`; `pw-api` owns the
+server-to-server key. Browser apps such as PWOS/PWPortal should call their own
+BFF/API routes and must not embed Nexus service credentials.
+
+Private ingestion stays outside this repo. PWOS `/market-data` may ingest
+Seeking Alpha CSV/XLSX screens, Schwab/custodian files, tracking records, and
+client assignments. Nexus may receive only de-identified candidate symbols,
+screened fields, and caller-supplied option-chain facts for public-safe
+calculation.
+
 ## Setup, build, test, lint
 
 ```bash

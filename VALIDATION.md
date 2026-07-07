@@ -5,6 +5,26 @@ data providers, and public documentation/status surface.
 
 ## Automated tests
 
+Docs/state closeout gate for the 2026-07-07 private-consumer-boundary update:
+
+```bash
+git diff --check
+# clean
+```
+
+Live smoke refreshed during the same closeout:
+
+| Check | Result |
+|-------|--------|
+| `GET https://nexusmcp.site/health` | `200` — `{"status":"ok","service":"nexus-core","version":"0.1.0"}` |
+| unauthenticated `GET https://nexusmcp.site/api/planning/tools` | `401` — `{"error":"unauthorized","error_description":"Nexus API key required"}` |
+
+GitHub state at closeout: local `main` was even with `origin/main` before this
+docs update; nexus-core had only Dependabot PRs open (#205-#212) and roadmap
+issues #197-#203 open. Latest main CI for the prior docs/access-boundary push
+had one `ruff + mypy + pytest` failure in the pytest/coverage step; the failed
+log body was not available through `gh run view --log-failed` in this session.
+
 Focused local gate for the 2026-07-06 collar-book executable-fill update:
 
 ```bash

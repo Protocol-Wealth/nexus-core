@@ -5,6 +5,13 @@ verification. For the architectural overview see [README.md](README.md); for
 deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
 [AUDIT.md](AUDIT.md).
 
+- **Last docs closeout:** 2026-07-07 ET — root docs reconciled to the private
+  consumer boundary: hosted native `/mcp` remains a public demo surface, hosted
+  REST/JSON calculation paths are service-key gated, `pw-api` owns the
+  server-to-server Nexus key, and PWOS/PWPortal browser clients should not hold
+  Nexus credentials. Cross-repo PWOS market-research import PR #993 is merged
+  and advisor-verified with `Saved 380 research rows (7c30414f)`; that raw
+  CSV/XLSX ingestion remains private PWOS/pw-api data, not nexus-core data.
 - **Last live verified:** 2026-07-06 ET / 2026-07-07 UTC — live `/health` OK;
   hosted REST/JSON planning paths require a Nexus API key; the pw-api service
   bearer key opens the 27-tool planning contract; hosted native `/mcp` keeps
@@ -30,9 +37,11 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
 
 For the PW Cash Flow OS + PW Planning Lab + PW Retirement Income Lab direction,
 this repo remains the public-safe calculation engine. It may expose pure,
-deterministic functions over de-identified planning inputs and derived
-monthly-close values. It must not ingest or store Monarch CSV exports, raw import
-rows, merchant/payee text, account nicknames, household/person identifiers,
+deterministic functions over de-identified planning inputs, derived
+monthly-close values, pre-screened stock symbols, and caller-supplied option
+facts. It must not ingest or store Monarch CSV exports, Seeking Alpha CSV/XLSX
+workbooks, Schwab/custodian order or position files, raw import rows,
+merchant/payee text, account nicknames, household/person identifiers,
 advisor/client notes, document requests, approvals, release state, or compliance
 audit trails. Private PWOS / pw-api / PWPortal owns those workflows and should
 call Nexus only after de-identification and aggregation.
@@ -65,7 +74,9 @@ provide midpoint `net_credit` plus either explicit `executable_net_credit` or
 This is the realistic-fill layer for the PWOS screen-to-chain / collar
 implementation workflow: bid-side call, ask-side put, still educational and
 public-safe. It is not a live-chain attestation, custodian execution record,
-client-specific recommendation, or order ticket.
+client-specific recommendation, or order ticket. PWOS `/market-data` may import
+and persist research-screen rows privately, then pass de-identified candidates
+and chain-derived facts to Nexus for calculation.
 
 ## Public REST surface
 
@@ -75,15 +86,16 @@ is configured; that flow has no user login and grants only public-scope access.
 External integrations degrade gracefully — when a provider key is absent the
 dependent endpoint returns `None` / empty / `503` rather than failing the service.
 
-Optional restricted mode lets production consumers keep the public native MCP
-transport as a low-risk demo while gating REST/JSON calculation paths. The
-hosted deployment currently sets `NEXUS_PUBLIC_MCP_PROFILE=demo`, so OAuth MCP
-clients see only `option_price`, `collar_book`, `health`, and `describe`. It
-also sets `NEXUS_ACCESS_MODE=restricted` plus `NEXUS_API_KEYS`, requiring
+Restricted mode lets production consumers keep the public native MCP transport
+as a low-risk demo while gating REST/JSON calculation paths. The hosted
+deployment currently sets `NEXUS_PUBLIC_MCP_PROFILE=demo`, so OAuth MCP clients
+see only `option_price`, `collar_book`, `health`, and `describe`. It also sets
+`NEXUS_ACCESS_MODE=restricted` plus `NEXUS_API_KEYS`, requiring
 `Authorization: Bearer <key>` or `X-Nexus-Api-Key` on `/api/*`,
-`/api/planning/tools/*`, and legacy `/mcp/tools/*`. `pw-api` should supply the
-matching `NEXUS_SERVICE_API_KEY`; CORS origin allow-lists remain a browser
-control, not an authentication boundary.
+`/api/planning/tools/*`, and legacy `/mcp/tools/*`. `pw-api` supplies the
+matching `NEXUS_SERVICE_API_KEY`; browser apps should call PWOS/PWPortal BFF
+routes rather than carrying Nexus credentials. CORS origin allow-lists remain a
+browser control, not an authentication boundary.
 
 ### Meta
 

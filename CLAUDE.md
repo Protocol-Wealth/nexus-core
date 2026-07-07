@@ -3,6 +3,21 @@
 > Repo: `Protocol-Wealth/nexus-core` · License: Apache 2.0 · Patent Pending: USPTO #64/034,229 · OIN member.
 > Open-source extraction of the [Protocol Wealth research engine](https://nexusmcp.site); nothing in this repo is client-specific or proprietary to PW.
 
+**Current state (2026-07-07 ET — private consumer boundary closeout):**
+- **Access model:** hosted Nexus is a split surface. Native `/mcp` remains a
+  public OAuth-compatible demo endpoint with `NEXUS_PUBLIC_MCP_PROFILE=demo`.
+  REST/JSON calculation paths (`/api/*`, `/api/planning/tools/*`, legacy
+  `/mcp/tools/*`) are gated by `NEXUS_ACCESS_MODE=restricted` +
+  `NEXUS_API_KEYS`; `pw-api` supplies `NEXUS_SERVICE_API_KEY` server-to-server.
+  PWOS/PWPortal browser clients must not carry Nexus credentials.
+- **Private research ingestion handoff:** PWOS `/market-data` owns CSV/XLSX
+  research-screen ingestion. PR #993 in `pw-os-v2` is merged and advisor-verified
+  with `Saved 380 research rows (7c30414f)`. Raw Seeking Alpha workbooks,
+  Schwab/custodian files, client assignments, tracking records, and chat
+  attachments stay private in PWOS/pw-api. Nexus may receive only de-identified
+  candidate symbols, screened fields, and caller-supplied option-chain facts for
+  public-safe calculation.
+
 **Current state (2026-07-06 ET / 2026-07-07 UTC — restricted REST + demo MCP deployed):**
 - **Live deployed:** commit `d3d0b2f` is on `origin/main`; Cloud Run revision
   `nexus-core-00061-xhs` serves 100% traffic. Hosted Nexus keeps transparent
@@ -18,7 +33,7 @@
   `stock_price`, `shares`, per-line `fill_haircut`, executable income/yield,
   and portfolio-level executable yield only when every held line has executable
   pricing. This is worksheet arithmetic over caller-supplied
-  public/pre-screened data; it is not a live-chain attestation, custodian
+  public-safe/pre-screened data; it is not a live-chain attestation, custodian
   execution record, client-specific recommendation, or order surface.
 - **Validation run:** targeted collar-book engine, route, and MCP parser tests
   plus strict mypy/ruff on the touched source passed; full FastAPI TestClient

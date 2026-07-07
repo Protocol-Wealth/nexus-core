@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Docs/state closeout — private consumer boundary and PWOS market import
+
+#### Changed
+
+- Reconciled root docs to the current access model: hosted native `/mcp` remains
+  a public OAuth-compatible demo surface, while hosted REST/JSON calculation
+  paths are service-key gated for trusted server callers such as `pw-api`.
+- Documented that PWOS/PWPortal browser apps should not hold Nexus service keys;
+  they should call their own BFF/API routes, with `pw-api` supplying the
+  server-to-server Nexus credential.
+- Recorded the PWOS `/market-data` Seeking Alpha CSV/XLSX import as a private
+  ingestion path after PR #993 and advisor verification of a 380-row import
+  (`7c30414f`). Nexus consumes only de-identified candidate symbols and
+  caller-supplied option-chain facts after private ingestion.
+- Clarified the provider boundary: MBOUM backs equity option expirations/chains
+  plus quote/history fallback coverage; MarketStack is a market quote/history
+  fallback, not an options-chain provider.
+
 ### REST/JSON access boundary and public MCP demo profile
 
 #### Added
