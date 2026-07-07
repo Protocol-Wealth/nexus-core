@@ -649,17 +649,19 @@ def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
         raise PlanningInputError(str(exc)) from exc
 
 
-def _parse_social_security_income(body: dict[str, Any]) -> SocialSecurityIncome | None:
-    value = body.get("socialSecurity")
+def _parse_social_security_income(
+    body: dict[str, Any], key: str = "socialSecurity"
+) -> SocialSecurityIncome | None:
+    value = body.get(key)
     if value is None:
         return None
     if not isinstance(value, dict):
-        raise PlanningInputError("socialSecurity must be an object or omitted")
+        raise PlanningInputError(f"{key} must be an object or omitted")
     allowed = {"piaMonthly", "claimAge", "fraAge", "colaRate"}
     extra = set(value) - allowed
     if extra:
         raise PlanningInputError(
-            f"socialSecurity only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
+            f"{key} only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
         )
     try:
         fra_age = _optional_int(value, "fraAge")
@@ -730,6 +732,9 @@ def income_layering_tool(body: dict[str, Any]) -> dict[str, Any]:
         "birthYear",
         "state",
         "residencyChange",
+        "spouseSocialSecurity",
+        "survivorYear",
+        "survivorFilingStatus",
     }
     extra = set(body) - allowed
     if extra:
@@ -749,6 +754,9 @@ def income_layering_tool(body: dict[str, Any]) -> dict[str, Any]:
         isinstance(bracket_fill, bool) or not isinstance(bracket_fill, (int, float))
     ):
         raise PlanningInputError("bracketFillTargetRate must be a number or omitted")
+    survivor_filing = body.get("survivorFilingStatus", "single")
+    if not isinstance(survivor_filing, str):
+        raise PlanningInputError("survivorFilingStatus must be a string or omitted")
     try:
         return income_layering(
             current_age=_as_int(body, "currentAge"),
@@ -762,6 +770,7 @@ def income_layering_tool(body: dict[str, Any]) -> dict[str, Any]:
             tax_year=2026 if tax_year is None else tax_year,
             base_year=base_year,
             social_security=_parse_social_security_income(body),
+            spouse_social_security=_parse_social_security_income(body, "spouseSocialSecurity"),
             income_streams=_parse_income_streams(body),
             account_balances=_optional_number_map(body, "accountBalances"),
             account_returns=_optional_number_map(body, "accountReturns"),
@@ -770,6 +779,8 @@ def income_layering_tool(body: dict[str, Any]) -> dict[str, Any]:
             birth_year=_optional_int(body, "birthYear"),
             state=_optional_state_code(body, "state"),
             residency_change=_optional_residency_change(body),
+            survivor_year=_optional_int(body, "survivorYear"),
+            survivor_filing_status=cast(Any, survivor_filing),
         )
     except InfeasiblePlanError as exc:
         raise PlanningInfeasibleError(str(exc)) from exc

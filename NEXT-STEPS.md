@@ -17,7 +17,8 @@ provider registry and adds Monte Carlo report diagnostics for Wealth Roadmap
 output quality, plus S1 education funding tools and S8 multi-account
 waterfall / Monte Carlo goal-schedule support, S2 income layering, and the
 current S3 historical-blend exhibit plus the current S7 illustrative state-tax
-layer. Live endpoints were not re-smoked._
+layer and current S9 household/survivor modeling. Live endpoints were not
+re-smoked._
 
 ## Orient yourself in 5 minutes
 
@@ -107,6 +108,14 @@ layer. Live endpoints were not re-smoked._
   exclusion states it can represent. Unknown states stay explicitly unmodeled;
   raw addresses, account identifiers, household records, approvals, and audit
   state remain private-stack concerns.
+- **Current S9 household/survivor state:** `social_security.py` exports a
+  simplified household Social Security snapshot helper with age-reduced spousal
+  benefits. `income_layering` accepts optional spouse Social Security and
+  first-survivor-year filing-status inputs so two-person cases can show survivor
+  benefit continuity and the joint-to-single tax transition. The public engine
+  still uses only PIAs, claim ages, filing statuses, ages, and numeric
+  assumptions; private household links, user permissions, approvals, and audit
+  records stay outside this repo.
 
 ## Before you commit (the gate — mirrors CI)
 

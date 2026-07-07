@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Household and survivor modeling S9
+
+#### Added
+
+- Added `household_social_security_benefits`, a PII-free deterministic helper
+  for simplified two-person Social Security own, age-reduced spousal,
+  household, and survivor monthly benefit snapshots.
+- Added optional `spouseSocialSecurity`, `survivorYear`, and
+  `survivorFilingStatus` support to `income_layering`. The tool can now model
+  a household Social Security stream before the first survivor-only modeling
+  year, survivor benefit continuity after that year, and joint-to-single
+  filing-status tax compression. The `IncomeLayeringResult` schema id is now
+  `income-layering-result-0.1.2`.
+
 ### State/local tax layer S7
 
 #### Added
