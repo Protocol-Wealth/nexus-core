@@ -233,13 +233,11 @@ def education_savings_need(
     elif abs(monthly_rate) < 1e-12:
         gap = max(0.0, target_fv - current_savings)
         monthly = gap / months
-        annual = monthly * 12.0
         lump = gap
     else:
         factor = (1.0 + monthly_rate) ** months
         future_gap = max(0.0, target_fv - current_savings * factor)
         monthly = future_gap * monthly_rate / (factor - 1.0)
-        annual = monthly * 12.0
         lump = max(0.0, target_fv / factor - current_savings)
     rounded_monthly = _round_money(monthly)
     rounded_annual = _round_money(annual if months == 0 else rounded_monthly * 12.0)
