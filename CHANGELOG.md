@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Multi-account waterfall S8
+
+#### Added
+
+- Added optional account-type buckets to `project_cash_flow`:
+  `accountBalances` / `accountReturns` split the deterministic portfolio across
+  taxable, traditional, and Roth balances while preserving the historical
+  single-bucket response shape when omitted. Surplus saves to taxable; deficits
+  draw taxable → traditional → Roth. Traditional withdrawals drive ordinary tax
+  and the optional early-withdrawal penalty model before age 59.5; Roth draws
+  are not treated as ordinary income in multi-account mode.
+- Added optional `goals` to `monte_carlo_decumulation` and `solve_goal` as a
+  deterministic gateway-level funding schedule. Goals are sorted by priority,
+  earlier projection year, input order, and funding-year index, then funded
+  path-by-path after base spending and before growth. Results include the
+  generated schedule plus per-goal funding probabilities / funded-amount
+  percentiles for replay.
+
 ### Education funding S1
 
 #### Added

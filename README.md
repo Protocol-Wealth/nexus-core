@@ -57,13 +57,14 @@ its provider key is absent.
 
 For the PW Cash Flow OS + PW Planning Lab + PW Retirement Income Lab direction,
 Nexus Core is the public-safe calculation plane. It can accept de-identified
-planning inputs, derived monthly-close numbers, pre-screened stock symbols, and
-caller-supplied option-chain facts. It must not ingest Monarch CSV exports,
-Seeking Alpha workbooks, Schwab order/status files, raw transaction rows,
-merchant/payee strings, account nicknames, household records, advisor/client
-notes, approval state, release state, or books-and-records audit trails. Those
-production workflows belong in private PWOS / pw-api / PWPortal; Nexus should
-receive only de-identified calculation inputs after private ingestion.
+planning inputs, optional taxable / traditional / Roth planning buckets, derived
+monthly-close numbers, pre-screened stock symbols, and caller-supplied
+option-chain facts. It must not ingest Monarch CSV exports, Seeking Alpha
+workbooks, Schwab order/status files, raw transaction rows, merchant/payee
+strings, account nicknames, household records, advisor/client notes, approval
+state, release state, or books-and-records audit trails. Those production
+workflows belong in private PWOS / pw-api / PWPortal; Nexus should receive only
+de-identified calculation inputs after private ingestion.
 
 ### Meta
 
@@ -177,7 +178,7 @@ Nexus Core (FastAPI + FastMCP)
 ├── Benchmarks (engine/benchmarks.py)
 │   └── Base-100 buy-and-hold compositions
 ├── Planning (engine/planning)
-│   └── PII-free planning math: Monte Carlo, goals, cash flow, Roth/IRMAA, versioned tax-table provider
+│   └── PII-free planning math: Monte Carlo, goals, cash flow, taxable-first waterfall, Roth/IRMAA, versioned tax-table provider
 ├── Data Clients (data/)
 │   ├── market/   yfinance, MBOUM, MarketStack, CoinGecko + cache + composite
 │   ├── macro/    FRED, EIA, BEA, Treasury

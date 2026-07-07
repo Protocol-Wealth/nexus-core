@@ -50,6 +50,16 @@ adds multi-student education cost FV and savings-need calculations, and
 `education_vehicle_rules` adds a 2026 reference comparison table for 529 plans,
 Coverdell ESAs, and UGMA/UTMA custodial accounts. Inputs stay de-identified.
 
+Current source also adds the S8 deterministic planning waterfall. `project_cash_flow`
+can remain a single-bucket projection for existing callers, or accept optional
+taxable / traditional / Roth `accountBalances` with per-bucket returns,
+taxable-first withdrawals, and a simplified early-withdrawal penalty model.
+`monte_carlo_decumulation` and `solve_goal` can accept optional de-identified
+`goals`; the gateway sorts those goals by priority, earlier projection year,
+input order, and funding-year index, then the engine funds them path-by-path
+after base spending and before growth. Results return the generated schedule and
+per-goal funding statistics for replay.
+
 The collar-book realistic-fill layer is part of current source. The engine plus
 REST/MCP parsers accept midpoint `net_credit` and optional executable pricing
 (`executable_net_credit` or `call_bid` minus `put_ask`) and return stock price,
@@ -158,7 +168,7 @@ gracefully to `None` / empty / `503` when its key is absent.
 - **`GET /api/usage`** — provider usage / quota report.
 - **`POST /mcp`** — MCP-over-HTTP transport (FastMCP, also `nexus-core mcp` over
   stdio) exposing the above as tools, plus `health` / `describe` / `get_quotes`
-  and the 27 current-source planning tools in full mode; demo mode registers
+  and the 29 current-source planning tools in full mode; demo mode registers
   only closed-world demo tools. `GET /api/planning/tools` +
   `POST /api/planning/tools/{id}` are the REST planning gateway
   (contractVersion `0.1.0`) for service/browser callers, with `/mcp/tools`

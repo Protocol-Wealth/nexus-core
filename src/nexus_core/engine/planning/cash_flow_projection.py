@@ -23,10 +23,10 @@ Conventions (documented because they are load-bearing):
   ``retirement_income`` — Social Security / pension — flows instead, inflation
   (COLA)-grown from today).
 * **Tax.** Federal ordinary tax only, via the shared progressive brackets +
-  standard deduction for ``filing_status``. All earned income, retirement income
-  and portfolio withdrawals are treated as ordinary-taxable — a conservative
-  simplification (real plans blend in capital-gains / Roth / partly-taxable
-  Social Security); a CFP refines the tax-aware withdrawal sequence.
+  standard deduction for ``filing_status``. In single-bucket mode, portfolio
+  withdrawals remain ordinary-taxable for backward compatibility. In optional
+  multi-account mode, only traditional-account withdrawals are ordinary-taxable;
+  taxable and Roth withdrawals are not modeled as ordinary income.
 * **Funding a deficit.** When after-tax guaranteed income cannot cover spending,
   the portfolio withdrawal is *grossed up* for the tax on the withdrawal itself
   (a short fixed-point iteration), so the net of (income + withdrawal − tax)
@@ -55,6 +55,12 @@ _MAX_PROJECTION_YEARS = 100
 #: ``W = (expenses − income) + tax(income + W)`` is a contraction (the tax slope
 #: is the marginal rate < 1), so a handful of steps converge to the cent.
 _GROSS_UP_ITERS = 12
+_ACCOUNT_TYPES = ("taxable", "traditional", "roth")
+_WITHDRAWAL_ORDER = ("taxable", "traditional", "roth")
+_ORDINARY_TAXABLE_WITHDRAWAL_ACCOUNTS = frozenset({"traditional"})
+_EARLY_WITHDRAWAL_PENALTY_ACCOUNTS = frozenset({"traditional"})
+_DEFAULT_EARLY_WITHDRAWAL_PENALTY_AGE = 59.5
+_DEFAULT_EARLY_WITHDRAWAL_PENALTY_RATE = 0.10
 
 _FILING_STATUSES: tuple[FilingStatus, ...] = (
     "single",
@@ -93,6 +99,130 @@ def _withdrawal_and_tax(
     return withdrawal, ordinary_tax(base_ordinary + withdrawal, filing_status, year=tax_year)
 
 
+def _validate_account_balances(
+    account_balances: dict[str, float] | None,
+    *,
+    current_portfolio: float,
+) -> dict[str, float] | None:
+    if account_balances is None:
+        return None
+    if not isinstance(account_balances, dict):
+        raise ValueError("account_balances must be an object or omitted")
+    unknown = sorted(set(account_balances) - set(_ACCOUNT_TYPES))
+    if unknown:
+        raise ValueError(f"unknown account balance type(s): {', '.join(unknown)}")
+    out = dict.fromkeys(_ACCOUNT_TYPES, 0.0)
+    for account_type, value in account_balances.items():
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value < 0
+        ):
+            raise ValueError("account_balances values must be finite non-negative numbers")
+        out[account_type] = float(value)
+    total = sum(out.values())
+    if abs(total - current_portfolio) > 0.01:
+        raise ValueError("account_balances must sum to current_portfolio")
+    return out
+
+
+def _validate_account_returns(
+    account_returns: dict[str, float] | None,
+    *,
+    expected_return: float,
+) -> dict[str, float]:
+    out = dict.fromkeys(_ACCOUNT_TYPES, expected_return)
+    if account_returns is None:
+        return out
+    if not isinstance(account_returns, dict):
+        raise ValueError("account_returns must be an object or omitted")
+    unknown = sorted(set(account_returns) - set(_ACCOUNT_TYPES))
+    if unknown:
+        raise ValueError(f"unknown account return type(s): {', '.join(unknown)}")
+    for account_type, value in account_returns.items():
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value <= -1
+        ):
+            raise ValueError("account_returns values must be finite numbers > -1")
+        out[account_type] = float(value)
+    return out
+
+
+def _allocate_withdrawal(
+    balances: dict[str, float],
+    requested: float,
+) -> dict[str, float]:
+    remaining = max(0.0, requested)
+    allocation = dict.fromkeys(_ACCOUNT_TYPES, 0.0)
+    for account_type in _WITHDRAWAL_ORDER:
+        draw = min(balances[account_type], remaining)
+        allocation[account_type] = draw
+        remaining -= draw
+        if remaining <= 0.005:
+            break
+    return allocation
+
+
+def _selected_account_draw(allocation: dict[str, float], accounts: frozenset[str]) -> float:
+    return sum(amount for account, amount in allocation.items() if account in accounts)
+
+
+def _round_account_map(values: dict[str, float]) -> dict[str, float]:
+    return {account_type: round(values[account_type], 2) for account_type in _ACCOUNT_TYPES}
+
+
+def _multi_account_withdrawal_and_tax(
+    *,
+    balances: dict[str, float],
+    base_ordinary: float,
+    expenses: float,
+    filing_status: FilingStatus,
+    tax_year: int,
+    age: int,
+    early_withdrawal_penalty_age: float,
+    early_withdrawal_penalty_rate: float,
+) -> tuple[float, float, float, float, dict[str, float]]:
+    """Desired/actual waterfall withdrawal, ordinary tax, penalty, allocation."""
+    tax_no_draw = ordinary_tax(base_ordinary, filing_status, year=tax_year)
+    if base_ordinary - tax_no_draw >= expenses:
+        return 0.0, 0.0, tax_no_draw, 0.0, dict.fromkeys(_ACCOUNT_TYPES, 0.0)
+
+    desired = max(0.0, expenses - base_ordinary)
+    for _ in range(_GROSS_UP_ITERS):
+        allocation = _allocate_withdrawal(balances, desired)
+        taxable_withdrawal = _selected_account_draw(
+            allocation, _ORDINARY_TAXABLE_WITHDRAWAL_ACCOUNTS
+        )
+        penalty_base = (
+            _selected_account_draw(allocation, _EARLY_WITHDRAWAL_PENALTY_ACCOUNTS)
+            if age < early_withdrawal_penalty_age
+            else 0.0
+        )
+        penalty = penalty_base * early_withdrawal_penalty_rate
+        ordinary = ordinary_tax(base_ordinary + taxable_withdrawal, filing_status, year=tax_year)
+        next_desired = max(0.0, expenses - base_ordinary + ordinary + penalty)
+        if abs(next_desired - desired) < 0.005:
+            desired = next_desired
+            break
+        desired = next_desired
+
+    allocation = _allocate_withdrawal(balances, desired)
+    actual = sum(allocation.values())
+    taxable_withdrawal = _selected_account_draw(allocation, _ORDINARY_TAXABLE_WITHDRAWAL_ACCOUNTS)
+    penalty_base = (
+        _selected_account_draw(allocation, _EARLY_WITHDRAWAL_PENALTY_ACCOUNTS)
+        if age < early_withdrawal_penalty_age
+        else 0.0
+    )
+    penalty = penalty_base * early_withdrawal_penalty_rate
+    ordinary = ordinary_tax(base_ordinary + taxable_withdrawal, filing_status, year=tax_year)
+    return desired, actual, ordinary, penalty, allocation
+
+
 def project_cash_flow(
     *,
     current_age: int,
@@ -109,6 +239,10 @@ def project_cash_flow(
     current_liabilities: float = 0.0,
     base_year: int | None = None,
     tax_year: int = 2026,
+    account_balances: dict[str, float] | None = None,
+    account_returns: dict[str, float] | None = None,
+    early_withdrawal_penalty_age: float = _DEFAULT_EARLY_WITHDRAWAL_PENALTY_AGE,
+    early_withdrawal_penalty_rate: float = _DEFAULT_EARLY_WITHDRAWAL_PENALTY_RATE,
 ) -> dict[str, Any]:
     """Year-by-year cash-flow + net-worth projection with a lifetime tax rollup.
 
@@ -135,6 +269,19 @@ def project_cash_flow(
             ``year`` is the calendar year, else the 0-based index.
         tax_year: Registered federal tax-table year used for ordinary-tax
             calculations throughout the projection.
+        account_balances: Optional account-type buckets
+            (``taxable``/``traditional``/``roth``). When omitted, the historical
+            single-bucket behavior and response shape are unchanged. When
+            supplied, values must sum to ``current_portfolio``; surplus saves to
+            taxable, and deficits draw taxable → traditional → Roth.
+        account_returns: Optional per-bucket returns. Defaults each bucket to
+            ``expected_return``.
+        early_withdrawal_penalty_age: Simplified age threshold for the 10%
+            penalty model, default 59.5.
+        early_withdrawal_penalty_rate: Simplified penalty rate applied to
+            traditional-account withdrawals before ``early_withdrawal_penalty_age``.
+            Roth draws are not treated as ordinary income in this simplified
+            public-safe waterfall.
 
     Returns:
         ``years`` (per-year rows), ``aggregate`` (lifetime totals, peak/ending
@@ -190,16 +337,35 @@ def project_cash_flow(
         raise ValueError("base_year must be an integer or omitted")
     if isinstance(tax_year, bool) or not isinstance(tax_year, int):
         raise ValueError("tax_year must be an integer")
+    for name, value in (
+        ("early_withdrawal_penalty_age", early_withdrawal_penalty_age),
+        ("early_withdrawal_penalty_rate", early_withdrawal_penalty_rate),
+    ):
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
+            raise ValueError(f"{name} must be a finite number")
+    if not 0 <= early_withdrawal_penalty_age <= _MAX_AGE:
+        raise ValueError("early_withdrawal_penalty_age must be in [0, 130]")
+    if not 0 <= early_withdrawal_penalty_rate < 1:
+        raise ValueError("early_withdrawal_penalty_rate must be in [0, 1)")
 
     tax_table = reference_bracket_table(tax_year)
     num_years = terminal_age - current_age + 1
-    portfolio = float(current_portfolio)
+    balances = _validate_account_balances(account_balances, current_portfolio=current_portfolio)
+    account_return_map = _validate_account_returns(account_returns, expected_return=expected_return)
+    multi_account = balances is not None
+    starting_account_balances = dict(balances) if balances is not None else None
+    portfolio = sum(balances.values()) if balances is not None else float(current_portfolio)
     liabilities = float(current_liabilities)
 
     rows: list[dict[str, Any]] = []
     lifetime_income = 0.0
     lifetime_expenses = 0.0
     lifetime_taxes = 0.0
+    lifetime_penalties = 0.0
     lifetime_savings = 0.0
     lifetime_withdrawals = 0.0
     peak_net_worth = portfolio - liabilities
@@ -215,17 +381,46 @@ def project_cash_flow(
         base_ordinary = earned_income + retire_income
         expenses = current_expenses * (1.0 + expense_inflation_rate) ** k
 
-        withdrawal, tax = _withdrawal_and_tax(
-            base_ordinary=base_ordinary,
-            expenses=expenses,
-            filing_status=filing_status,
-            tax_year=tax_year,
-        )
+        if multi_account:
+            assert balances is not None
+            desired_withdrawal, withdrawal, ordinary_tax_amount, penalty, withdrawal_allocation = (
+                _multi_account_withdrawal_and_tax(
+                    balances=balances,
+                    base_ordinary=base_ordinary,
+                    expenses=expenses,
+                    filing_status=filing_status,
+                    tax_year=tax_year,
+                    age=age,
+                    early_withdrawal_penalty_age=float(early_withdrawal_penalty_age),
+                    early_withdrawal_penalty_rate=float(early_withdrawal_penalty_rate),
+                )
+            )
+            tax = ordinary_tax_amount + penalty
+        else:
+            withdrawal_allocation = {}
+            desired_withdrawal = 0.0
+            ordinary_tax_amount = 0.0
+            penalty = 0.0
+            withdrawal, tax = _withdrawal_and_tax(
+                base_ordinary=base_ordinary,
+                expenses=expenses,
+                filing_status=filing_status,
+                tax_year=tax_year,
+            )
 
         if withdrawal <= 0.0:
             # Surplus (or exactly covered): save it; it compounds from next year.
             net_cash_flow = base_ordinary - tax - expenses
-            portfolio = portfolio * (1.0 + expected_return) + net_cash_flow
+            if multi_account:
+                assert balances is not None
+                balances = {
+                    account_type: balances[account_type] * (1.0 + account_return_map[account_type])
+                    for account_type in _ACCOUNT_TYPES
+                }
+                balances["taxable"] += net_cash_flow
+                portfolio = sum(balances.values())
+            else:
+                portfolio = portfolio * (1.0 + expected_return) + net_cash_flow
             lifetime_savings += net_cash_flow
         else:
             # Deficit funded from the portfolio, capped at what is actually there.
@@ -234,13 +429,31 @@ def project_cash_flow(
             # withdrawn would massively overstate lifetime tax + the effective rate.
             if first_deficit_age is None:
                 first_deficit_age = age
-            available = portfolio
-            actual_withdrawal = min(withdrawal, available)
-            if actual_withdrawal < withdrawal:
-                if depletion_age is None:
+            if multi_account:
+                assert balances is not None
+                actual_withdrawal = withdrawal
+                if actual_withdrawal < desired_withdrawal and depletion_age is None:
                     depletion_age = age
-                tax = ordinary_tax(base_ordinary + actual_withdrawal, filing_status, year=tax_year)
-            portfolio = (available - actual_withdrawal) * (1.0 + expected_return)
+                balances = {
+                    account_type: balances[account_type] - withdrawal_allocation[account_type]
+                    for account_type in _ACCOUNT_TYPES
+                }
+                balances = {
+                    account_type: balances[account_type] * (1.0 + account_return_map[account_type])
+                    for account_type in _ACCOUNT_TYPES
+                }
+                portfolio = sum(balances.values())
+                lifetime_penalties += penalty
+            else:
+                available = portfolio
+                actual_withdrawal = min(withdrawal, available)
+                if actual_withdrawal < withdrawal:
+                    if depletion_age is None:
+                        depletion_age = age
+                    tax = ordinary_tax(
+                        base_ordinary + actual_withdrawal, filing_status, year=tax_year
+                    )
+                portfolio = (available - actual_withdrawal) * (1.0 + expected_return)
             net_cash_flow = -actual_withdrawal
             lifetime_withdrawals += actual_withdrawal
 
@@ -253,25 +466,30 @@ def project_cash_flow(
         lifetime_expenses += expenses
         lifetime_taxes += tax
 
-        rows.append(
-            {
-                "age": age,
-                "year": (base_year + k) if base_year is not None else k,
-                "phase": "retirement" if retired else "accumulation",
-                "earnedIncome": round(earned_income, 2),
-                "retirementIncome": round(retire_income, 2),
-                "income": round(base_ordinary, 2),
-                "expenses": round(expenses, 2),
-                "taxes": round(tax, 2),
-                "netCashFlow": round(net_cash_flow, 2),
-                "portfolioBalance": round(portfolio, 2),
-                "liabilities": round(liabilities, 2),
-                "netWorth": round(net_worth, 2),
-            }
-        )
+        row: dict[str, Any] = {
+            "age": age,
+            "year": (base_year + k) if base_year is not None else k,
+            "phase": "retirement" if retired else "accumulation",
+            "earnedIncome": round(earned_income, 2),
+            "retirementIncome": round(retire_income, 2),
+            "income": round(base_ordinary, 2),
+            "expenses": round(expenses, 2),
+            "taxes": round(tax, 2),
+            "netCashFlow": round(net_cash_flow, 2),
+            "portfolioBalance": round(portfolio, 2),
+            "liabilities": round(liabilities, 2),
+            "netWorth": round(net_worth, 2),
+        }
+        if multi_account:
+            assert balances is not None
+            row["accountBalances"] = _round_account_map(balances)
+            row["withdrawalsByAccount"] = _round_account_map(withdrawal_allocation)
+            row["ordinaryTaxes"] = round(ordinary_tax_amount, 2)
+            row["earlyWithdrawalPenalty"] = round(penalty, 2)
+        rows.append(row)
 
     ending = rows[-1]
-    aggregate = {
+    aggregate: dict[str, Any] = {
         "projectionYears": num_years,
         "currentAge": current_age,
         "retirementAge": retirement_age,
@@ -291,6 +509,12 @@ def project_cash_flow(
         "firstDeficitAge": first_deficit_age,
         "fundedThroughTerminal": depletion_age is None,
     }
+    if multi_account:
+        assert balances is not None
+        assert starting_account_balances is not None
+        aggregate["startingAccountBalances"] = _round_account_map(starting_account_balances)
+        aggregate["endingAccountBalances"] = _round_account_map(balances)
+        aggregate["lifetimeEarlyWithdrawalPenalties"] = round(lifetime_penalties, 2)
 
     effective_rate = lifetime_taxes / lifetime_income if lifetime_income > 0 else 0.0
     lifetime_tax = {
@@ -299,7 +523,7 @@ def project_cash_flow(
         "effectiveRate": round(effective_rate, 4),
     }
 
-    assumptions = {
+    assumptions: dict[str, Any] = {
         "filingStatus": filing_status,
         "taxTableYear": tax_table.year,
         "taxTableVersion": tax_table.table_version,
@@ -308,6 +532,17 @@ def project_cash_flow(
         "expectedReturn": round(expected_return, 6),
         "retirementIncomeGrowthRate": round(expense_inflation_rate, 6),
     }
+    if multi_account:
+        assumptions["accountReturns"] = {
+            account_type: round(account_return_map[account_type], 6)
+            for account_type in _ACCOUNT_TYPES
+        }
+        assumptions["withdrawalOrder"] = list(_WITHDRAWAL_ORDER)
+        assumptions["surplusDepositAccount"] = "taxable"
+        assumptions["ordinaryTaxWithdrawalAccounts"] = sorted(_ORDINARY_TAXABLE_WITHDRAWAL_ACCOUNTS)
+        assumptions["earlyWithdrawalPenaltyAccounts"] = sorted(_EARLY_WITHDRAWAL_PENALTY_ACCOUNTS)
+        assumptions["earlyWithdrawalPenaltyAge"] = early_withdrawal_penalty_age
+        assumptions["earlyWithdrawalPenaltyRate"] = early_withdrawal_penalty_rate
 
     return {
         "years": rows,
