@@ -26,6 +26,12 @@ results generated before this fix overstated variance by `dof / (dof - 2)`;
 for the current 5-degree model that was about 1.667x variance, or about 1.29x
 volatility.
 
+Current source also centralizes the RMD start-age policy. `rmd`,
+`tax_aware_withdrawal`, and the Roth composite now use the same
+SECURE/SECURE 2.0 birth-year table, with age-only callers remaining compatible
+at the legacy age-73 default and birth-year-aware callers receiving the 1960+
+age-75 rule plus the documented 1959 good-faith age-73 treatment.
+
 The collar-book realistic-fill layer is part of current source. The engine plus
 REST/MCP parsers accept midpoint `net_credit` and optional executable pricing
 (`executable_net_credit` or `call_bid` minus `put_ask`) and return stock price,

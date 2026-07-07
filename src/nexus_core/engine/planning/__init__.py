@@ -57,7 +57,7 @@ from .tables import (
     reference_irmaa_table,
     reference_state_rule,
 )
-from .tax import InfeasiblePlanError, tax_aware_withdrawal
+from .tax import InfeasiblePlanError, rmd_start_age, tax_aware_withdrawal
 from .xray import portfolio_xray
 
 __all__ = [
@@ -99,6 +99,7 @@ __all__ = [
     "regime_conditioned_swr",
     "risk_metrics",
     "rmd",
+    "rmd_start_age",
     "roth_conversion",
     "roth_conversion_analysis_schema",
     "sequence_conversions",

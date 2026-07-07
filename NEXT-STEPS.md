@@ -10,7 +10,9 @@ _Last updated: 2026-07-07. Live deployment was last verified on 2026-07-01 at
 [nexusmcp.site](https://nexusmcp.site); current local work includes the Slice
 0/1/2 cash-flow planning bridge updates, a local collar-book executable-fill
 layer, an optional REST/JSON service-key gate, and the Student-t Monte Carlo
-covariance-scaling correction. Live endpoints were not re-smoked._
+covariance-scaling correction plus the RMD start-age policy kernel shared by
+`rmd`, `tax_aware_withdrawal`, and the Roth composite. Live endpoints were not
+re-smoked._
 
 ## Orient yourself in 5 minutes
 
@@ -51,6 +53,10 @@ covariance-scaling correction. Live endpoints were not re-smoked._
   native `/mcp` to closed-world demo tools. `NEXUS_ACCESS_MODE=restricted` plus
   `NEXUS_API_KEYS` gates `/api/*`, primary `/api/planning/tools/*`, and legacy
   `/mcp/tools/*`; `pw-api` should send its matching `NEXUS_SERVICE_API_KEY`.
+- **Current RMD policy state:** `rmd`, `tax_aware_withdrawal`, and the Roth
+  composite share `tax.rmd_start_age`. Age-only callers still default to 73;
+  callers with a de-identified `birthYear` get the SECURE/SECURE 2.0 table,
+  including 1960+ at 75 and the documented 1959 good-faith age-73 policy.
 
 ## Before you commit (the gate — mirrors CI)
 

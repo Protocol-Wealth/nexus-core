@@ -24,8 +24,12 @@ def test_ordinary_tax_progressive_married_joint() -> None:
 
 def test_ordering_taxable_first_when_young() -> None:
     r = tax_aware_withdrawal(
-        year=2026, filing_status="married_joint", accounts=_ACCOUNTS,
-        gross_need=120_000, age=65, other_taxable_income=0,
+        year=2026,
+        filing_status="married_joint",
+        accounts=_ACCOUNTS,
+        gross_need=120_000,
+        age=65,
+        other_taxable_income=0,
     )
     assert [w["type"] for w in r["withdrawals"]] == ["taxable"]  # age<73 ⇒ no RMD; taxable first
     assert r["withdrawals"][0]["gross"] == 120_000
@@ -35,9 +39,12 @@ def test_ordering_taxable_first_when_young() -> None:
 
 def test_roth_is_tax_free() -> None:
     r = tax_aware_withdrawal(
-        year=2026, filing_status="single",
+        year=2026,
+        filing_status="single",
         accounts=[{"type": "roth", "balance": 300000, "allocation": {"x": 1.0}}],
-        gross_need=50_000, age=70, other_taxable_income=0,
+        gross_need=50_000,
+        age=70,
+        other_taxable_income=0,
     )
     assert r["withdrawals"][0]["type"] == "roth"
     assert r["withdrawals"][0]["tax"] == 0.0
@@ -46,12 +53,15 @@ def test_roth_is_tax_free() -> None:
 
 def test_rmd_enforced_at_73_plus() -> None:
     r = tax_aware_withdrawal(
-        year=2026, filing_status="single",
+        year=2026,
+        filing_status="single",
         accounts=[
             {"type": "traditional", "balance": 1_000_000, "allocation": {"x": 1.0}},
             {"type": "taxable", "balance": 500_000, "allocation": {"x": 1.0}},
         ],
-        gross_need=10_000, age=80, other_taxable_income=0,
+        gross_need=10_000,
+        age=80,
+        other_taxable_income=0,
     )
     # RMD at 80 = 1,000,000 / 20.2 ≈ 49,505 — taken even though it exceeds the need.
     traditional = next(w for w in r["withdrawals"] if w["type"] == "traditional")
@@ -60,11 +70,52 @@ def test_rmd_enforced_at_73_plus() -> None:
     assert traditional["tax"] > 0  # ordinary income
 
 
+def test_birth_year_policy_defers_rmd_for_1960_plus_cohort() -> None:
+    r = tax_aware_withdrawal(
+        year=2026,
+        filing_status="single",
+        accounts=[
+            {"type": "traditional", "balance": 1_000_000, "allocation": {"x": 1.0}},
+            {"type": "taxable", "balance": 500_000, "allocation": {"x": 1.0}},
+        ],
+        gross_need=10_000,
+        age=73,
+        other_taxable_income=0,
+        birth_year=1960,
+    )
+    assert r["rmdStartAge"] == 75
+    assert r["withdrawals"][0]["type"] == "taxable"
+    assert r["withdrawals"][0]["gross"] == 10_000
+    assert r["rmdSatisfied"] is True
+
+
+def test_birth_year_policy_enforces_rmd_at_75_for_1960_plus_cohort() -> None:
+    r = tax_aware_withdrawal(
+        year=2026,
+        filing_status="single",
+        accounts=[
+            {"type": "traditional", "balance": 1_000_000, "allocation": {"x": 1.0}},
+            {"type": "taxable", "balance": 500_000, "allocation": {"x": 1.0}},
+        ],
+        gross_need=10_000,
+        age=75,
+        other_taxable_income=0,
+        birth_year=1960,
+    )
+    traditional = next(w for w in r["withdrawals"] if w["type"] == "traditional")
+    assert traditional["gross"] == round(1_000_000 / 24.6, 2)
+    assert r["rmdStartAge"] == 75
+    assert r["rmdSatisfied"] is True
+
+
 def test_traditional_taxed_as_ordinary_income() -> None:
     r = tax_aware_withdrawal(
-        year=2026, filing_status="single",
+        year=2026,
+        filing_status="single",
         accounts=[{"type": "traditional", "balance": 500_000, "allocation": {"x": 1.0}}],
-        gross_need=80_000, age=65, other_taxable_income=0,
+        gross_need=80_000,
+        age=65,
+        other_taxable_income=0,
     )
     trad = r["withdrawals"][0]
     assert trad["type"] == "traditional"
@@ -75,15 +126,22 @@ def test_traditional_taxed_as_ordinary_income() -> None:
 def test_infeasible_when_need_exceeds_balances() -> None:
     with pytest.raises(InfeasiblePlanError):
         tax_aware_withdrawal(
-            year=2026, filing_status="single",
+            year=2026,
+            filing_status="single",
             accounts=[{"type": "roth", "balance": 10_000, "allocation": {"x": 1.0}}],
-            gross_need=50_000, age=65, other_taxable_income=0,
+            gross_need=50_000,
+            age=65,
+            other_taxable_income=0,
         )
 
 
 def test_bad_filing_status_raises_value_error() -> None:
     with pytest.raises(ValueError, match="filingStatus"):
         tax_aware_withdrawal(
-            year=2026, filing_status="nope", accounts=_ACCOUNTS,
-            gross_need=1_000, age=65, other_taxable_income=0,
+            year=2026,
+            filing_status="nope",
+            accounts=_ACCOUNTS,
+            gross_need=1_000,
+            age=65,
+            other_taxable_income=0,
         )

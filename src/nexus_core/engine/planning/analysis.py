@@ -20,9 +20,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 #: Which ceiling (or gate) determined a year's recommended conversion amount.
-BindingConstraint = Literal[
-    "bracket", "irmaa", "liquidity", "trad_balance", "fixed_amount", "none"
-]
+BindingConstraint = Literal["bracket", "irmaa", "liquidity", "trad_balance", "fixed_amount", "none"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,7 +223,7 @@ class DoNothingProjection:
     spouse files single) the same dollars are forced out at compressed rates.
     """
 
-    rmd_start_age: int
+    rmd_start_age: float
     first_rmd_year: int
     years_until_rmd: int
     growth_rate_assumption: float
