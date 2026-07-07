@@ -18,8 +18,8 @@ output quality, plus S1 education funding tools and S8 multi-account
 waterfall / Monte Carlo goal-schedule support, S2 income layering, and the
 current S3 historical-blend exhibit plus the current S7 illustrative state-tax
 layer, current S9 household/survivor modeling, and the current S6 PW Wealth
-Roadmap report preset, plus current S5 risk-profile scoring. Live endpoints
-were not re-smoked._
+Roadmap report preset, current S5 risk-profile scoring, and current S4
+performance analysis. Live endpoints were not re-smoked._
 
 ## Orient yourself in 5 minutes
 
@@ -96,6 +96,14 @@ were not re-smoked._
   the optimizer-compatible `riskProfile` enum, annual volatility band, suggested
   model weights, and canonical planning disclaimer. Advisor overrides,
   suitability approvals, and audit records stay private.
+- **Current S4 performance-analysis state:** `performance_analysis` lives in
+  `engine/planning/performance.py`, is exported from
+  `nexus_core.engine.planning`, and is exposed through the planning
+  gateway/native MCP registry. It computes time-weighted return,
+  money-weighted return / XIRR, fee drag, and benchmark-relative return deltas
+  from de-identified numeric series only. Symbols, holdings names, account
+  identifiers, raw transaction rows, tax lots, notes, approvals, and audit
+  records stay outside this public repo.
 - **Current S2 income-layering state:** `income_layering` composes earned income,
   Social Security, pension/annuity streams, forced RMDs, tax-aware withdrawals,
   and optional bracket-fill analysis into a stacked per-year income timeline.
@@ -177,9 +185,9 @@ single-kernel RMD start-age policy, shared tax/IRMAA table providers, Monte
 Carlo report diagnostics, S1 education funding, S8 multi-account waterfall /
 Monte Carlo goal scheduling, S2 income layering, S3 historical blend, S7
 state/local tax coverage, S9 household/survivor modeling, S6 Wealth Roadmap
-report assembly, and S5 risk-profile scoring. Continue with the consolidated
-Wealth Roadmap sequence from the next unmerged slice; keep each item one PR and
-preserve the public/private planning boundary.
+report assembly, S5 risk-profile scoring, and S4 performance analysis. Continue
+with the consolidated Wealth Roadmap sequence from the next unmerged slice; keep
+each item one PR and preserve the public/private planning boundary.
 
 ### Public-safe planning/report analytics extraction (#197)
 

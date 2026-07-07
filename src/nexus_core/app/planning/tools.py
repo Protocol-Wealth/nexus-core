@@ -34,9 +34,11 @@ from ...engine.planning import (
     GuardrailParams,
     IncomeStream,
     InfeasiblePlanError,
+    MwrCashFlow,
     SocialSecurityIncome,
     SolveResult,
     StateResidencyChange,
+    TwrPeriod,
     analyze_goals,
     analyze_roth_conversion,
     bracket_headroom,
@@ -52,6 +54,7 @@ from ...engine.planning import (
     income_layering,
     irmaa_headroom,
     monte_carlo_decumulation,
+    performance_analysis,
     portfolio_xray,
     project_cash_flow,
     rebalance,
@@ -182,6 +185,15 @@ def _as_number(body: dict[str, Any], key: str) -> float:
     return float(value)
 
 
+def _finite_number(value: object, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise PlanningInputError(f"{field} must be a number")
+    number = float(value)
+    if not math.isfinite(number):
+        raise PlanningInputError(f"{field} must be finite")
+    return number
+
+
 def _as_str(body: dict[str, Any], key: str) -> str:
     value = _require(body, key)
     if not isinstance(value, str):
@@ -245,6 +257,13 @@ def _as_num_list(body: dict[str, Any], key: str) -> list[float]:
     ):
         raise PlanningInputError(f"field '{key}' must be a non-empty list of numbers")
     return [float(x) for x in value]
+
+
+def _as_finite_num_list(body: dict[str, Any], key: str) -> list[float]:
+    value = _require(body, key)
+    if not isinstance(value, list) or not value:
+        raise PlanningInputError(f"field '{key}' must be a non-empty list of numbers")
+    return [_finite_number(item, f"{key}[{index}]") for index, item in enumerate(value)]
 
 
 def _fetch_aligned_returns(
@@ -885,6 +904,126 @@ def risk_profile_score_tool(body: dict[str, Any]) -> dict[str, Any]:
         answers[key] = value
     try:
         return risk_profile_score(answers)
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def _parse_twr_periods(body: dict[str, Any]) -> list[TwrPeriod] | None:
+    raw = body.get("twrPeriods")
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not raw:
+        raise PlanningInputError("twrPeriods must be a non-empty array when supplied")
+    allowed = {"startValue", "endValue", "netExternalFlow"}
+    periods: list[TwrPeriod] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise PlanningInputError(f"twrPeriods[{index}] must be an object")
+        extra = set(item) - allowed
+        if extra:
+            raise PlanningInputError(
+                f"twrPeriods[{index}] only accepts {sorted(allowed)}; got {sorted(extra)}"
+            )
+        start = _finite_number(item.get("startValue"), f"twrPeriods[{index}].startValue")
+        end = _finite_number(item.get("endValue"), f"twrPeriods[{index}].endValue")
+        flow = _finite_number(
+            item.get("netExternalFlow", 0.0), f"twrPeriods[{index}].netExternalFlow"
+        )
+        periods.append(
+            TwrPeriod(
+                start_value=start,
+                end_value=end,
+                net_external_flow=flow,
+            )
+        )
+    return periods
+
+
+def _parse_mwr_flows(body: dict[str, Any]) -> list[MwrCashFlow] | None:
+    raw = body.get("mwrFlows")
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not raw:
+        raise PlanningInputError("mwrFlows must be a non-empty array when supplied")
+    allowed = {"tYears", "amount"}
+    flows: list[MwrCashFlow] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise PlanningInputError(f"mwrFlows[{index}] must be an object")
+        extra = set(item) - allowed
+        if extra:
+            raise PlanningInputError(
+                f"mwrFlows[{index}] only accepts {sorted(allowed)}; got {sorted(extra)}"
+            )
+        t_years = _finite_number(item.get("tYears"), f"mwrFlows[{index}].tYears")
+        amount = _finite_number(item.get("amount"), f"mwrFlows[{index}].amount")
+        flows.append(MwrCashFlow(t_years=t_years, amount=amount))
+    return flows
+
+
+def performance_analysis_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``performance_analysis`` — TWR/MWR/fee-drag/benchmark return math."""
+
+    allowed = {
+        "contractVersion",
+        "twrPeriods",
+        "flowTiming",
+        "periodsPerYear",
+        "mwrFlows",
+        "terminalValue",
+        "terminalTimeYears",
+        "grossReturns",
+        "feeRates",
+        "portfolioReturns",
+        "benchmarkReturns",
+    }
+    extra = set(body) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"performance_analysis only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
+        )
+    flow_timing = body.get("flowTiming", "start")
+    if not isinstance(flow_timing, str):
+        raise PlanningInputError("flowTiming must be start, end, or omitted")
+    periods_per_year = body.get("periodsPerYear", 1)
+    if (
+        isinstance(periods_per_year, bool)
+        or not isinstance(periods_per_year, int)
+        or periods_per_year < 1
+    ):
+        raise PlanningInputError("periodsPerYear must be a positive integer or omitted")
+    terminal_value = (
+        _finite_number(body["terminalValue"], "terminalValue") if "terminalValue" in body else None
+    )
+    terminal_time = (
+        _finite_number(body["terminalTimeYears"], "terminalTimeYears")
+        if "terminalTimeYears" in body
+        else None
+    )
+
+    try:
+        return performance_analysis(
+            twr_periods=_parse_twr_periods(body),
+            flow_timing=cast(Any, flow_timing),
+            periods_per_year=periods_per_year,
+            mwr_flows=_parse_mwr_flows(body),
+            terminal_value=terminal_value,
+            terminal_time_years=terminal_time,
+            gross_returns=(
+                _as_finite_num_list(body, "grossReturns") if "grossReturns" in body else None
+            ),
+            fee_rates=_as_finite_num_list(body, "feeRates") if "feeRates" in body else None,
+            portfolio_returns=(
+                _as_finite_num_list(body, "portfolioReturns")
+                if "portfolioReturns" in body
+                else None
+            ),
+            benchmark_returns=(
+                _as_finite_num_list(body, "benchmarkReturns")
+                if "benchmarkReturns" in body
+                else None
+            ),
+        )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
 
@@ -2777,6 +2916,7 @@ def build_tool_handlers(
         "risk_profile_score": risk_profile_score_tool,
         "fire": fire_tool,
         "risk_metrics": risk_metrics_tool,
+        "performance_analysis": performance_analysis_tool,
         "rebalance": rebalance_tool,
         "irmaa_headroom": irmaa_headroom_tool,
         "analyze_roth_conversion": analyze_roth_conversion_tool,
@@ -2801,6 +2941,7 @@ __all__ = [
     "irmaa_headroom_tool",
     "project_cash_flow_tool",
     "sequence_conversions_tool",
+    "performance_analysis_tool",
     "rebalance_tool",
     "risk_metrics_tool",
     "risk_profile_score_tool",

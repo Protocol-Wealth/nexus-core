@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Performance analysis S4
+
+#### Added
+
+- Added the public-safe `performance_analysis` planning tool. It computes
+  time-weighted return, money-weighted return / XIRR, fee drag, and
+  benchmark-relative return deltas from de-identified numeric series only, with
+  the canonical planning disclaimer. Symbols, holdings names, account
+  identifiers, raw transaction rows, tax lots, notes, approvals, and audit
+  workflows remain private-stack concerns.
+
 ### Risk-profile scoring S5
 
 #### Added

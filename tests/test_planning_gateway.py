@@ -216,7 +216,7 @@ def test_planning_response_carries_disclaimer() -> None:
 def test_list_tools_version_handshake() -> None:
     body = _list_gateway_tools()
     assert body["contractVersion"] == CONTRACT_VERSION
-    assert len(body["tools"]) == 32
+    assert len(body["tools"]) == 33
     assert "glide_path" in body["tools"]
     assert "correlation_matrix" in body["tools"]
     assert "capital_market_assumptions" in body["tools"]
@@ -238,6 +238,7 @@ def test_list_tools_version_handshake() -> None:
     assert "project_cash_flow" in body["tools"]
     assert "fire" in body["tools"]
     assert "risk_metrics" in body["tools"]
+    assert "performance_analysis" in body["tools"]
     assert "rebalance" in body["tools"]
     assert "cashflow_planning_bridge" in body["tools"]
     assert "cash_reserve_analysis" in body["tools"]
@@ -1084,6 +1085,46 @@ def test_risk_metrics_too_few_returns_400() -> None:
     )
     assert r.status_code == 400
     assert "at least 2" in r.text
+
+
+_PERFORMANCE: dict[str, Any] = {
+    "contractVersion": "0.1.0",
+    "twrPeriods": [
+        {"startValue": 100000, "endValue": 110000, "netExternalFlow": 0},
+        {"startValue": 110000, "endValue": 220000, "netExternalFlow": 90000},
+    ],
+    "mwrFlows": [
+        {"tYears": 0, "amount": -100000},
+        {"tYears": 0.5, "amount": -90000},
+    ],
+    "terminalValue": 220000,
+    "terminalTimeYears": 1,
+    "grossReturns": [0.08, -0.02, 0.05],
+    "feeRates": [0.002, 0.002, 0.002],
+    "portfolioReturns": [0.08, -0.02, 0.05],
+    "benchmarkReturns": [0.07, -0.01, 0.04],
+    "periodsPerYear": 12,
+}
+
+
+def test_performance_analysis_happy_path() -> None:
+    r = _client().post("/mcp/tools/performance_analysis", json=_PERFORMANCE)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert body["timeWeighted"]["cumulativeReturn"] == 0.21
+    assert body["moneyWeighted"]["method"] == "bracketed_newton_bisection"
+    assert body["feeDrag"]["cumulativeFeeDrag"] < 0.0
+    assert body["benchmarkRelative"]["periods"] == 3
+
+
+def test_performance_analysis_rejects_partial_fee_drag() -> None:
+    r = _client().post(
+        "/mcp/tools/performance_analysis",
+        json={"contractVersion": "0.1.0", "grossReturns": [0.1, 0.2]},
+    )
+    assert r.status_code == 400
+    assert "fee_rates" in r.text
 
 
 _REBALANCE: dict[str, Any] = {

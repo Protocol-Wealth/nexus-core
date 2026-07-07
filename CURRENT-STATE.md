@@ -17,7 +17,12 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   bearer key opened the then-current 27-tool planning contract; hosted native `/mcp` keeps
   transparent OAuth active and exposes only the demo MCP tools
   `option_price`, `collar_book`, `health`, and `describe`.
-- **Last local update:** 2026-07-07 — current branch adds S5
+- **Last local update:** 2026-07-07 — current branch adds S4
+  `performance_analysis`: public-safe TWR, MWR/XIRR, fee-drag, and
+  benchmark-relative return math over de-identified numeric series only. It
+  accepts values, flows, fee rates, and return series; it does not accept
+  symbols, holdings names, account labels, transaction rows, tax lots, notes,
+  approvals, or audit workflow state. `main` also adds S5
   `risk_profile_score`: a fixed, PII-free questionnaire scorer that emits the
   optimizer-compatible `riskProfile` enum, annual volatility band, suggested
   weights, question/band metadata, and the canonical planning disclaimer.
@@ -251,10 +256,10 @@ read-only with `readOnlyHint` + the educational disclaimer):
   `crypto_options_book_mtm` / `crypto_options_scenario`. Full overwriting + hedge
   suite is on BOTH the REST surface (`/api/options/crypto/{currency}/...`) and MCP.
 - **DeFi** — `defi_protocols`, `defi_protocol`, `defi_chains`
-- **Planning** (32 in current source; live deployment can lag source) — `monte_carlo_decumulation`, `solve_goal`, `analyze_goals`, `project_cash_flow`, `cashflow_planning_bridge`, `cash_reserve_analysis`, `budget_pacing_projection`, `education_funding`, `education_vehicle_rules`, `income_layering`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `historical_blend`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `risk_profile_score`, `fire`, `risk_metrics`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`
+- **Planning** (33 in current source; live deployment can lag source) — `monte_carlo_decumulation`, `solve_goal`, `analyze_goals`, `project_cash_flow`, `cashflow_planning_bridge`, `cash_reserve_analysis`, `budget_pacing_projection`, `education_funding`, `education_vehicle_rules`, `income_layering`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `historical_blend`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `risk_profile_score`, `fire`, `risk_metrics`, `performance_analysis`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`
 - **Meta** — `health` (per-upstream status), `describe` (catalog + symbology + contract version)
 
-All 32 current-source planning tools are served both natively through MCP and via
+All 33 current-source planning tools are served both natively through MCP and via
 the REST/JSON gateway (`POST /api/planning/tools/{id}`) for browser/server
 callers — same handlers, contractVersion `0.1.0`. Legacy `/mcp/tools/{id}`
 aliases remain. The composite Roth/IRMAA case contract is
@@ -419,11 +424,17 @@ key is absent.
   annual volatility band, suggested model weights, question/band metadata, and
   the canonical planning disclaimer. Advisor overrides, suitability approvals,
   and audit workflow state remain private-stack concerns.
-- **Planning surface now 32 tools in current source** — includes `solve_goal`,
+- **S4 performance-analysis state** — `performance_analysis` computes
+  time-weighted returns, money-weighted returns / XIRR, fee drag, and
+  benchmark-relative return deltas from numeric series only. It stays PII-free
+  and does not ingest symbols, holdings names, account identifiers, transaction
+  rows, tax lots, approvals, or audit records.
+- **Planning surface now 33 tools in current source** — includes `solve_goal`,
   `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio,
   `education_funding`, `education_vehicle_rules`, `income_layering`,
   `historical_blend`, `optimize_allocation`, `risk_profile_score`,
-  `build_planning_report`, and the composite Roth/IRMAA trio.
+  `performance_analysis`, `build_planning_report`, and the composite
+  Roth/IRMAA trio.
 - **Uniswap V3 owned-position enumeration** — `GET /api/lp/uniswap-v3/{chain}/positions?owner=`
   lists open positions before USD valuation.
 - **Research-data cleanup** — FMP/FinanceToolkit path removed; supported future

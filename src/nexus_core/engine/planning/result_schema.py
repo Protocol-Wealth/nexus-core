@@ -687,11 +687,162 @@ def risk_profile_result_schema() -> dict[str, Any]:
     }
 
 
+def performance_analysis_result_schema() -> dict[str, Any]:
+    """JSON Schema for the ``performance_analysis`` tool result."""
+
+    number_array = {"type": "array", "items": {"type": "number"}}
+    twr_period = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["period", "startValue", "endValue", "netExternalFlow", "return"],
+        "properties": {
+            "period": {"type": "integer"},
+            "startValue": _MONEY,
+            "endValue": _MONEY,
+            "netExternalFlow": _MONEY,
+            "return": _RATE,
+        },
+    }
+    time_weighted = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "periods",
+            "periodsPerYear",
+            "flowTiming",
+            "periodReturns",
+            "cumulativeReturn",
+            "annualizedReturn",
+        ],
+        "properties": {
+            "periods": {"type": "integer"},
+            "periodsPerYear": {"type": "integer"},
+            "flowTiming": {"type": "string"},
+            "periodReturns": {"type": "array", "items": twr_period},
+            "cumulativeReturn": _RATE,
+            "annualizedReturn": _RATE,
+        },
+    }
+    money_weighted = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "rate",
+            "terminalTimeYears",
+            "iterations",
+            "bracketExpansions",
+            "method",
+        ],
+        "properties": {
+            "rate": _RATE,
+            "terminalTimeYears": {"type": "number"},
+            "iterations": {"type": "integer"},
+            "bracketExpansions": {"type": "integer"},
+            "method": {"type": "string"},
+        },
+    }
+    fee_drag_schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "periods",
+            "periodsPerYear",
+            "netReturns",
+            "cumulativeGrossReturn",
+            "cumulativeNetReturn",
+            "cumulativeFeeDrag",
+            "annualizedGrossReturn",
+            "annualizedNetReturn",
+            "annualizedFeeDrag",
+        ],
+        "properties": {
+            "periods": {"type": "integer"},
+            "periodsPerYear": {"type": "integer"},
+            "netReturns": number_array,
+            "cumulativeGrossReturn": _RATE,
+            "cumulativeNetReturn": _RATE,
+            "cumulativeFeeDrag": _RATE,
+            "annualizedGrossReturn": _RATE,
+            "annualizedNetReturn": _RATE,
+            "annualizedFeeDrag": _RATE,
+        },
+    }
+    benchmark_relative_schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "periods",
+            "periodsPerYear",
+            "relativeReturns",
+            "cumulativePortfolioReturn",
+            "cumulativeBenchmarkReturn",
+            "cumulativeExcessReturn",
+            "annualizedPortfolioReturn",
+            "annualizedBenchmarkReturn",
+            "annualizedExcessReturn",
+        ],
+        "properties": {
+            "periods": {"type": "integer"},
+            "periodsPerYear": {"type": "integer"},
+            "relativeReturns": number_array,
+            "cumulativePortfolioReturn": _RATE,
+            "cumulativeBenchmarkReturn": _RATE,
+            "cumulativeExcessReturn": _RATE,
+            "annualizedPortfolioReturn": _RATE,
+            "annualizedBenchmarkReturn": _RATE,
+            "annualizedExcessReturn": _RATE,
+        },
+    }
+    assumptions = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "flowTiming",
+            "periodsPerYear",
+            "cashFlowSignConvention",
+            "compositeTool",
+        ],
+        "properties": {
+            "flowTiming": {"type": "string"},
+            "periodsPerYear": {"type": "integer"},
+            "cashFlowSignConvention": {"type": "string"},
+            "compositeTool": {"type": "string"},
+        },
+    }
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://nexusmcp.site/schemas/performance-analysis-result-0.1.0.json",
+        "title": "PerformanceAnalysisResult",
+        "description": "PII-free output of the performance_analysis planning tool.",
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "contractVersion",
+            "timeWeighted",
+            "moneyWeighted",
+            "feeDrag",
+            "benchmarkRelative",
+            "assumptions",
+            "disclaimer",
+        ],
+        "properties": {
+            "contractVersion": {"type": "string"},
+            "timeWeighted": {"anyOf": [time_weighted, {"type": "null"}]},
+            "moneyWeighted": {"anyOf": [money_weighted, {"type": "null"}]},
+            "feeDrag": {"anyOf": [fee_drag_schema, {"type": "null"}]},
+            "benchmarkRelative": {"anyOf": [benchmark_relative_schema, {"type": "null"}]},
+            "assumptions": assumptions,
+            "disclaimer": {"type": "string"},
+        },
+    }
+
+
 __all__ = [
     "education_funding_result_schema",
     "education_vehicle_rules_result_schema",
     "historical_blend_result_schema",
     "income_layering_result_schema",
+    "performance_analysis_result_schema",
     "risk_profile_result_schema",
     "roth_conversion_analysis_schema",
 ]
