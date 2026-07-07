@@ -101,6 +101,7 @@ def test_mcp_guide_documents_pwplan_core_integration() -> None:
         "budget_pacing_projection",
         "education_funding",
         "education_vehicle_rules",
+        "income_layering",
         "glide_path",
         "tax_aware_withdrawal",
         "correlation_matrix",

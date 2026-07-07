@@ -185,7 +185,7 @@ nexus-core mcp        # MCP server over stdio</code></pre>
     <tr><td>Options</td><td>Black-Scholes price + Greeks; covered-call / cash-secured-put / collar overlays</td></tr>
     <tr><td>Crypto options</td><td>Deribit instruments + IV/Greeks (BTC, ETH, SOL, XRP, TRX, AVAX)</td></tr>
     <tr><td>DeFi</td><td>DefiLlama TVL by protocol and chain</td></tr>
-    <tr><td>Planning</td><td>23 PII-free tools: Monte Carlo, goal funding, deterministic cash flow, allocation optimization, Roth/IRMAA, report assembly</td></tr>
+    <tr><td>Planning</td><td>30 PII-free tools: Monte Carlo, goal funding, deterministic cash flow, education, income layering, allocation optimization, Roth/IRMAA, report assembly</td></tr>
   </table>
   <p>
     Everything is read-only, public, and educational — no side effects, no
@@ -264,6 +264,7 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     <li><code>budget_pacing_projection</code> — month-end budget pace from aggregate spending</li>
     <li><code>education_funding</code> — education cost FV and savings-need solver</li>
     <li><code>education_vehicle_rules</code> — reference 529 / Coverdell / UGMA-UTMA rule table</li>
+    <li><code>income_layering</code> — stacked retirement income timeline with Social Security, pensions/annuities, RMDs, and tax-aware withdrawals</li>
     <li><code>glide_path</code> — equity weight by age across the horizon</li>
     <li><code>tax_aware_withdrawal</code> — RMD-first, tax-efficient withdrawal sequencing with optional birthYear policy</li>
     <li><code>correlation_matrix</code> — real-data return correlation across asset classes</li>

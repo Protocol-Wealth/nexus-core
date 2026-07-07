@@ -38,6 +38,7 @@ class InfeasiblePlanError(ValueError):
 #: Assumed fraction of a taxable-account withdrawal that is long-term capital
 #: gain (the rest is return of basis, untaxed). Illustrative.
 _TAXABLE_GAIN_FRACTION = 0.5
+TAXABLE_WITHDRAWAL_GAIN_FRACTION = _TAXABLE_GAIN_FRACTION
 
 #: Default RMD start age for age-only callers. Birth-year-aware callers should
 #: use :func:`rmd_start_age`.
@@ -198,6 +199,17 @@ def _ltcg_tax(
     return gains * rate
 
 
+def ltcg_tax(
+    gains: float,
+    ordinary_income: float,
+    filing_status: FilingStatus,
+    *,
+    year: int = 2026,
+) -> float:
+    """Long-term capital-gain tax using the shared planning bracket table."""
+    return _ltcg_tax(gains, ordinary_income, filing_status, year=year)
+
+
 def tax_aware_withdrawal(
     *,
     year: int,
@@ -303,8 +315,10 @@ __all__ = [
     "InfeasiblePlanError",
     "ordinary_brackets",
     "ordinary_tax",
+    "ltcg_tax",
     "rmd_factor",
     "rmd_start_age",
     "standard_deduction",
+    "TAXABLE_WITHDRAWAL_GAIN_FRACTION",
     "tax_aware_withdrawal",
 ]

@@ -177,6 +177,7 @@ _PLANNING_TOOL_IDS = {
     "budget_pacing_projection",
     "education_funding",
     "education_vehicle_rules",
+    "income_layering",
     "glide_path",
     "tax_aware_withdrawal",
     "correlation_matrix",

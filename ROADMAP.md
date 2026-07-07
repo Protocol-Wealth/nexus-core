@@ -60,6 +60,13 @@ input order, and funding-year index, then the engine funds them path-by-path
 after base spending and before growth. Results return the generated schedule and
 per-goal funding statistics for replay.
 
+Current source also adds the S2 income-layering slice. `income_layering` composes
+earned income, Social Security claiming assumptions, pension/annuity streams,
+forced RMDs, tax-aware portfolio withdrawals, and optional bracket-fill analysis
+into a per-year stacked income timeline. Inputs are de-identified numeric
+assumptions and account-type buckets only; no labels, account IDs, raw
+transactions, or client records enter the public engine.
+
 The collar-book realistic-fill layer is part of current source. The engine plus
 REST/MCP parsers accept midpoint `net_credit` and optional executable pricing
 (`executable_net_credit` or `call_bid` minus `put_ask`) and return stock price,
@@ -168,13 +175,14 @@ gracefully to `None` / empty / `503` when its key is absent.
 - **`GET /api/usage`** — provider usage / quota report.
 - **`POST /mcp`** — MCP-over-HTTP transport (FastMCP, also `nexus-core mcp` over
   stdio) exposing the above as tools, plus `health` / `describe` / `get_quotes`
-  and the 29 current-source planning tools in full mode; demo mode registers
+  and the 30 current-source planning tools in full mode; demo mode registers
   only closed-world demo tools. `GET /api/planning/tools` +
   `POST /api/planning/tools/{id}` are the REST planning gateway
   (contractVersion `0.1.0`) for service/browser callers, with `/mcp/tools`
   compatibility aliases.
   The same handler set serves native MCP and REST, including
-  `solve_goal`, `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio,
+  `solve_goal`, `analyze_goals`, `project_cash_flow`, `income_layering`,
+  the cash-flow bridge trio,
   `optimize_allocation`,
   `build_planning_report`, and the Roth/IRMAA tools
   `analyze_roth_conversion`, `sequence_conversions`, and `irmaa_headroom`.
