@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   describe the intended split: open-source demo MCP for low-risk public use and
   authenticated REST/JSON for production service consumers such as `pw-api`.
 
+#### Changed
+
+- Documented the hosted production posture as transparent OAuth plus
+  `NEXUS_PUBLIC_MCP_PROFILE=demo` for `/mcp`, while REST/JSON and legacy
+  planning aliases remain API-key gated.
+
 ### Collar book executable-fill modeling
 
 #### Added

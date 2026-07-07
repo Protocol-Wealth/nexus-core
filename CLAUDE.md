@@ -3,10 +3,27 @@
 > Repo: `Protocol-Wealth/nexus-core` · License: Apache 2.0 · Patent Pending: USPTO #64/034,229 · OIN member.
 > Open-source extraction of the [Protocol Wealth research engine](https://nexusmcp.site); nothing in this repo is client-specific or proprietary to PW.
 
-**Current state (2026-07-06 — local collar-book executable-fill update):**
-- **Local source update, not live-smoked:** the multi-name collar-book worksheet now accepts per-share executable pricing (`executable_net_credit` or `call_bid` minus `put_ask`) through the engine plus REST/MCP parsers and reports `stock_price`, `shares`, per-line `fill_haircut`, executable income/yield, and portfolio-level executable yield only when every held line has executable pricing. This is worksheet arithmetic over caller-supplied public/pre-screened data; it is not a live-chain attestation, custodian execution record, client-specific recommendation, or order surface.
-- **Access-boundary update, not live-smoked:** `NEXUS_PUBLIC_MCP_PROFILE=demo` can keep hosted native `/mcp` to closed-world demo tools, while `NEXUS_ACCESS_MODE=restricted` + `NEXUS_API_KEYS` gates `/api/*`, `/api/planning/tools/*`, and legacy `/mcp/tools/*`. `pw-api` should call the new `/api/planning/tools/{tool_id}` alias with `NEXUS_SERVICE_API_KEY`.
-- **Validation run:** targeted collar-book engine, route, and MCP parser tests plus strict mypy/ruff on the touched source are the expected local gate for this change; run the full repo gate before PR/deploy.
+**Current state (2026-07-06 ET / 2026-07-07 UTC — restricted REST + demo MCP deployed):**
+- **Live deployed:** commit `d3d0b2f` is on `origin/main`; Cloud Run revision
+  `nexus-core-00061-xhs` serves 100% traffic. Hosted Nexus keeps transparent
+  OAuth active for `/mcp`, runs `NEXUS_PUBLIC_MCP_PROFILE=demo`, and gates
+  `/api/*`, `/api/planning/tools/*`, and legacy `/mcp/tools/*` with
+  `NEXUS_ACCESS_MODE=restricted` + `NEXUS_API_KEYS`. Anonymous
+  `/api/planning/tools` returns 401; the pw-api service bearer key returns the
+  27-tool planning contract; OAuth MCP `tools/list` returns only
+  `option_price`, `collar_book`, `health`, and `describe`.
+- **Collar-book executable-fill update:** the multi-name collar-book worksheet
+  accepts per-share executable pricing (`executable_net_credit` or `call_bid`
+  minus `put_ask`) through the engine plus REST/MCP parsers and reports
+  `stock_price`, `shares`, per-line `fill_haircut`, executable income/yield,
+  and portfolio-level executable yield only when every held line has executable
+  pricing. This is worksheet arithmetic over caller-supplied
+  public/pre-screened data; it is not a live-chain attestation, custodian
+  execution record, client-specific recommendation, or order surface.
+- **Validation run:** targeted collar-book engine, route, and MCP parser tests
+  plus strict mypy/ruff on the touched source passed; full FastAPI TestClient
+  route suites hit a local WSL/sandbox anyio threadpool hang, so CI or a
+  non-sandboxed Python environment remains the full route-harness gate.
 
 **Current state (2026-07-01 — docs/status audit):**
 - **Live deployment verified:** `https://nexusmcp.site/health` returns `{"status":"ok","service":"nexus-core","version":"0.1.0"}` and `https://nexusmcp.site/mcp/tools` returns contractVersion `0.1.0` with **23 planning tool ids**: `monte_carlo_decumulation`, `analyze_goals`, `project_cash_flow`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `fire`, `risk_metrics`, `rebalance`, `build_planning_report`, `irmaa_headroom`, `analyze_roth_conversion`, and `sequence_conversions`. GitHub has **no open PRs** and seven open issues (#197-#203) tracking public-safe planning/report extraction, planning assumptions provenance, LP/indexer expansion, crypto-options follow-ups, agent analytics, governance/tooling cleanup, and equity-research gates.

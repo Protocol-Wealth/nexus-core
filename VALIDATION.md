@@ -167,16 +167,19 @@ Current test coverage includes:
 
 ## Live smoke test
 
-Live public status was checked on 2026-07-01:
+Live public status was checked after deploying commit `d3d0b2f` on
+2026-07-06 ET / 2026-07-07 UTC. Cloud Run revision `nexus-core-00061-xhs` was
+serving 100% traffic.
 
 | Check | Result |
 |-------|--------|
 | `GET https://nexusmcp.site/health` | `200` — `{"status":"ok","service":"nexus-core","version":"0.1.0"}` |
-| `GET https://nexusmcp.site/mcp/tools` | `200` — contractVersion `0.1.0`, 23 planning tools |
-| `GET https://nexusmcp.site/openapi.json` | `200` — public OpenAPI schema served with security headers |
-| `GET https://nexusmcp.site/llms.txt` | `200` — agent site map served |
-| `GET https://nexusmcp.site/.well-known/ai-disclosure.json` | `200` — generatedAt `2026-06-01T00:00:00Z` on the currently deployed artifact; local docs/source now update this to `2026-07-01T00:00:00Z` for the next deploy |
-| OAuth metadata | `/.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-authorization-server` served successfully |
+| unauthenticated `GET https://nexusmcp.site/api/planning/tools` | `401` — `{"error":"unauthorized","error_description":"Nexus API key required"}` |
+| authenticated `GET https://nexusmcp.site/api/planning/tools` | `200` — contractVersion `0.1.0`, 27 planning tools |
+| unauthenticated `POST https://nexusmcp.site/mcp` | `401` — transparent OAuth bearer token required |
+| transparent OAuth `/register` → `/authorize` → `/token` | `201` → `302` → `200`; token exchange succeeded with public `mcp` scope |
+| OAuth MCP initialize → initialized → `tools/list` | `200` → `202` → `200`; tool list was `option_price`, `collar_book`, `health`, `describe`; provider-backed/full tools absent |
+| Cloud Run service config | `NEXUS_PUBLIC_MCP_PROFILE=demo`, `NEXUS_ACCESS_MODE=restricted`, `NEXUS_API_KEYS` mounted from `pwllc-nexus-api-key-digests`; `MCP_OAUTH_SIGNING_KEY` remains mounted for hosted MCP compatibility |
 
 GitHub status after the issue-sync pass: no open PRs; seven open issues
 (#197-#203) track the outstanding and future-build lanes from the roadmap.

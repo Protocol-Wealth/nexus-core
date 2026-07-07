@@ -220,7 +220,9 @@ mapping DNS:
 ```bash
 curl https://nexus-core-XXXXXX-uc.a.run.app/health
 curl https://nexus-core-XXXXXX-uc.a.run.app/health/db
-curl https://nexus-core-XXXXXX-uc.a.run.app/mcp/tools
+# Hosted native `/mcp` uses transparent OAuth when `MCP_OAUTH_SIGNING_KEY` is
+# mounted. With `NEXUS_PUBLIC_MCP_PROFILE=demo`, an OAuth MCP `tools/list` should
+# return only option_price, collar_book, health, and describe.
 
 # Restricted REST/planning paths should 401 without the pw-api service key.
 curl -i https://nexus-core-XXXXXX-uc.a.run.app/api/planning/tools
@@ -237,6 +239,11 @@ gcloud run services update nexus-core \
   --update-env-vars "NEXUS_PUBLIC_MCP_PROFILE=demo,NEXUS_ACCESS_MODE=restricted" \
   --update-secrets "NEXUS_API_KEYS=pwllc-nexus-api-key-digests:latest"
 ```
+
+Keep `MCP_OAUTH_SIGNING_KEY` mounted on the hosted public service unless the
+explicit goal is to make `/mcp` unauthenticated. OAuth is compatible with the
+demo profile and prevents the hosted transport from becoming a raw anonymous
+HTTP tool endpoint.
 
 ### 4. Deploy the snapshot job (Cloud Run Job)
 

@@ -5,14 +5,26 @@ verification. For the architectural overview see [README.md](README.md); for
 deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
 [AUDIT.md](AUDIT.md).
 
-- **Last live verified:** 2026-07-01 — live `/health` OK; live `/mcp/tools` returned 23 tools; GitHub: 7 open issues (#197-#203), 0 open PRs.
-- **Last local update:** 2026-07-06 — local `main` now includes the 2026-07-05 Slice 0/1/2 cash-flow planning bridge work, local collar-book executable-fill modeling, and an optional Nexus REST/JSON access gate. The collar-book engine and REST/MCP parsers accept per-share `executable_net_credit` or `call_bid`/`put_ask` and report stock price, share count, fill haircut, executable income, and executable annualized yield. Current source exposes 27 planning tools; live endpoints were not re-smoked in this pass.
+- **Last live verified:** 2026-07-06 ET / 2026-07-07 UTC — live `/health` OK;
+  hosted REST/JSON planning paths require a Nexus API key; the pw-api service
+  bearer key opens the 27-tool planning contract; hosted native `/mcp` keeps
+  transparent OAuth active and exposes only the demo MCP tools
+  `option_price`, `collar_book`, `health`, and `describe`.
+- **Last local update:** 2026-07-06 — `main` includes the 2026-07-05 Slice
+  0/1/2 cash-flow planning bridge work, collar-book executable-fill modeling,
+  and the restricted REST/JSON access gate. The collar-book engine and REST/MCP
+  parsers accept per-share `executable_net_credit` or `call_bid`/`put_ask` and
+  report stock price, share count, fill haircut, executable income, and
+  executable annualized yield.
 - **Repo:** [github.com/Protocol-Wealth/nexus-core](https://github.com/Protocol-Wealth/nexus-core) — public, Apache-2.0
 - **Live:** [nexusmcp.site](https://nexusmcp.site) (Cloudflare → Cloud Run)
 - **Version:** 0.1.0
 - **Stack:** Python 3.12 · FastAPI · FastMCP · sync httpx · asyncpg · mypy `--strict` · ruff
 - **Tests:** CI-gated test suite (`pytest`)
-- **Posture:** read-only, no client data, transparent OAuth only for remote MCP handshakes, no public write endpoints. Native `/mcp` can remain an open-source demo endpoint; `/api/*` and the planning JSON gateway can be API-key gated with `NEXUS_ACCESS_MODE=restricted`.
+- **Posture:** read-only, no client data, transparent OAuth only for remote MCP
+  handshakes, no public write endpoints. Hosted native `/mcp` is an
+  OAuth-compatible open-source demo endpoint; `/api/*` and the planning JSON
+  gateway are API-key gated with `NEXUS_ACCESS_MODE=restricted`.
 
 ## Hybrid planning boundary
 
@@ -64,9 +76,10 @@ External integrations degrade gracefully — when a provider key is absent the
 dependent endpoint returns `None` / empty / `503` rather than failing the service.
 
 Optional restricted mode lets production consumers keep the public native MCP
-transport as a low-risk demo while gating REST/JSON calculation paths. Set
-`NEXUS_PUBLIC_MCP_PROFILE=demo` to register only closed-world demo MCP tools,
-then set `NEXUS_ACCESS_MODE=restricted` plus `NEXUS_API_KEYS` to require
+transport as a low-risk demo while gating REST/JSON calculation paths. The
+hosted deployment currently sets `NEXUS_PUBLIC_MCP_PROFILE=demo`, so OAuth MCP
+clients see only `option_price`, `collar_book`, `health`, and `describe`. It
+also sets `NEXUS_ACCESS_MODE=restricted` plus `NEXUS_API_KEYS`, requiring
 `Authorization: Bearer <key>` or `X-Nexus-Api-Key` on `/api/*`,
 `/api/planning/tools/*`, and legacy `/mcp/tools/*`. `pw-api` should supply the
 matching `NEXUS_SERVICE_API_KEY`; CORS origin allow-lists remain a browser
