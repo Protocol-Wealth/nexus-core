@@ -19,6 +19,14 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from .state_tax import (
+    IncomeSource,
+    StateResidencyChange,
+    estimate_state_income_tax_components,
+    reference_state_tax_rule,
+    state_code_for_year,
+    state_tax_notes,
+)
 from .tables import FilingStatus, TableError, reference_bracket_table
 
 AccountType = Literal["taxable", "traditional", "roth"]
@@ -219,6 +227,9 @@ def tax_aware_withdrawal(
     age: int,
     other_taxable_income: float,
     birth_year: int | None = None,
+    state: str | None = None,
+    residency_change: StateResidencyChange | None = None,
+    projection_year: int | None = None,
 ) -> dict[str, Any]:
     """Return the tax-aware withdrawal plan. Raises ``ValueError`` on bad input.
 
@@ -283,28 +294,87 @@ def tax_aware_withdrawal(
     tax_taxable = _ltcg_tax(gains, base + trad, status, year=year)
 
     tax_by_type = {"taxable": tax_taxable, "traditional": tax_traditional, "roth": 0.0}
+    state_by_type = {"taxable": 0.0, "traditional": 0.0, "roth": 0.0}
+    state_meta: dict[str, Any] | None = None
+    state_code = state_code_for_year(
+        base_state=state,
+        residency_change=residency_change,
+        year=year if projection_year is None else projection_year,
+    )
+    if state_code is not None:
+        try:
+            state_rule = reference_state_tax_rule(state_code, year)
+        except TableError as exc:
+            raise ValueError(str(exc)) from exc
+        if state_rule is None:
+            state_meta = {
+                "stateCode": state_code,
+                "stateTaxModeled": False,
+                "stateTax": 0.0,
+                "stateTaxTableVersion": None,
+                "stateTaxNotes": [
+                    f"No reference state-tax rule registered for {state_code}; state tax is not modeled."
+                ],
+            }
+        else:
+            state_components: list[tuple[str, IncomeSource, float]] = [
+                ("taxable", "taxable_gain", gains),
+                ("traditional", "traditional_distribution", trad),
+                ("roth", "roth_distribution", withdrawn["roth"]),
+            ]
+            state_estimates = estimate_state_income_tax_components(
+                state_rule,
+                state_components,
+                age=age,
+                filing_status=status,
+                total_income=max(0.0, other_taxable_income) + trad + gains,
+                baseline_taxable_income=max(0.0, other_taxable_income),
+            )
+            for acct_type in ("taxable", "traditional", "roth"):
+                estimate = state_estimates.get(acct_type)
+                state_by_type[acct_type] = estimate.tax if estimate is not None else 0.0
+            state_total = sum(state_by_type.values())
+            state_meta = {
+                "stateCode": state_code,
+                "stateTaxModeled": True,
+                "stateTax": round(state_total, 2),
+                "stateTaxTableVersion": state_rule.table_version,
+                "stateTaxNotes": list(state_tax_notes(state_rule, tuple(state_estimates.values()))),
+            }
     rows = [
         {
             "type": acct_type,
             "gross": round(withdrawn[acct_type], 2),
-            "tax": round(tax_by_type[acct_type], 2),
+            "tax": round(tax_by_type[acct_type] + state_by_type[acct_type], 2),
+            **(
+                {
+                    "federalTax": round(tax_by_type[acct_type], 2),
+                    "stateTax": round(state_by_type[acct_type], 2),
+                }
+                if state_meta is not None
+                else {}
+            ),
         }
         for acct_type in ("taxable", "traditional", "roth")
         if withdrawn[acct_type] > 0
     ]
-    total_tax = tax_taxable + tax_traditional
+    total_tax = tax_taxable + tax_traditional + sum(state_by_type.values())
     total_gross = sum(withdrawn.values())
     effective_rate = total_tax / total_gross if total_gross > 0 else 0.0
-    return {
+    result: dict[str, Any] = {
         "withdrawals": rows,
         "totalTax": round(total_tax, 2),
         "effectiveRate": round(effective_rate, 4),
+        "federalTax": round(tax_taxable + tax_traditional, 2),
         "rmdStartAge": start_age,
         "rmdStartAgePolicyVersion": RMD_START_AGE_POLICY_VERSION,
         "taxTableYear": tax_table.year,
         "taxTableVersion": tax_table.table_version,
         "rmdSatisfied": withdrawn["traditional"] + 1e-6 >= rmd,
     }
+    if state_meta is not None:
+        result.update(state_meta)
+    return result
 
 
 __all__ = [

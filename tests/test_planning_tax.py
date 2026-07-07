@@ -6,7 +6,11 @@ from __future__ import annotations
 
 import pytest
 
-from nexus_core.engine.planning import InfeasiblePlanError, tax_aware_withdrawal
+from nexus_core.engine.planning import (
+    InfeasiblePlanError,
+    StateResidencyChange,
+    tax_aware_withdrawal,
+)
 from nexus_core.engine.planning.tax import ordinary_tax
 
 _ACCOUNTS = [
@@ -135,6 +139,120 @@ def test_traditional_taxed_as_ordinary_income() -> None:
     assert trad["type"] == "traditional"
     assert trad["tax"] > 0
     assert r["totalTax"] == trad["tax"]
+
+
+def test_state_tax_exposes_federal_and_state_split() -> None:
+    r = tax_aware_withdrawal(
+        year=2026,
+        filing_status="single",
+        accounts=[{"type": "traditional", "balance": 500_000, "allocation": {"x": 1.0}}],
+        gross_need=80_000,
+        age=50,
+        other_taxable_income=0,
+        state="PA",
+    )
+    trad = r["withdrawals"][0]
+
+    assert r["stateCode"] == "PA"
+    assert r["stateTaxModeled"] is True
+    assert r["stateTax"] == pytest.approx(2_456.0)
+    assert trad["stateTax"] == pytest.approx(2_456.0)
+    assert trad["federalTax"] > 0.0
+    assert trad["tax"] == pytest.approx(trad["federalTax"] + trad["stateTax"])
+    assert r["totalTax"] == pytest.approx(r["federalTax"] + r["stateTax"])
+
+
+def test_state_tax_pa_retirement_age_excludes_traditional_distribution() -> None:
+    r = tax_aware_withdrawal(
+        year=2026,
+        filing_status="single",
+        accounts=[{"type": "traditional", "balance": 500_000, "allocation": {"x": 1.0}}],
+        gross_need=80_000,
+        age=65,
+        other_taxable_income=0,
+        state="PA",
+    )
+
+    assert r["stateCode"] == "PA"
+    assert r["stateTaxModeled"] is True
+    assert r["stateTax"] == 0.0
+
+
+def test_state_tax_residency_change_uses_projection_year() -> None:
+    no_change = tax_aware_withdrawal(
+        year=2026,
+        filing_status="single",
+        accounts=[{"type": "traditional", "balance": 500_000, "allocation": {"x": 1.0}}],
+        gross_need=50_000,
+        age=50,
+        other_taxable_income=0,
+        state="PA",
+        projection_year=2026,
+    )
+    changed = tax_aware_withdrawal(
+        year=2026,
+        filing_status="single",
+        accounts=[{"type": "traditional", "balance": 500_000, "allocation": {"x": 1.0}}],
+        gross_need=50_000,
+        age=50,
+        other_taxable_income=0,
+        state="PA",
+        residency_change=StateResidencyChange(year=2027, from_state="PA", to_state="FL"),
+        projection_year=2027,
+    )
+
+    assert no_change["stateCode"] == "PA"
+    assert no_change["stateTax"] > 0.0
+    assert changed["stateCode"] == "FL"
+    assert changed["stateTax"] == 0.0
+
+
+def test_bracketed_state_tax_stacks_on_other_income() -> None:
+    r = tax_aware_withdrawal(
+        year=2026,
+        filing_status="single",
+        accounts=[{"type": "traditional", "balance": 100_000, "allocation": {"x": 1.0}}],
+        gross_need=10_000,
+        age=50,
+        other_taxable_income=10_000,
+        state="MS",
+    )
+
+    assert r["stateCode"] == "MS"
+    assert r["stateTax"] == pytest.approx(440.0)
+    assert r["withdrawals"][0]["stateTax"] == pytest.approx(440.0)
+
+
+def test_state_tax_notes_include_rule_caveats() -> None:
+    r = tax_aware_withdrawal(
+        year=2026,
+        filing_status="single",
+        accounts=[{"type": "taxable", "balance": 100_000, "allocation": {"x": 1.0}}],
+        gross_need=20_000,
+        age=60,
+        other_taxable_income=0,
+        state="WA",
+    )
+
+    assert r["stateTax"] == 0.0
+    assert any("capital-gains excise" in note for note in r["stateTaxNotes"])
+
+
+def test_unregistered_state_marks_state_tax_unmodeled() -> None:
+    r = tax_aware_withdrawal(
+        year=2026,
+        filing_status="single",
+        accounts=[{"type": "traditional", "balance": 500_000, "allocation": {"x": 1.0}}],
+        gross_need=50_000,
+        age=50,
+        other_taxable_income=0,
+        state="CA",
+    )
+
+    assert r["stateCode"] == "CA"
+    assert r["stateTaxModeled"] is False
+    assert r["stateTax"] == 0.0
+    assert "not modeled" in r["stateTaxNotes"][0]
 
 
 def test_infeasible_when_need_exceeds_balances() -> None:

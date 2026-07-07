@@ -16,7 +16,8 @@ centralizes federal tax/IRMAA reference-table lookup behind a version-stamped
 provider registry and adds Monte Carlo report diagnostics for Wealth Roadmap
 output quality, plus S1 education funding tools and S8 multi-account
 waterfall / Monte Carlo goal-schedule support, S2 income layering, and the
-current S3 historical-blend exhibit. Live endpoints were not re-smoked._
+current S3 historical-blend exhibit plus the current S7 illustrative state-tax
+layer. Live endpoints were not re-smoked._
 
 ## Orient yourself in 5 minutes
 
@@ -97,6 +98,15 @@ current S3 historical-blend exhibit. Live endpoints were not re-smoked._
   returns, trailing windows, growth-of-dollar, and annualized mean/sigma bands.
   The wrapper does provider I/O; the engine remains pure and receives only
   de-identified return series and weights.
+- **Current S7 state/local tax state:** `state_tax.py` provides a data-driven
+  2026 reference table for no-income-tax states, full retirement exclusion
+  states, and selected partial/senior exclusion states. `tax_aware_withdrawal`
+  and `income_layering` accept optional 2-letter state/residency inputs and
+  return federal/state tax splits when modeled. The Roth composite's simpler
+  conversion-rule reference set is aligned for no-income and full-retirement
+  exclusion states it can represent. Unknown states stay explicitly unmodeled;
+  raw addresses, account identifiers, household records, approvals, and audit
+  state remain private-stack concerns.
 
 ## Before you commit (the gate — mirrors CI)
 

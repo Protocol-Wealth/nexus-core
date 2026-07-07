@@ -339,6 +339,12 @@ def income_layering_result_schema() -> dict[str, Any]:
             "effectiveTaxRate": _MONEY,
             "endingAccountBalances": account_balances,
             "bracketHeadroom": {"type": "object"},
+            "stateCode": {"type": ["string", "null"]},
+            "stateTaxModeled": {"type": "boolean"},
+            "federalTax": _MONEY,
+            "stateTax": _MONEY,
+            "stateTaxTableVersion": {"type": ["string", "null"]},
+            "stateTaxNotes": _STRING_ARRAY,
         },
     }
     source_total = {
@@ -376,6 +382,8 @@ def income_layering_result_schema() -> dict[str, Any]:
             "totalSpendingTarget": _MONEY,
             "totalGrossIncome": _MONEY,
             "totalTax": _MONEY,
+            "totalFederalTax": _MONEY,
+            "totalStateTax": _MONEY,
             "totalNetIncome": _MONEY,
             "totalGap": _MONEY,
             "totalSurplusAfterTax": _MONEY,
@@ -415,11 +423,22 @@ def income_layering_result_schema() -> dict[str, Any]:
             "socialSecurityClaimAge": {"type": ["integer", "null"]},
             "socialSecurityFraAge": {"type": ["integer", "null"]},
             "bracketFillTargetRate": {"type": ["number", "null"]},
+            "state": {"type": ["string", "null"]},
+            "residencyChange": {
+                "type": ["object", "null"],
+                "additionalProperties": False,
+                "required": ["year", "from", "to"],
+                "properties": {
+                    "year": {"type": "integer"},
+                    "from": {"type": "string"},
+                    "to": {"type": "string"},
+                },
+            },
         },
     }
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://nexusmcp.site/schemas/income-layering-result-0.1.0.json",
+        "$id": "https://nexusmcp.site/schemas/income-layering-result-0.1.1.json",
         "title": "IncomeLayeringResult",
         "description": "PII-free output of the income_layering planning tool.",
         "type": "object",

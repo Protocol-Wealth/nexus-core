@@ -17,10 +17,14 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   bearer key opened the then-current 27-tool planning contract; hosted native `/mcp` keeps
   transparent OAuth active and exposes only the demo MCP tools
   `option_price`, `collar_book`, `health`, and `describe`.
-- **Last local update:** 2026-07-07 — current branch adds the S3
-  `historical_blend` planning tool: public proxy histories are converted to
-  aligned monthly returns in the wrapper, while the pure engine emits
-  calendar-year returns, trailing windows, growth-of-dollar, and annualized
+- **Last local update:** 2026-07-07 — current branch adds the S7 illustrative
+  state-tax layer: `tax_aware_withdrawal` and `income_layering` accept optional
+  2-letter `state` plus deterministic `residencyChange` inputs, expose
+  federal/state tax splits and table versions when a reference rule is modeled,
+  and keep unknown states explicitly unmodeled instead of assuming zero. `main`
+  also adds the S3 `historical_blend` planning tool: public proxy histories are
+  converted to aligned monthly returns in the wrapper, while the pure engine
+  emits calendar-year returns, trailing windows, growth-of-dollar, and annualized
   mean/sigma bands for Wealth Roadmap historical-context exhibits. `main` also
   adds S1 education funding, S8 deterministic/Monte Carlo goal-waterfall
   support, S2 income layering, report-grade Monte Carlo diagnostics for Wealth
@@ -362,6 +366,16 @@ key is absent.
   draws are not ordinary income in multi-account mode. `monte_carlo_decumulation`
   and `solve_goal` can also accept de-identified `goals`, echo the generated
   `goalFundingSchedule`, and return per-goal path-level funding statistics.
+- **S7 state/local tax state** — `engine/planning/state_tax.py` provides a
+  data-driven 2026 reference table for no-income-tax states, full retirement
+  exclusion states (PA/IL/MS/IA), and selected partial/senior exclusion states
+  (CO/NY/VA/NJ/MD/DE). `tax_aware_withdrawal` and `income_layering` accept only
+  state codes, ages, filing status, and numeric income components; they return
+  optional federal/state tax splits and table versions. The Roth composite's
+  older `StateConversionRule` reference set is aligned for the S7 no-income and
+  full-retirement-exclusion states it can represent. Raw addresses, account
+  identifiers, household records, approvals, and audit state stay outside the
+  public engine.
 - **Planning surface now 31 tools in current source** — includes `solve_goal`,
   `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio,
   `education_funding`, `education_vehicle_rules`, `income_layering`,

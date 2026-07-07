@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### State/local tax layer S7
+
+#### Added
+
+- Added `engine/planning/state_tax.py`, a public-safe, data-driven 2026
+  illustrative state-tax table covering no-income-tax states, PA/IL/MS/IA full
+  retirement exclusions, and selected partial/senior exclusions for CO, NY, VA,
+  NJ, MD, and DE.
+- Added optional `state`, `residencyChange`, and `projectionYear` support to
+  `tax_aware_withdrawal`, returning federal/state tax splits, state table
+  versions, modeled/unmodeled flags, and explicit unknown-state notes.
+- Added optional `state` and `residencyChange` support to `income_layering`,
+  including per-year state code, federal/state tax totals, table versions, and
+  state notes while preserving the existing federal-only response when omitted.
+- Expanded the Roth composite's older `StateConversionRule` reference mapping
+  for the S7 no-income and full-retirement-exclusion states that fit that rule
+  shape.
+
+#### Fixed
+
+- Shared capped/tiered state retirement exclusions across pension, annuity, RMD,
+  and discretionary traditional-withdrawal components in a year instead of
+  applying the cap once per layer.
+
 ### Historical blend S3
 
 #### Added

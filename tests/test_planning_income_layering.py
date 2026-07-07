@@ -18,6 +18,7 @@ from nexus_core.data.providers import PriceBar
 from nexus_core.engine.planning import (
     IncomeStream,
     SocialSecurityIncome,
+    StateResidencyChange,
     income_layering,
     income_layering_result_schema,
     project_cash_flow,
@@ -129,6 +130,76 @@ def test_rmd_withdrawal_increases_taxable_social_security() -> None:
     assert first["totalTax"] > 5_000.0
 
 
+def test_state_tax_layers_pa_excludes_retirement_income() -> None:
+    pa = income_layering(
+        current_age=65,
+        terminal_age=66,
+        spending_target=0.0,
+        filing_status="single",
+        income_streams=(IncomeStream("pension", 60_000.0, 65),),
+        state="PA",
+        base_year=2026,
+    )
+    va = income_layering(
+        current_age=65,
+        terminal_age=66,
+        spending_target=0.0,
+        filing_status="single",
+        income_streams=(IncomeStream("pension", 60_000.0, 65),),
+        state="VA",
+        base_year=2026,
+    )
+
+    assert pa["years"][0]["stateCode"] == "PA"
+    assert pa["years"][0]["stateTaxModeled"] is True
+    assert pa["years"][0]["stateTax"] == 0.0
+    assert va["years"][0]["stateCode"] == "VA"
+    assert va["years"][0]["stateTax"] > 0.0
+    assert va["rollups"]["totalTax"] == pytest.approx(
+        va["rollups"]["totalFederalTax"] + va["rollups"]["totalStateTax"]
+    )
+
+
+def test_state_tax_residency_change_switches_income_layering_year() -> None:
+    result = income_layering(
+        current_age=50,
+        terminal_age=51,
+        spending_target=50_000.0,
+        filing_status="single",
+        tax_year=2026,
+        base_year=2026,
+        account_balances={"taxable": 0.0, "traditional": 200_000.0, "roth": 0.0},
+        account_returns={"taxable": 0.0, "traditional": 0.0, "roth": 0.0},
+        state="PA",
+        residency_change=StateResidencyChange(year=2027, from_state="PA", to_state="FL"),
+    )
+
+    first, second = result["years"]
+    assert first["stateCode"] == "PA"
+    assert first["stateTax"] > 0.0
+    assert second["stateCode"] == "FL"
+    assert second["stateTax"] == 0.0
+
+
+def test_state_tax_gross_up_prevents_artificial_gap() -> None:
+    result = income_layering(
+        current_age=50,
+        terminal_age=51,
+        spending_target=50_000.0,
+        filing_status="single",
+        tax_year=2026,
+        base_year=2026,
+        account_balances={"taxable": 0.0, "traditional": 250_000.0, "roth": 0.0},
+        account_returns={"taxable": 0.0, "traditional": 0.0, "roth": 0.0},
+        state="VA",
+    )
+
+    first = result["years"][0]
+    assert first["stateTax"] > 0.0
+    assert first["gap"] == pytest.approx(0.0, abs=1.0)
+    assert first["netIncome"] >= first["spendingTarget"] - 1.0
+
+
 def test_bracket_fill_adds_optional_traditional_layer() -> None:
     base = income_layering(
         current_age=65,
@@ -236,6 +307,31 @@ def test_income_layering_gateway_happy_path_and_disclaimer() -> None:
     assert "not predictions" in body["disclaimer"]
 
 
+def test_income_layering_gateway_accepts_state_and_residency_change() -> None:
+    status, body = _call_gateway_tool(
+        "income_layering",
+        {
+            "currentAge": 50,
+            "terminalAge": 51,
+            "spendingTarget": 50_000,
+            "filingStatus": "single",
+            "taxYear": 2026,
+            "baseYear": 2026,
+            "accountBalances": {"taxable": 0, "traditional": 200_000, "roth": 0},
+            "accountReturns": {"taxable": 0, "traditional": 0, "roth": 0},
+            "state": "PA",
+            "residencyChange": {"year": 2027, "from": "PA", "to": "FL"},
+        },
+    )
+
+    assert status == 200
+    assert body["years"][0]["stateCode"] == "PA"
+    assert body["years"][0]["stateTax"] > 0.0
+    assert body["years"][1]["stateCode"] == "FL"
+    assert body["years"][1]["stateTax"] == 0.0
+    assert body["assumptions"]["residencyChange"] == {"year": 2027, "from": "PA", "to": "FL"}
+
+
 def test_income_layering_gateway_rejects_stream_labels() -> None:
     status, body = _call_gateway_tool(
         "income_layering",
@@ -273,6 +369,27 @@ def test_income_layering_gateway_rejects_unknown_top_level_fields() -> None:
     assert "income_layering only accepts" in body
 
 
+def test_income_layering_gateway_rejects_extra_residency_change_fields() -> None:
+    status, body = _call_gateway_tool(
+        "income_layering",
+        {
+            "currentAge": 65,
+            "terminalAge": 66,
+            "spendingTarget": 60_000,
+            "state": "PA",
+            "residencyChange": {
+                "year": 2027,
+                "from": "PA",
+                "to": "FL",
+                "address": "123 Main St",
+            },
+        },
+    )
+
+    assert status == 400
+    assert "identity fields are not accepted" in body
+
+
 def test_income_layering_gateway_rejects_explicit_invalid_fra_age() -> None:
     status, body = _call_gateway_tool(
         "income_layering",
@@ -292,9 +409,12 @@ def test_income_layering_schema_exposes_wire_shape() -> None:
     schema = income_layering_result_schema()
 
     assert schema["title"] == "IncomeLayeringResult"
+    assert schema["$id"].endswith("income-layering-result-0.1.1.json")
     assert "years" in schema["properties"]
     assert "rollups" in schema["properties"]
     layer_props = schema["properties"]["years"]["items"]["properties"]["layers"]["items"][
         "properties"
     ]
     assert "source" in layer_props
+    assert "stateTax" in schema["properties"]["years"]["items"]["properties"]
+    assert "residencyChange" in schema["properties"]["assumptions"]["properties"]

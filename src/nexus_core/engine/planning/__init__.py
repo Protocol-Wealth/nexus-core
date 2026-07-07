@@ -68,6 +68,19 @@ from .roth_analysis import analyze_roth_conversion, sequence_conversions
 from .roth_conversion import roth_conversion
 from .sequence_risk import sequence_of_returns_stress
 from .social_security import social_security_claiming
+from .state_tax import (
+    StateResidencyChange,
+    StateRetirementExclusion,
+    StateRetirementExclusionBand,
+    StateTaxEstimate,
+    StateTaxRule,
+    estimate_state_income_tax,
+    estimate_state_income_tax_components,
+    reference_state_tax_rule,
+    retirement_exclusion_amount,
+    state_code_for_year,
+    state_tax_notes,
+)
 from .tables import (
     AcaSituation,
     BracketTable,
@@ -111,6 +124,11 @@ __all__ = [
     "SolveResult",
     "SocialSecurityIncome",
     "StateConversionRule",
+    "StateResidencyChange",
+    "StateRetirementExclusion",
+    "StateRetirementExclusionBand",
+    "StateTaxEstimate",
+    "StateTaxRule",
     "analyze_goals",
     "analyze_roth_conversion",
     "bracket_headroom",
@@ -128,6 +146,8 @@ __all__ = [
     "education_savings_projection",
     "education_vehicle_rules_result_schema",
     "fire",
+    "estimate_state_income_tax",
+    "estimate_state_income_tax_components",
     "historical_blend",
     "historical_blend_result_schema",
     "irmaa_headroom",
@@ -142,7 +162,9 @@ __all__ = [
     "reference_bracket_table",
     "reference_education_vehicle_rules",
     "reference_irmaa_table",
+    "reference_state_tax_rule",
     "reference_state_rule",
+    "retirement_exclusion_amount",
     "regime_conditioned_swr",
     "risk_metrics",
     "rmd",
@@ -154,5 +176,7 @@ __all__ = [
     "social_security_claiming",
     "solve_integer_monotone",
     "solve_monotone",
+    "state_code_for_year",
+    "state_tax_notes",
     "tax_aware_withdrawal",
 ]
