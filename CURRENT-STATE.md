@@ -17,7 +17,12 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   bearer key opened the then-current 27-tool planning contract; hosted native `/mcp` keeps
   transparent OAuth active and exposes only the demo MCP tools
   `option_price`, `collar_book`, `health`, and `describe`.
-- **Last local update:** 2026-07-07 — current branch adds the S9 household /
+- **Last local update:** 2026-07-07 — current branch adds the S6 PW Wealth
+  Roadmap preset to `build_planning_report`: `preset: "wealth_roadmap"` fixes
+  the report title, supports `focused` / `full` scopes, injects the required
+  scope statement and focused-scope planning-benefit notice, requires and stamps
+  replay metadata on every section, and rejects public `released` / caller
+  `curated` workflow state. `main` also adds the S9 household /
   survivor layer: `household_social_security_benefits` provides a simplified
   two-person Social Security own, age-reduced spousal, and survivor snapshot,
   and `income_layering` accepts optional spouse Social Security plus
@@ -392,6 +397,18 @@ key is absent.
   remain ages, claim ages, PIAs, filing statuses, and numeric assumptions only;
   names, household identifiers, permissions, approvals, and audit records stay
   private-stack concerns.
+- **S6 Wealth Roadmap state** — `build_planning_report` now supports the
+  additive `preset: "wealth_roadmap"` request shape. The focused scope includes
+  snapshot, trajectory, one goals section, and the required scope / assumptions /
+  disclosure section. The full scope includes snapshot, trajectory, goals,
+  income, guardrails, historical blend, required scope / assumptions /
+  disclosures, and priority actions. Every Roadmap section carries the same
+  replay metadata (`assumptionVersion`, `cmaVersion`, `taxYear`, `seed`,
+  `engineReference`, `scope`). Full-scope priority actions are candidate
+  observations with `curated: false`; the public engine rejects `released` and
+  caller-provided `curated` workflow state. Rendering, approval, archiving,
+  client delivery, and books-and-records workflows remain private-stack
+  concerns.
 - **Planning surface now 31 tools in current source** — includes `solve_goal`,
   `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio,
   `education_funding`, `education_vehicle_rules`, `income_layering`,

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Wealth Roadmap report preset S6
+
+#### Added
+
+- Added the `wealth_roadmap` preset to `build_planning_report`. The preset
+  emits the fixed "PW Wealth Roadmap" title, supports `focused` and `full`
+  scopes, injects the required scope statement and focused-scope planning
+  benefit notice, requires replay metadata, and stamps that metadata on every
+  section.
+- Added full-scope priority-action handling. Candidate actions remain
+  `curated: false` until private-stack advisor curation. Public Roadmap requests
+  reject `released` and caller-provided `curated` workflow state.
+
 ### Household and survivor modeling S9
 
 #### Added

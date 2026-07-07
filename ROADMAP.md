@@ -93,6 +93,16 @@ then show survivor benefit continuity and joint-to-single tax compression in the
 yearly timeline. The public boundary remains de-identified: PIAs, claim ages,
 filing statuses, ages, and numeric assumptions only.
 
+Current source also adds the S6 PW Wealth Roadmap report preset.
+`build_planning_report` accepts `preset: "wealth_roadmap"` and keeps
+`preset: "custom"` as the default. The Roadmap preset fixes the display title,
+supports `focused` and `full` scopes, injects the required scope statement and
+focused-scope planning-benefit notice, requires and stamps every section with
+replay metadata, and emits full-scope priority actions as candidate observations
+only. The public engine rejects `released` and caller-provided `curated`
+workflow state. It emits structured report JSON only; branded PDF rendering,
+release approval, archive records, and client delivery stay in the private stack.
+
 The collar-book realistic-fill layer is part of current source. The engine plus
 REST/MCP parsers accept midpoint `net_credit` and optional executable pricing
 (`executable_net_credit` or `call_bid` minus `put_ask`) and return stock price,

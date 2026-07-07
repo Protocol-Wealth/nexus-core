@@ -17,8 +17,8 @@ provider registry and adds Monte Carlo report diagnostics for Wealth Roadmap
 output quality, plus S1 education funding tools and S8 multi-account
 waterfall / Monte Carlo goal-schedule support, S2 income layering, and the
 current S3 historical-blend exhibit plus the current S7 illustrative state-tax
-layer and current S9 household/survivor modeling. Live endpoints were not
-re-smoked._
+layer, current S9 household/survivor modeling, and the current S6 PW Wealth
+Roadmap report preset. Live endpoints were not re-smoked._
 
 ## Orient yourself in 5 minutes
 
@@ -116,6 +116,12 @@ re-smoked._
   still uses only PIAs, claim ages, filing statuses, ages, and numeric
   assumptions; private household links, user permissions, approvals, and audit
   records stay outside this repo.
+- **Current S6 Wealth Roadmap state:** `build_planning_report` supports
+  `preset: "wealth_roadmap"` with `focused` and `full` scopes, required scope /
+  disclosure injection, required per-section replay metadata, and full-scope
+  candidate priority actions. The public engine rejects `released` and
+  caller-provided `curated` workflow state; private rendering, approval,
+  archive, and client-delivery workflows stay outside this repo.
 
 ## Before you commit (the gate — mirrors CI)
 

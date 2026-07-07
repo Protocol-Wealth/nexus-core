@@ -24,6 +24,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import Any, cast
 
+from ... import __version__
 from ...data.providers import MarketDataProvider
 from ...disclaimers import FULL
 from ...engine.planning import (
@@ -90,7 +91,7 @@ from ...engine.planning.tables import (
 from ...engine.planning.tax import FilingStatus
 from ...engine.regime import RegimeEngine
 from .contract import PlanningInfeasibleError, PlanningInputError
-from .report import assemble_report
+from .report import assemble_report, assemble_wealth_roadmap
 from .universe import ASSET_UNIVERSE, proxy_tickers, universe_ids
 
 _MAX_SEED = 2**31 - 1
@@ -1412,6 +1413,53 @@ def _optimize_allocation_tool(
 
 
 _MAX_REPORT_SECTIONS = 40
+_REPORT_PRESETS = frozenset(("custom", "wealth_roadmap"))
+_REPORT_SCOPES = frozenset(("focused", "full"))
+
+
+def _parse_report_metadata(body: dict[str, Any], scope: str) -> dict[str, Any]:
+    raw = body.get("metadata", {})
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise PlanningInputError("metadata must be an object or omitted")
+    allowed = {"assumptionVersion", "cmaVersion", "taxYear", "seed", "engineReference"}
+    extra = set(raw) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"metadata only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
+        )
+
+    def optional_str(
+        key: str, default: str | None = None, *, required: bool = False
+    ) -> str | None:
+        value = raw.get(key, default)
+        if value is None:
+            if required:
+                raise PlanningInputError(f"metadata.{key} is required for wealth_roadmap")
+            return None
+        if not isinstance(value, str) or not value:
+            raise PlanningInputError(f"metadata.{key} must be a non-empty string or null")
+        return value
+
+    def optional_int(key: str, *, required: bool = False) -> int | None:
+        value = raw.get(key)
+        if value is None:
+            if required:
+                raise PlanningInputError(f"metadata.{key} is required for wealth_roadmap")
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise PlanningInputError(f"metadata.{key} must be an integer or null")
+        return value
+
+    return {
+        "assumptionVersion": optional_str("assumptionVersion", required=True),
+        "cmaVersion": optional_str("cmaVersion", required=True),
+        "taxYear": optional_int("taxYear", required=True),
+        "seed": optional_int("seed", required=True),
+        "engineReference": optional_str("engineReference", f"nexus-core:{__version__}"),
+        "scope": scope,
+    }
 
 
 def _parse_report_section(raw: Any, index: int) -> dict[str, Any]:
@@ -1457,6 +1505,10 @@ def _build_planning_report_tool(
     assumptions, and the comprehensive disclaimer. PII-free — it composes numeric
     tool outputs, never identity. Not a substitute for an advisor's IPS.
     """
+    preset = body.get("preset", "custom")
+    if not isinstance(preset, str) or preset not in _REPORT_PRESETS:
+        raise PlanningInputError(f"preset must be one of {sorted(_REPORT_PRESETS)}")
+
     raw_sections = _require(body, "sections")
     if not isinstance(raw_sections, list) or not raw_sections:
         raise PlanningInputError("sections must be a non-empty list")
@@ -1476,7 +1528,24 @@ def _build_planning_report_tool(
         raw_regime = regime_engine.classify().regime
         regime = str(getattr(raw_regime, "value", raw_regime))
 
-    report = assemble_report(sections, title=title, regime=regime)
+    if preset == "wealth_roadmap":
+        scope = body.get("scope", "focused")
+        if not isinstance(scope, str) or scope not in _REPORT_SCOPES:
+            raise PlanningInputError(f"scope must be one of {sorted(_REPORT_SCOPES)}")
+        if "released" in body:
+            raise PlanningInputError("released is private workflow state and is not accepted")
+        metadata = _parse_report_metadata(body, scope)
+        try:
+            report = assemble_wealth_roadmap(
+                sections,
+                scope=scope,
+                metadata=metadata,
+                regime=regime,
+            )
+        except ValueError as exc:
+            raise PlanningInputError(str(exc)) from exc
+    else:
+        report = assemble_report(sections, title=title, regime=regime)
     return {"report": report, "disclaimer": FULL}
 
 
