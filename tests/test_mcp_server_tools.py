@@ -175,6 +175,8 @@ _PLANNING_TOOL_IDS = {
     "cashflow_planning_bridge",
     "cash_reserve_analysis",
     "budget_pacing_projection",
+    "education_funding",
+    "education_vehicle_rules",
     "glide_path",
     "tax_aware_withdrawal",
     "correlation_matrix",
@@ -767,9 +769,7 @@ def test_equity_option_chain_tool() -> None:
         mboum_options=_mboum_options_stub(_MBOUM_TOOL_PAYLOAD),  # type: ignore[arg-type]
     )
     body = json.loads(
-        _call_text(
-            server, "equity_option_chain", {"symbol": "KO", "expiration": "2026-08-07"}
-        )
+        _call_text(server, "equity_option_chain", {"symbol": "KO", "expiration": "2026-08-07"})
     )
     assert "error" not in body
     assert body["count"] == {"calls": 1, "puts": 1}

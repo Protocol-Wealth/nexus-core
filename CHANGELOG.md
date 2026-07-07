@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Education funding S1
+
+#### Added
+
+- Added the public-safe `education_funding` planning tool for multi-student
+  cost inflation, projected education savings, and closed-form monthly / annual
+  / lump-sum savings needs.
+- Added the `education_vehicle_rules` planning tool with a 2026 reference
+  comparison table for 529 plans, Coverdell ESAs, and UGMA/UTMA custodial
+  accounts.
+
 ### Monte Carlo report diagnostics
 
 #### Added

@@ -99,6 +99,8 @@ def test_mcp_guide_documents_pwplan_core_integration() -> None:
         "cashflow_planning_bridge",
         "cash_reserve_analysis",
         "budget_pacing_projection",
+        "education_funding",
+        "education_vehicle_rules",
         "glide_path",
         "tax_aware_withdrawal",
         "correlation_matrix",
@@ -284,8 +286,7 @@ def test_cache_control_headers() -> None:
     with _rest_client() as client:
         assert client.get("/api/regime").headers.get("cache-control") == "public, max-age=900"
         assert (
-            client.get("/api/regime/signals").headers.get("cache-control")
-            == "public, max-age=900"
+            client.get("/api/regime/signals").headers.get("cache-control") == "public, max-age=900"
         )
         assert (
             client.get("/api/market/quote/SPY").headers.get("cache-control")
@@ -296,7 +297,6 @@ def test_cache_control_headers() -> None:
             == "public, max-age=3600"
         )
         assert (
-            client.get("/api/economic/DGS10").headers.get("cache-control")
-            == "public, max-age=3600"
+            client.get("/api/economic/DGS10").headers.get("cache-control") == "public, max-age=3600"
         )
         assert client.get("/health").headers.get("cache-control") == "no-store"

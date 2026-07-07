@@ -14,7 +14,8 @@ covariance-scaling correction plus the RMD start-age policy kernel shared by
 `rmd`, `tax_aware_withdrawal`, and the Roth composite. Current branch also
 centralizes federal tax/IRMAA reference-table lookup behind a version-stamped
 provider registry and adds Monte Carlo report diagnostics for Wealth Roadmap
-output quality. Live endpoints were not re-smoked._
+output quality, plus S1 education funding tools. Live endpoints were not
+re-smoked._
 
 ## Orient yourself in 5 minutes
 
@@ -70,6 +71,12 @@ output quality. Live endpoints were not re-smoked._
   run manifest with engine version, de-identified assumptions hash, and
   confidence-width report-quality flags. Guardrail runs also return cut/raise
   timing stats.
+- **Current education-funding state:** `education_funding` and
+  `education_vehicle_rules` live in `engine/planning/education.py` and
+  `engine/planning/tables.py`, are exported from `nexus_core.engine.planning`,
+  and are exposed through the planning gateway/native MCP registry. Inputs are
+  annual costs, year offsets, funding years, current savings, contributions, and
+  opaque `subjectRef` values only.
 
 ## Before you commit (the gate — mirrors CI)
 
@@ -113,12 +120,12 @@ so pace the calls.
 ### Planning engine correctness queue
 
 The first correctness items have landed locally: Student-t covariance scaling,
-single-kernel RMD start-age policy, shared tax/IRMAA table providers, and
-Monte Carlo report diagnostics. Continue with the consolidated Wealth Roadmap
-sequence: education funding, multi-account deterministic waterfall, income
-layering, historical blend, state/local tax coverage, and household/survivor
-modeling. Keep each item one PR and preserve the public/private planning
-boundary.
+single-kernel RMD start-age policy, shared tax/IRMAA table providers, Monte
+Carlo report diagnostics, and S1 education funding. Continue with the
+consolidated Wealth Roadmap sequence: multi-account deterministic waterfall,
+income layering, historical blend, state/local tax coverage, and
+household/survivor modeling. Keep each item one PR and preserve the
+public/private planning boundary.
 
 ### Public-safe planning/report analytics extraction (#197)
 
