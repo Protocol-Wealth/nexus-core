@@ -301,10 +301,11 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
   <p>
     <code>monte_carlo_decumulation</code> over a de-identified portfolio. The
     response echoes <code>contractVersion</code> and carries
-    <code>successProbability</code>, a <code>terminalValues</code> percentile map,
-    <code>medianBalanceByYear</code>, <code>depletionStats</code>,
-    <code>firstDecadeReturnVsOutcome</code>, and a <code>regimePathSummary</code>
-    for the regime-aware models:
+    <code>successProbability</code> with a Wilson interval, a
+    <code>terminalValues</code> percentile map, <code>medianBalanceByYear</code>,
+    <code>depletionStats</code>, sticky <code>depletionCurve</code>,
+    <code>conditionalShortfall</code>, <code>firstDecadeReturnVsOutcome</code>
+    deciles, and a <code>regimePathSummary</code> for the regime-aware models:
   </p>
   <pre><code>curl -s {mcp_url}tools/monte_carlo_decumulation \\
   -H 'content-type: application/json' \\

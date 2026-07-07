@@ -39,7 +39,9 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "Monte Carlo retirement decumulation simulation across return models "
         "(incl. live-regime-aware), with optional spendSchedule shocks, optional "
         "Guyton-Klinger dynamic-withdrawal guardrails (pass `guardrails`), and "
-        "depletion-age diagnostics. Pass the planning request as a JSON object in `body`."
+        "report diagnostics including Wilson success intervals, depletion curves, "
+        "shortfall, and first-decade deciles. Pass the planning request as a JSON "
+        "object in `body`."
     ),
     "solve_goal": (
         "Multi-variable goal solver: back into the value of ONE plan variable that "

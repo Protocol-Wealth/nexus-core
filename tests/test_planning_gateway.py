@@ -296,10 +296,17 @@ def test_monte_carlo_default_scenario_non_degenerate() -> None:
     assert set(body["terminalValues"]) == {"p10", "p25", "p50", "p75", "p90"}
     assert body["terminalValues"]["p90"] > 0  # upside paths retain wealth
     assert len(body["medianBalanceByYear"]) == 50  # horizonAge - currentAge
+    assert body["successProbabilityConfidenceInterval"]["method"] == "wilson"
     assert set(body["depletionStats"]["depletionAgePercentiles"]) == {"p10", "p50", "p90"}
+    assert len(body["depletionCurve"]) == 50
+    assert body["conditionalShortfall"]["basis"] == "cumulative_unmet_portfolio_withdrawal_nominal"
     assert body["firstDecadeReturnVsOutcome"]["years"] == 10
+    assert len(body["firstDecadeReturnVsOutcome"]["deciles"]) == 10
     assert len(body["regimePathSummary"]) == 50  # emf_regime populated
     assert body["seedUsed"] == 12345
+    assert body["runManifest"]["manifestVersion"] == "monte_carlo_run_manifest_0.1.0"
+    assert len(body["runManifest"]["assumptionsHash"]) == 64
+    assert body["runManifest"]["paths"] == 3000
 
 
 def test_monte_carlo_spend_schedule_late_ltc_bump_lowers_success() -> None:
@@ -411,6 +418,7 @@ def test_monte_carlo_guardrails_end_to_end() -> None:
         "cut",
         "raise",
     }
+    assert "cutCountPercentiles" in body["guardrailStats"]
 
 
 def test_monte_carlo_without_guardrails_omits_the_dynamic_fields() -> None:
