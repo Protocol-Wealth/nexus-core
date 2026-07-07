@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Risk-profile scoring S5
+
+#### Added
+
+- Added the public-safe `risk_profile_score` planning tool. It scores a fixed,
+  PII-free questionnaire into the optimizer-compatible `riskProfile` enum,
+  annual volatility band, suggested model weights, question/band metadata, and
+  the canonical planning disclaimer. Advisor override, suitability approval, and
+  audit workflows remain private-stack concerns.
+
 ### Wealth Roadmap report preset S6
 
 #### Added

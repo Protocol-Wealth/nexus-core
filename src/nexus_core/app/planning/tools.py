@@ -61,6 +61,7 @@ from ...engine.planning import (
     reference_state_rule,
     regime_conditioned_swr,
     risk_metrics,
+    risk_profile_score,
     rmd,
     roth_conversion,
     sequence_conversions,
@@ -863,6 +864,31 @@ def risk_metrics_tool(body: dict[str, Any]) -> dict[str, Any]:
         raise PlanningInputError(str(exc)) from exc
 
 
+def risk_profile_score_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``risk_profile_score`` — fixed-question risk profile scoring."""
+
+    allowed = {"contractVersion", "answers"}
+    extra = set(body) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"risk_profile_score only accepts {sorted(allowed)}; got {sorted(extra)}"
+        )
+    raw_answers = _require(body, "answers")
+    if not isinstance(raw_answers, dict):
+        raise PlanningInputError("answers must be an object of question id to answer id")
+    answers: dict[str, str] = {}
+    for key, value in raw_answers.items():
+        if not isinstance(key, str):
+            raise PlanningInputError("answers keys must be strings")
+        if not isinstance(value, str):
+            raise PlanningInputError(f"answers.{key} must be a string answer id")
+        answers[key] = value
+    try:
+        return risk_profile_score(answers)
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
 def rebalance_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``rebalance`` — drift + self-financing trades to reach target weights.
 
@@ -1430,9 +1456,7 @@ def _parse_report_metadata(body: dict[str, Any], scope: str) -> dict[str, Any]:
             f"metadata only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
         )
 
-    def optional_str(
-        key: str, default: str | None = None, *, required: bool = False
-    ) -> str | None:
+    def optional_str(key: str, default: str | None = None, *, required: bool = False) -> str | None:
         value = raw.get(key, default)
         if value is None:
             if required:
@@ -2750,6 +2774,7 @@ def build_tool_handlers(
         "regime_conditioned_swr": regime_conditioned_swr_tool,
         "portfolio_xray": portfolio_xray_tool,
         "optimize_allocation": optimize_allocation_tool,
+        "risk_profile_score": risk_profile_score_tool,
         "fire": fire_tool,
         "risk_metrics": risk_metrics_tool,
         "rebalance": rebalance_tool,
@@ -2778,6 +2803,7 @@ __all__ = [
     "sequence_conversions_tool",
     "rebalance_tool",
     "risk_metrics_tool",
+    "risk_profile_score_tool",
     "rmd_tool",
     "roth_conversion_tool",
     "sequence_of_returns_stress_tool",

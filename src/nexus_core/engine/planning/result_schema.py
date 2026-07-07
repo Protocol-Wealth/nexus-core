@@ -95,6 +95,7 @@ def roth_conversion_analysis_schema() -> dict[str, Any]:
 
 
 _MONEY = {"type": "number"}
+_RATE = {"type": "number"}
 _NULLABLE_MONEY = {"type": ["number", "null"]}
 _STRING_ARRAY = {"type": "array", "items": {"type": "string"}}
 _SUBJECT_REF_SCHEMA = {
@@ -576,10 +577,121 @@ def historical_blend_result_schema() -> dict[str, Any]:
     }
 
 
+def risk_profile_result_schema() -> dict[str, Any]:
+    """JSON Schema for the ``risk_profile_score`` tool result."""
+
+    weight_map = {
+        "type": "object",
+        "additionalProperties": _RATE,
+    }
+    scored_answer = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["questionId", "answerId", "score"],
+        "properties": {
+            "questionId": {"type": "string"},
+            "answerId": {"type": "string"},
+            "score": {"type": "integer"},
+        },
+    }
+    answer = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["id", "label", "score"],
+        "properties": {
+            "id": {"type": "string"},
+            "label": {"type": "string"},
+            "score": {"type": "integer"},
+        },
+    }
+    question = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["id", "label", "answers"],
+        "properties": {
+            "id": {"type": "string"},
+            "label": {"type": "string"},
+            "answers": {"type": "array", "items": answer},
+        },
+    }
+    band = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "profile",
+            "scoreMin",
+            "scoreMax",
+            "annualVolatilityLow",
+            "annualVolatilityHigh",
+            "suggestedWeights",
+        ],
+        "properties": {
+            "profile": {"type": "string"},
+            "scoreMin": {"type": "integer"},
+            "scoreMax": {"type": "integer"},
+            "annualVolatilityLow": _RATE,
+            "annualVolatilityHigh": _RATE,
+            "suggestedWeights": weight_map,
+        },
+    }
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://nexusmcp.site/schemas/risk-profile-result-0.1.0.json",
+        "title": "RiskProfileResult",
+        "description": "PII-free output of the risk_profile_score planning tool.",
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "contractVersion",
+            "score",
+            "maxScore",
+            "profile",
+            "riskBand",
+            "suggestedWeights",
+            "scoredAnswers",
+            "questions",
+            "bands",
+            "assumptions",
+            "disclaimer",
+        ],
+        "properties": {
+            "contractVersion": {"type": "string"},
+            "score": {"type": "integer"},
+            "maxScore": {"type": "integer"},
+            "profile": {"type": "string"},
+            "riskBand": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["annualVolatilityLow", "annualVolatilityHigh"],
+                "properties": {
+                    "annualVolatilityLow": _RATE,
+                    "annualVolatilityHigh": _RATE,
+                },
+            },
+            "suggestedWeights": weight_map,
+            "scoredAnswers": {"type": "array", "items": scored_answer},
+            "questions": {"type": "array", "items": question},
+            "bands": {"type": "array", "items": band},
+            "assumptions": {
+                "type": "object",
+                "additionalProperties": True,
+                "required": ["questionnaireVersion", "profileSet", "optimizerField"],
+                "properties": {
+                    "questionnaireVersion": {"type": "string"},
+                    "profileSet": {"type": "array", "items": {"type": "string"}},
+                    "optimizerField": {"type": "string"},
+                },
+            },
+            "disclaimer": {"type": "string"},
+        },
+    }
+
+
 __all__ = [
     "education_funding_result_schema",
     "education_vehicle_rules_result_schema",
     "historical_blend_result_schema",
     "income_layering_result_schema",
+    "risk_profile_result_schema",
     "roth_conversion_analysis_schema",
 ]

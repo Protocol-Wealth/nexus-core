@@ -60,9 +60,19 @@ from .result_schema import (
     education_vehicle_rules_result_schema,
     historical_blend_result_schema,
     income_layering_result_schema,
+    risk_profile_result_schema,
     roth_conversion_analysis_schema,
 )
 from .risk_metrics import risk_metrics
+from .risk_profile import (
+    RISK_BANDS,
+    RISK_QUESTIONS,
+    RiskAnswer,
+    RiskBand,
+    RiskProfile,
+    RiskQuestion,
+    risk_profile_score,
+)
 from .rmd import rmd
 from .roth_analysis import analyze_roth_conversion, sequence_conversions
 from .roth_conversion import roth_conversion
@@ -119,6 +129,12 @@ __all__ = [
     "IrmaaTier",
     "PlanningContract",
     "PlanningContractError",
+    "RISK_BANDS",
+    "RISK_QUESTIONS",
+    "RiskAnswer",
+    "RiskBand",
+    "RiskProfile",
+    "RiskQuestion",
     "RothConversionAnalysis",
     "SolvePoint",
     "SolveResult",
@@ -168,6 +184,8 @@ __all__ = [
     "retirement_exclusion_amount",
     "regime_conditioned_swr",
     "risk_metrics",
+    "risk_profile_result_schema",
+    "risk_profile_score",
     "rmd",
     "rmd_start_age",
     "roth_conversion",

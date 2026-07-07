@@ -211,7 +211,7 @@ gracefully to `None` / empty / `503` when its key is absent.
 - **`GET /api/usage`** — provider usage / quota report.
 - **`POST /mcp`** — MCP-over-HTTP transport (FastMCP, also `nexus-core mcp` over
   stdio) exposing the above as tools, plus `health` / `describe` / `get_quotes`
-  and the 31 current-source planning tools in full mode; demo mode registers
+  and the 32 current-source planning tools in full mode; demo mode registers
   only closed-world demo tools. `GET /api/planning/tools` +
   `POST /api/planning/tools/{id}` are the REST planning gateway
   (contractVersion `0.1.0`) for service/browser callers, with `/mcp/tools`
@@ -219,7 +219,7 @@ gracefully to `None` / empty / `503` when its key is absent.
   The same handler set serves native MCP and REST, including
   `solve_goal`, `analyze_goals`, `project_cash_flow`, `income_layering`,
   the cash-flow bridge trio,
-  `optimize_allocation`,
+  `optimize_allocation`, `risk_profile_score`,
   `build_planning_report`, and the Roth/IRMAA tools
   `analyze_roth_conversion`, `sequence_conversions`, and `irmaa_headroom`.
 - **Persistence** — private Cloud SQL (`nexus-marketdata`, POSTGRES_16,
