@@ -18,13 +18,15 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   transparent OAuth active and exposes only the demo MCP tools
   `option_price`, `collar_book`, `health`, and `describe`.
 - **Last local update:** 2026-07-07 — current branch centralizes the
-  SECURE/SECURE 2.0 RMD start-age policy in `tax.rmd_start_age` so `rmd`,
-  `tax_aware_withdrawal`, and the Roth composite share one kernel. It preserves
-  age-only defaults for existing callers and adds optional `birthYear` policy
-  handling plus `rmdStartAgePolicyVersion`. `main` also includes the Student-t
-  Monte Carlo covariance-scaling correction, the 2026-07-05 Slice 0/1/2
-  cash-flow planning bridge work, collar-book executable-fill modeling, and the
-  restricted REST/JSON access gate.
+  SECURE/SECURE 2.0 RMD start-age policy in `tax.rmd_start_age` and the
+  illustrative federal tax/IRMAA reference tables in a version-stamped provider
+  registry. `rmd`, `tax_aware_withdrawal`, `tax_bracket_headroom`,
+  `roth_conversion`, `irmaa_headroom`, and the Roth composite now share one
+  explicit tax-table basis, with unregistered years failing closed and
+  table-version stamps returned in tax-sensitive outputs. `main` also includes
+  the Student-t Monte Carlo covariance-scaling correction, the 2026-07-05 Slice
+  0/1/2 cash-flow planning bridge work, collar-book executable-fill modeling,
+  and the restricted REST/JSON access gate.
 - **Repo:** [github.com/Protocol-Wealth/nexus-core](https://github.com/Protocol-Wealth/nexus-core) — public, Apache-2.0
 - **Live:** [nexusmcp.site](https://nexusmcp.site) (Cloudflare → Cloud Run)
 - **Version:** 0.1.0

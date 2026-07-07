@@ -21,15 +21,27 @@ from nexus_core.engine.planning import (
 from nexus_core.engine.planning.case import PlanningContract
 
 _BASE: dict[str, Any] = {
-    "case_id": "c1", "tax_year": 2026, "filing_status": "mfj", "state_code": "PA",
-    "birth_years": [1962, 1963], "medicare_enrolled": 2,
+    "case_id": "c1",
+    "tax_year": 2026,
+    "filing_status": "mfj",
+    "state_code": "PA",
+    "birth_years": [1962, 1963],
+    "medicare_enrolled": 2,
     "income_ex_conversion": {
-        "pension": 30_000, "social_security_gross": 48_000, "taxable_interest": 5_000,
-        "tax_exempt_interest": 8_000, "ordinary_dividends": 12_000, "qualified_dividends": 9_000,
+        "pension": 30_000,
+        "social_security_gross": 48_000,
+        "taxable_interest": 5_000,
+        "tax_exempt_interest": 8_000,
+        "ordinary_dividends": 12_000,
+        "qualified_dividends": 9_000,
         "long_term_gains": 10_000,
     },
-    "accounts": {"trad_ira_aggregate": 1_400_000, "nondeductible_basis": 0,
-                 "roth_balance": 200_000, "taxable_liquidity": 250_000},
+    "accounts": {
+        "trad_ira_aggregate": 1_400_000,
+        "nondeductible_basis": 0,
+        "roth_balance": 200_000,
+        "taxable_liquidity": 250_000,
+    },
     "intent": {"target_rule": "fill_to_irmaa_tier", "years": [2026, 2027]},
 }
 
@@ -62,6 +74,14 @@ def test_irmaa_binds_for_a_60s_mfj_retiree() -> None:
     res = _run(_contract())
     y = res.years[0]
     assert y.binding_constraint == "irmaa"
+    assert (
+        "Federal tax table version: federal-income-tax-reference-2026-illustrative-v1."
+        in res.assumptions
+    )
+    assert (
+        "IRMAA table version: irmaa-reference-2025-married_joint-illustrative-v1."
+        in res.assumptions
+    )
     assert y.irmaa_ceiling is not None
     assert y.recommended_amount == pytest.approx(y.irmaa_ceiling, abs=2.0)
     assert y.bracket_ceiling is None  # fill_to_irmaa with no target_rate → bracket non-binding
@@ -69,7 +89,9 @@ def test_irmaa_binds_for_a_60s_mfj_retiree() -> None:
 
 def test_binding_ceiling_is_the_min_of_bracket_and_irmaa() -> None:
     # fill_to_rate at 24% — bracket room is large, IRMAA is the smaller ceiling.
-    res = _run(_contract(intent={"target_rule": "fill_to_rate", "target_rate": 0.24, "years": [2026]}))
+    res = _run(
+        _contract(intent={"target_rule": "fill_to_rate", "target_rate": 0.24, "years": [2026]})
+    )
     y = res.years[0]
     assert y.bracket_ceiling is not None and y.irmaa_ceiling is not None
     assert y.binding_ceiling == pytest.approx(min(y.bracket_ceiling, y.irmaa_ceiling), abs=2.0)
@@ -81,7 +103,9 @@ def test_bracket_binds_when_no_one_is_on_medicare() -> None:
     # does not bind, the bracket does.
     res = _run(
         _contract(
-            filing_status="single", birth_years=[1975], medicare_enrolled=0,
+            filing_status="single",
+            birth_years=[1975],
+            medicare_enrolled=0,
             intent={"target_rule": "fill_to_rate", "target_rate": 0.22, "years": [2026]},
         )
     )
@@ -132,7 +156,9 @@ def test_two_year_sequence_splits_and_draws_down_balance() -> None:
 
 
 def test_fixed_amount_rule() -> None:
-    res = _run(_contract(intent={"target_rule": "fixed_amount", "fixed_amount": 50_000, "years": [2026]}))
+    res = _run(
+        _contract(intent={"target_rule": "fixed_amount", "fixed_amount": 50_000, "years": [2026]})
+    )
     y = res.years[0]
     assert y.recommended_amount == pytest.approx(50_000.0, abs=2.0)
     assert y.binding_constraint == "fixed_amount"
@@ -176,7 +202,9 @@ def test_do_nothing_rmd_start_age_by_birth_year() -> None:
 
 def test_state_treatment_pa_exempt_vs_flat_vs_unmodeled() -> None:
     pa = _run(_contract(state_code="PA")).years[0]
-    assert pa.state_tax.modeled is True and pa.state_tax.incremental_state_tax == 0.0  # exempt past 59
+    assert (
+        pa.state_tax.modeled is True and pa.state_tax.incremental_state_tax == 0.0
+    )  # exempt past 59
 
     co = _run(_contract(state_code="CO")).years[0]
     assert co.state_tax.modeled is True and co.state_tax.incremental_state_tax > 0.0

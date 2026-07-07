@@ -298,6 +298,7 @@ def roth_conversion_tool(body: dict[str, Any]) -> dict[str, Any]:
     taxes_from = body.get("taxesPaidFromConversion", False)
     if not isinstance(taxes_from, bool):
         raise PlanningInputError("taxesPaidFromConversion must be a boolean")
+    year = _optional_int(body, "year")
     try:
         return roth_conversion(
             current_taxable_income=_as_number(body, "currentTaxableIncome"),
@@ -307,6 +308,7 @@ def roth_conversion_tool(body: dict[str, Any]) -> dict[str, Any]:
             years=_as_int(body, "years"),
             retirement_marginal_rate=_as_number(body, "retirementMarginalRate"),
             taxes_paid_from_conversion=taxes_from,
+            year=2026 if year is None else year,
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
@@ -344,11 +346,13 @@ def tax_bracket_headroom_tool(body: dict[str, Any]) -> dict[str, Any]:
     target = body.get("targetRate")
     if target is not None and (isinstance(target, bool) or not isinstance(target, (int, float))):
         raise PlanningInputError("targetRate must be a number or omitted")
+    year = _optional_int(body, "year")
     try:
         return bracket_headroom(
             taxable_income=_as_number(body, "taxableIncome"),
             filing_status=filing,
             target_rate=float(target) if target is not None else None,
+            year=2026 if year is None else year,
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
@@ -469,6 +473,7 @@ def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
     base_year = body.get("baseYear")
     if base_year is not None and (isinstance(base_year, bool) or not isinstance(base_year, int)):
         raise PlanningInputError("baseYear must be an integer or omitted")
+    tax_year = _optional_int(body, "taxYear")
     try:
         return project_cash_flow(
             current_age=_as_int(body, "currentAge"),
@@ -484,6 +489,7 @@ def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
             retirement_income=_optional_number(body, "retirementIncome", 0.0),
             current_liabilities=_optional_number(body, "currentLiabilities", 0.0),
             base_year=base_year,
+            tax_year=2026 if tax_year is None else tax_year,
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
@@ -1907,7 +1913,9 @@ def irmaa_headroom_tool(body: dict[str, Any]) -> dict[str, Any]:
         raise PlanningInputError(str(exc)) from exc
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
-    return asdict(result)
+    payload = asdict(result)
+    payload["irmaaTableVersion"] = table.table_version
+    return payload
 
 
 def _parse_contract(body: dict[str, Any]) -> PlanningContract:
@@ -1977,7 +1985,7 @@ def analyze_roth_conversion_tool(body: dict[str, Any]) -> dict[str, Any]:
 def sequence_conversions_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``sequence_conversions`` — the multi-year split roll-up only."""
     contract = _parse_contract(body)
-    bt, it, sr, _bt_src, _it_src, _sr_src = _resolve_tables(body, contract)
+    bt, it, sr, bt_src, it_src, sr_src = _resolve_tables(body, contract)
     result = sequence_conversions(
         contract,
         irmaa_table=it,
@@ -1988,7 +1996,15 @@ def sequence_conversions_tool(body: dict[str, Any]) -> dict[str, Any]:
         irmaa_buffer=_opt_num(body, "irmaa_buffer", 5_000.0),
         growth_rate=_opt_num(body, "growth_rate", 0.05),
     )
-    return asdict(result)
+    payload = asdict(result)
+    payload["bracketTableYear"] = bt.year
+    payload["bracketTableSource"] = bt_src
+    payload["bracketTableVersion"] = bt.table_version
+    payload["irmaaTiersSourceYear"] = it.source_year
+    payload["irmaaTableSource"] = it_src
+    payload["irmaaTableVersion"] = it.table_version
+    payload["stateRuleSource"] = "none" if sr is None else sr_src
+    return payload
 
 
 def build_tool_handlers(

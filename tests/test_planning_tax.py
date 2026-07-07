@@ -33,6 +33,8 @@ def test_ordering_taxable_first_when_young() -> None:
     )
     assert [w["type"] for w in r["withdrawals"]] == ["taxable"]  # age<73 ⇒ no RMD; taxable first
     assert r["withdrawals"][0]["gross"] == 120_000
+    assert r["taxTableYear"] == 2026
+    assert r["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
     assert r["rmdSatisfied"] is True  # RMD = 0
     assert 0.0 <= r["effectiveRate"] <= 1.0
 
@@ -106,6 +108,18 @@ def test_birth_year_policy_enforces_rmd_at_75_for_1960_plus_cohort() -> None:
     assert traditional["gross"] == round(1_000_000 / 24.6, 2)
     assert r["rmdStartAge"] == 75
     assert r["rmdSatisfied"] is True
+
+
+def test_unregistered_tax_year_fails_closed() -> None:
+    with pytest.raises(ValueError, match="no reference federal tax table registered"):
+        tax_aware_withdrawal(
+            year=2027,
+            filing_status="single",
+            accounts=[{"type": "taxable", "balance": 100_000, "allocation": {"x": 1.0}}],
+            gross_need=10_000,
+            age=65,
+            other_taxable_income=0,
+        )
 
 
 def test_traditional_taxed_as_ordinary_income() -> None:

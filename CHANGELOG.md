@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Tax table provider kernel
+
+#### Fixed
+
+- Centralized the illustrative federal tax-table and IRMAA reference lookup in a
+  version-stamped provider registry so `tax.py`, `tax_bracket_headroom`,
+  `roth_conversion`, `tax_aware_withdrawal`, `irmaa_headroom`, and the Roth
+  composite do not drift across duplicate bracket/tier kernels.
+- Made reference table lookup fail closed for unregistered tax/source years
+  instead of silently reusing the current basis.
+- Added tax/IRMAA table-version stamps to public tax-tool outputs and the Roth
+  composite assumptions / compact sequence output without changing the closed
+  Roth result schema.
+
 ### RMD start-age policy kernel
 
 #### Fixed
