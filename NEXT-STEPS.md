@@ -6,11 +6,11 @@ A hand-off for new contributors (interns). Read this with
 [`ROADMAP.md`](ROADMAP.md) (what's live vs next). This file is the **prioritized
 to-do list**; keep it current as you finish items.
 
-_Last updated: 2026-07-06. Live deployment was last verified on 2026-07-01 at
+_Last updated: 2026-07-07. Live deployment was last verified on 2026-07-01 at
 [nexusmcp.site](https://nexusmcp.site); current local work includes the Slice
 0/1/2 cash-flow planning bridge updates, a local collar-book executable-fill
-layer, and an optional REST/JSON service-key gate. Live endpoints were not
-re-smoked._
+layer, an optional REST/JSON service-key gate, and the Student-t Monte Carlo
+covariance-scaling correction. Live endpoints were not re-smoked._
 
 ## Orient yourself in 5 minutes
 
@@ -90,6 +90,16 @@ may be service-key gated in restricted mode and are rate-limited (~60/min/IP),
 so pace the calls.
 
 ## Prioritized next tasks
+
+### Planning engine correctness queue
+
+The first correctness item is the `student_t` Monte Carlo covariance fix: the
+Gaussian core must be pre-scaled by `sqrt((dof - 2) / dof)` before applying the
+chi-square draw so the realized Student-t covariance matches the stated CMA.
+Archived Student-t comparisons before this fix sit behind an engine-version
+boundary. After this lands, continue with the RMD start-age single-kernel fix:
+one birth-year policy in `tax.py`, with the 1959 cohort documented under the
+`secure2.0-goodfaith-73-per-89FR58644` policy basis.
 
 ### Public-safe planning/report analytics extraction (#197)
 

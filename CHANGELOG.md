@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Monte Carlo Student-t covariance scaling
+
+#### Fixed
+
+- Corrected the `student_t` return model in `monte_carlo_decumulation` so the
+  multivariate Student-t draw is scaled to the caller-supplied covariance matrix
+  instead of inflating variance by `dof / (dof - 2)`. With the current 5-degree
+  model, archived Student-t runs before this fix overstated volatility by about
+  29% versus the stated CMA covariance.
+- Added regression coverage that the Student-t branch empirically matches the
+  target covariance and pins the old unscaled shape-matrix formula as the known
+  bad variance-inflation case.
+
 ### Docs/state closeout — private consumer boundary and PWOS market import
 
 #### Changed

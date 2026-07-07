@@ -20,6 +20,12 @@ public OAuth-compatible demo endpoint with only closed-world demo tools, while
 server-to-server key path. Browser apps such as PWOS and PWPortal should call
 their own BFF/API routes and never hold Nexus service keys.
 
+Current source also corrects the Monte Carlo `student_t` return model so its
+fat-tailed draw is scaled to the caller-supplied covariance matrix. Student-t
+results generated before this fix overstated variance by `dof / (dof - 2)`;
+for the current 5-degree model that was about 1.667x variance, or about 1.29x
+volatility.
+
 The collar-book realistic-fill layer is part of current source. The engine plus
 REST/MCP parsers accept midpoint `net_credit` and optional executable pricing
 (`executable_net_credit` or `call_bid` minus `put_ask`) and return stock price,
