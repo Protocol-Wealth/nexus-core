@@ -6,17 +6,20 @@ A hand-off for new contributors (interns). Read this with
 [`ROADMAP.md`](ROADMAP.md) (what's live vs next). This file is the **prioritized
 to-do list**; keep it current as you finish items.
 
-_Last updated: 2026-07-05. Live deployment was last verified on 2026-07-01 at
-[nexusmcp.site](https://nexusmcp.site); current local work is Slice 0 docs plus
-Slice 1 pure cash-flow planning bridge engine functions. Live endpoints were not
+_Last updated: 2026-07-06. Live deployment was last verified on 2026-07-01 at
+[nexusmcp.site](https://nexusmcp.site); current local work includes the Slice
+0/1/2 cash-flow planning bridge updates, a local collar-book executable-fill
+layer, and an optional REST/JSON service-key gate. Live endpoints were not
 re-smoked._
 
 ## Orient yourself in 5 minutes
 
 - **What this is:** the open, read-only public surface of the Protocol Wealth
-  research engine — a REST API + an MCP server, no account/API key and no client
-  data. Remote MCP clients may use transparent OAuth with no user login.
-  Deployed to Cloud Run at `nexusmcp.site`.
+  research engine — a REST API + an MCP server with no client data. Native MCP
+  can stay as a low-risk public demo surface; production REST/JSON consumers can
+  require `NEXUS_ACCESS_MODE=restricted` + `NEXUS_API_KEYS`. Remote MCP clients
+  may use transparent OAuth with no user login. Deployed to Cloud Run at
+  `nexusmcp.site`.
 - **Three sibling repos:** `nexus-core` (this — the engine + public API/MCP),
   `pwplan-core` (a thin PII-free **planning** UI that calls this engine's planning
   tools), and `pw-demo` (the public **demo site** at pwdemo.com — browser + chat
@@ -38,6 +41,16 @@ re-smoked._
   derived monthly-close aggregates only. They do not ingest Monarch CSVs, raw
   transaction rows, merchant/payee strings, account nicknames, household records,
   client/advisor notes, approvals, release state, or audit trails.
+- **Current collar-book state:** `engine/pricing/collar_book.py` sizes
+  pre-screened collar candidates and now reports current/assumed stock price,
+  shares, optional executable net credit, bid/ask fill haircut, executable
+  income, and executable annualized yield. REST and MCP parsers accept
+  `executable_net_credit` or `call_bid`/`put_ask`; this remains an advisor
+  research worksheet with no live-chain attestation, order routing, or advice.
+- **Current access-boundary state:** `NEXUS_PUBLIC_MCP_PROFILE=demo` limits
+  native `/mcp` to closed-world demo tools. `NEXUS_ACCESS_MODE=restricted` plus
+  `NEXUS_API_KEYS` gates `/api/*`, primary `/api/planning/tools/*`, and legacy
+  `/mcp/tools/*`; `pw-api` should send its matching `NEXUS_SERVICE_API_KEY`.
 
 ## Before you commit (the gate — mirrors CI)
 
@@ -72,8 +85,9 @@ for the body instead.
 Production deploys are **maintainer-run** (a human authorizes each one). The
 command lives in [`DEPLOY.md`](DEPLOY.md); run `gcloud run deploy` **from the repo
 root** (running it from a different dir uploads the wrong source). After a deploy,
-smoke the changed endpoints live — note `/api/*` and `/mcp/tools/*` are
-rate-limited (~60/min/IP), so pace the calls.
+smoke the changed endpoints live — note `/api/*` and planning JSON gateway paths
+may be service-key gated in restricted mode and are rate-limited (~60/min/IP),
+so pace the calls.
 
 ## Prioritized next tasks
 
@@ -115,8 +129,9 @@ subgraph health-gate, Uniswap V4, Solana CLMM, persisted LP PnL history.
 
 ### Additional tracked backlog
 
-- #201 agent analytics capabilities: equity options IV, `score_portfolio`,
-  DeFi yield/risk, symbol resolver, score provenance/versioning.
+- #201 agent analytics capabilities: IV-rank / VRP / 25-delta skew on equity
+  chains, full stock-screen-to-chain pipeline, `score_portfolio`, DeFi
+  yield/risk, symbol resolver, score provenance/versioning.
 - #202 governance/tooling cleanup: EMF numbering, display-only signal decision,
   and possible `ruff format` gate.
 - #203 equity-research vertical gates and public-safe buildout.

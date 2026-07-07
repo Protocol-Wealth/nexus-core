@@ -3,8 +3,9 @@
 """Multi-name collar BOOK assembly — an advisor research worksheet.
 
 Given a set of pre-screened collar candidates (one per underlying: spot, tenor,
-per-share net credit, optional window dividend income and an optional external
-``score``), :func:`assemble_collar_book` sizes a whole-contract portfolio
+per-share midpoint net credit, optional executable net credit, optional window
+dividend income and an optional external ``score``), :func:`assemble_collar_book`
+sizes a whole-contract portfolio
 against a notional target with per-position and per-sector caps, then reports
 the resulting book's arithmetic: deployed notional, cash residual, dollar and
 percentage income, and capital-weighted floor/cap geometry when strike data is
@@ -31,9 +32,10 @@ module is clock-free (callers supply ``dte``).
 
 The engine **describes** a book; it does not prescribe one. It reports the
 portfolio yield but applies no yield-band policing, places no orders, and
-produces no execution instructions. Everything here is an advisor research
-WORKSHEET over caller-supplied parameters — not individualized advice, a
-recommendation to trade, or a suitability assessment.
+produces no execution instructions. When bid/ask executable pricing is supplied,
+it also reports the fill haircut between midpoint and executable credit. Everything
+here is an advisor research WORKSHEET over caller-supplied parameters — not
+individualized advice, a recommendation to trade, or a suitability assessment.
 """
 
 from __future__ import annotations
@@ -78,6 +80,9 @@ class CollarBookPosition:
     call_strike: float | None = None
     floor_pct: float | None = None
     cap_pct: float | None = None
+    executable_net_credit: float | None = None  # per share; call bid minus put ask
+    call_bid: float | None = None  # per share; short-call executable sale price
+    put_ask: float | None = None  # per share; long-put executable purchase price
 
 
 @dataclass
@@ -93,11 +98,18 @@ class CollarBookHolding:
     symbol: str
     sector: str | None
     contracts: int
+    stock_price: float  # current/assumed market price per share
+    shares: int
     capital_per_contract: float  # spot × 100
     notional: float  # contracts × capital_per_contract
     weight_pct: float  # % of notional_target
     annual_income: float  # $ per year, 365-day-convention annualization
     period_income: float  # $ over the option window
+    executable_net_credit: float | None  # per share, if caller supplied bid/ask executable pricing
+    fill_haircut: float | None  # per share midpoint credit less executable credit
+    executable_period_income: float | None  # $ over the option window using executable credit
+    executable_annual_income: float | None  # $ per year using executable credit
+    executable_yield_pct: float | None  # annualized executable income / position notional × 100
     expiration: str | None
     put_strike: float | None
     call_strike: float | None
@@ -137,6 +149,10 @@ class CollarBookResult:
     deploy_pct: float  # notional_deployed / notional_target × 100
     annual_income: float  # total $, 365-day-convention annualization
     portfolio_yield_pct: float  # annual_income / notional_deployed × 100
+    executable_annual_income: float | None  # total $, if every held name has executable pricing
+    executable_portfolio_yield_pct: float | None  # executable_annual_income / deployed × 100
+    fill_haircut: float | None  # period $ income lost from midpoint to executable pricing
+    fill_haircut_yield_pct: float | None  # annualized haircut / deployed × 100
     capital_weighted_floor_pct: float | None
     capital_weighted_cap_pct: float | None
     counts: dict[str, int]
@@ -181,6 +197,15 @@ def _effective_cap_pct(position: CollarBookPosition) -> float | None:
     return None
 
 
+def _executable_net_credit(position: CollarBookPosition) -> float | None:
+    """Conservative executable net credit, preferring explicit caller input."""
+    if position.executable_net_credit is not None:
+        return position.executable_net_credit
+    if position.call_bid is not None and position.put_ask is not None:
+        return position.call_bid - position.put_ask
+    return None
+
+
 def _capital_weighted(
     holdings: Sequence[tuple[float | None, float]], deployed: float
 ) -> float | None:
@@ -197,6 +222,60 @@ def _capital_weighted(
             return None
         total += value * notional
     return round(total / deployed, 2)
+
+
+def _holding_from_slot(
+    slot: _Slot, notional_target: float, days_per_year: int
+) -> CollarBookHolding:
+    """Build the public holding row, including executable-fill metrics."""
+    executable = _executable_net_credit(slot.position)
+    executable_period = (
+        (executable + slot.position.dividend_income_window)
+        * _SHARES_PER_CONTRACT
+        * slot.contracts
+        if executable is not None
+        else None
+    )
+    executable_annual = (
+        executable_period * days_per_year / slot.position.dte
+        if executable_period is not None
+        else None
+    )
+    fill_haircut = (
+        slot.position.net_credit - executable
+        if executable is not None
+        else None
+    )
+    return CollarBookHolding(
+        symbol=slot.position.symbol,
+        sector=slot.position.sector,
+        contracts=slot.contracts,
+        stock_price=round(slot.position.spot, 2),
+        shares=int(slot.contracts * _SHARES_PER_CONTRACT),
+        capital_per_contract=round(slot.capital, 2),
+        notional=round(slot.notional, 2),
+        weight_pct=round(slot.notional / notional_target * 100.0, 2),
+        annual_income=round(slot.annual_income * slot.contracts, 2),
+        period_income=round(slot.period_income * slot.contracts, 2),
+        executable_net_credit=round(executable, 4) if executable is not None else None,
+        fill_haircut=round(fill_haircut, 4) if fill_haircut is not None else None,
+        executable_period_income=(
+            round(executable_period, 2) if executable_period is not None else None
+        ),
+        executable_annual_income=(
+            round(executable_annual, 2) if executable_annual is not None else None
+        ),
+        executable_yield_pct=(
+            round(executable_annual / slot.notional * 100.0, 2)
+            if executable_annual is not None and slot.notional > 0.0
+            else None
+        ),
+        expiration=slot.position.expiration,
+        put_strike=slot.position.put_strike,
+        call_strike=slot.position.call_strike,
+        floor_pct=_effective_floor_pct(slot.position),
+        cap_pct=_effective_cap_pct(slot.position),
+    )
 
 
 def assemble_collar_book(
@@ -260,6 +339,10 @@ def assemble_collar_book(
             deploy_pct=0.0,
             annual_income=0.0,
             portfolio_yield_pct=0.0,
+            executable_annual_income=None,
+            executable_portfolio_yield_pct=None,
+            fill_haircut=None,
+            fill_haircut_yield_pct=None,
             capital_weighted_floor_pct=None,
             capital_weighted_cap_pct=None,
             counts={
@@ -374,25 +457,32 @@ def assemble_collar_book(
             residual -= added
 
     holdings = [
-        CollarBookHolding(
-            symbol=slot.position.symbol,
-            sector=slot.position.sector,
-            contracts=slot.contracts,
-            capital_per_contract=round(slot.capital, 2),
-            notional=round(slot.notional, 2),
-            weight_pct=round(slot.notional / notional_target * 100.0, 2),
-            annual_income=round(slot.annual_income * slot.contracts, 2),
-            period_income=round(slot.period_income * slot.contracts, 2),
-            expiration=slot.position.expiration,
-            put_strike=slot.position.put_strike,
-            call_strike=slot.position.call_strike,
-            floor_pct=_effective_floor_pct(slot.position),
-            cap_pct=_effective_cap_pct(slot.position),
-        )
+        _holding_from_slot(slot, notional_target, days_per_year)
         for slot in held
     ]
 
     annual_income = sum(slot.annual_income * slot.contracts for slot in held)
+    executable_annual_income_raw = 0.0
+    fill_haircut_raw = 0.0
+    fill_haircut_annualized_raw = 0.0
+    all_have_executable_pricing = True
+    for slot in held:
+        executable = _executable_net_credit(slot.position)
+        if executable is None:
+            all_have_executable_pricing = False
+            break
+        period_haircut = (
+            (slot.position.net_credit - executable) * _SHARES_PER_CONTRACT * slot.contracts
+        )
+        executable_annual_income_raw += (
+            (executable + slot.position.dividend_income_window)
+            * _SHARES_PER_CONTRACT
+            * slot.contracts
+            * days_per_year
+            / slot.position.dte
+        )
+        fill_haircut_raw += period_haircut
+        fill_haircut_annualized_raw += period_haircut * days_per_year / slot.position.dte
     deploy_pct = deployed / notional_target * 100.0
 
     if len(held) < n_positions_min:
@@ -416,6 +506,22 @@ def assemble_collar_book(
         deploy_pct=round(deploy_pct, 2),
         annual_income=round(annual_income, 2),
         portfolio_yield_pct=round(annual_income / deployed * 100.0, 2) if deployed else 0.0,
+        executable_annual_income=(
+            round(executable_annual_income_raw, 2)
+            if all_have_executable_pricing
+            else None
+        ),
+        executable_portfolio_yield_pct=(
+            round(executable_annual_income_raw / deployed * 100.0, 2)
+            if deployed and all_have_executable_pricing
+            else None
+        ),
+        fill_haircut=round(fill_haircut_raw, 2) if all_have_executable_pricing else None,
+        fill_haircut_yield_pct=(
+            round(fill_haircut_annualized_raw / deployed * 100.0, 2)
+            if deployed and all_have_executable_pricing
+            else None
+        ),
         capital_weighted_floor_pct=_capital_weighted(
             [(h.floor_pct, h.notional) for h in holdings], deployed
         ),

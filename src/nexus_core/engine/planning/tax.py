@@ -168,7 +168,7 @@ def tax_aware_withdrawal(
     """
     if filing_status not in _FILING_STATUSES:
         raise ValueError(f"filingStatus must be one of {', '.join(_FILING_STATUSES)}")
-    status: FilingStatus = filing_status  # narrowed by the membership check above
+    status: FilingStatus = filing_status
     if gross_need < 0:
         raise ValueError("grossNeed must be non-negative")
 

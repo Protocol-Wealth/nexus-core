@@ -10,6 +10,7 @@ not installed. The application factory treats that as "serve REST only".
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable
 from typing import Any
 
@@ -258,9 +259,9 @@ def build_configured_server(
     market: MarketDataProvider,
     macro: MacroDataProvider,
 ) -> Any:
-    """Build the fully-wired nexus-core MCP server (shared by HTTP + stdio).
+    """Build the configured nexus-core MCP server (shared by HTTP + stdio).
 
-    Wires the full educational tool set — regime (current_regime, regime_signals),
+    By default wires the full educational tool set — regime (current_regime, regime_signals),
     the EMF ``score_asset`` (sharing the REST ``/api/score`` context builder +
     framework, so MCP and REST return identical scores), market quotes/history,
     FRED economic series, DefiLlama TVL, the options pricing/overlay + Deribit
@@ -275,7 +276,9 @@ def build_configured_server(
     composite Roth/IRMAA trio analyze_roth_conversion, sequence_conversions,
     irmaa_headroom, plus build_planning_report) — the same handlers the REST
     planning gateway serves, so the MCP transport and ``POST /mcp/tools/{id}``
-    stay in lock-step.
+    stay in lock-step. When ``NEXUS_PUBLIC_MCP_PROFILE=demo``, the native MCP
+    transport registers only closed-world demo tools that do not call live
+    vendors; production REST/JSON callers should use the gated HTTP routes.
 
     Both transports build from here so the stdio server (``nexus-core mcp``,
     for Claude Desktop) and the HTTP server (``/mcp``) expose an identical set
@@ -289,6 +292,10 @@ def build_configured_server(
     Raises:
         ImportError: If ``fastmcp`` is not installed (``build_server`` guards).
     """
+    profile = os.environ.get("NEXUS_PUBLIC_MCP_PROFILE", "full").strip().lower() or "full"
+    if profile == "demo":
+        return build_server(name="nexus-core", disclaimer=TERSE, tool_profile="demo")
+
     return build_server(
         name="nexus-core",
         regime_engine=regime_engine,
@@ -303,6 +310,7 @@ def build_configured_server(
         defillama=DefiLlamaClient(),
         disclaimer=TERSE,
         extra_tools=_build_planning_mcp_tools(market, regime_engine),
+        tool_profile="full",
     )
 
 

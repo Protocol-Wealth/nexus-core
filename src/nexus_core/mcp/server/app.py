@@ -34,7 +34,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 try:
     from fastmcp import FastMCP
@@ -144,6 +144,7 @@ def build_server(
     filters: list[ResponseFilter] | None = None,
     disclaimer: str | None = None,
     extra_tools: Sequence[tuple[str, str, Callable[..., str]]] | None = None,
+    tool_profile: str = "full",
 ) -> Any:
     """Build a FastMCP server with regime + scoring tools.
 
@@ -167,6 +168,10 @@ def build_server(
             Kept generic so the library scaffold stays decoupled from any
             specific tool layer — the deployment wires its own tools (e.g. the
             planning gateway) in through here.
+        tool_profile: ``"full"`` registers the complete tool set. ``"demo"``
+            registers only closed-world demo tools that do not call live vendor
+            providers; use this for the public open-source MCP endpoint when
+            production REST/JSON endpoints are gated separately.
 
     Returns:
         A configured ``FastMCP`` instance. Call ``.run()`` to start.
@@ -179,6 +184,7 @@ def build_server(
     # (which could carry an upstream URL, key, or internal path) to the client.
     mcp = FastMCP(name, mask_error_details=True)
     filters = filters or []
+    demo_profile = tool_profile.strip().lower() == "demo"
     disclaimer = disclaimer or (
         "For educational and research purposes only. Not investment advice. "
         "Past performance is not indicative of future results. Consult a "
@@ -231,23 +237,27 @@ def build_server(
 
     # ---------------------- Market / macro / DeFi / options ----------------------
 
-    if market is not None:
-        _register_market_tools(mcp, market, disclaimer, filters)
-        _register_equity_options_tools(mcp, market, disclaimer, filters)
-    if mboum_options is not None:
-        _register_equity_option_chain_tools(mcp, mboum_options, disclaimer, filters)
-    if macro is not None:
-        _register_economic_tools(mcp, macro, disclaimer, filters)
-    if deribit is not None:
-        _register_crypto_options_tools(mcp, deribit, disclaimer, filters, regime_engine)
-    if defillama is not None:
-        _register_defi_tools(mcp, defillama, disclaimer, filters)
+    if demo_profile:
+        _register_demo_options_tools(mcp, disclaimer, filters)
+    else:
+        if market is not None:
+            _register_market_tools(mcp, market, disclaimer, filters)
+            _register_equity_options_tools(mcp, market, disclaimer, filters)
+        if mboum_options is not None:
+            _register_equity_option_chain_tools(mcp, mboum_options, disclaimer, filters)
+        if macro is not None:
+            _register_economic_tools(mcp, macro, disclaimer, filters)
+        if deribit is not None:
+            _register_crypto_options_tools(mcp, deribit, disclaimer, filters, regime_engine)
+        if defillama is not None:
+            _register_defi_tools(mcp, defillama, disclaimer, filters)
 
     # Caller-supplied tools (e.g. the planning gateway). Registered generically
     # so this scaffold never imports a specific deployment's tool layer. All are
     # read-only educational tools.
-    for tool_name, tool_description, tool_fn in extra_tools or ():
-        mcp.tool(tool_fn, name=tool_name, description=tool_description, annotations=_RO_OPEN)
+    if not demo_profile:
+        for tool_name, tool_description, tool_fn in extra_tools or ():
+            mcp.tool(tool_fn, name=tool_name, description=tool_description, annotations=_RO_OPEN)
 
     @mcp.tool(annotations=_RO_CLOSED)
     def health() -> str:
@@ -290,45 +300,54 @@ def build_server(
         """Self-orientation: the tool catalog by category, symbology rules, and the
         planning contract version. Read this to learn how to address assets — the
         same coin uses different ids per tool (see ``symbology``)."""
+        categories = (
+            {
+                "options": ["option_price", "collar_book"],
+                "meta": ["health", "describe"],
+            }
+            if demo_profile
+            else {
+                "regime": ["current_regime", "regime_signals"],
+                "scoring": ["score_asset"],
+                "market": ["get_quote", "get_quotes", "get_price_history"],
+                "economic": ["get_economic_series"],
+                "options": [
+                    "option_price",
+                    "covered_call",
+                    "cash_secured_put",
+                    "collar",
+                    "equity_collar_screen",
+                    "collar_book",
+                    "equity_option_expirations",
+                    "equity_option_chain",
+                ],
+                "crypto_options": [
+                    "crypto_option_instruments",
+                    "crypto_option_ticker",
+                    "crypto_covered_call",
+                    "crypto_covered_call_chain",
+                    "crypto_iv_term_structure",
+                    "crypto_vol_skew",
+                    "crypto_protective_put",
+                    "crypto_collar",
+                    "crypto_regime_overwrite",
+                    "crypto_covered_call_ladder",
+                    "crypto_option_roll",
+                    "crypto_options_book_mtm",
+                    "crypto_options_scenario",
+                ],
+                "defi": ["defi_protocols", "defi_protocol", "defi_chains"],
+                "planning": [name for name, _d, _f in (extra_tools or ())],
+                "meta": ["health", "describe"],
+            }
+        )
         return _ok(
             "describe",
             {
                 "service": "nexus-core",
+                "tool_profile": "demo" if demo_profile else "full",
                 "purpose": "Educational/research financial analysis. Not advice.",
-                "categories": {
-                    "regime": ["current_regime", "regime_signals"],
-                    "scoring": ["score_asset"],
-                    "market": ["get_quote", "get_quotes", "get_price_history"],
-                    "economic": ["get_economic_series"],
-                    "options": [
-                        "option_price",
-                        "covered_call",
-                        "cash_secured_put",
-                        "collar",
-                        "equity_collar_screen",
-                        "collar_book",
-                        "equity_option_expirations",
-                        "equity_option_chain",
-                    ],
-                    "crypto_options": [
-                        "crypto_option_instruments",
-                        "crypto_option_ticker",
-                        "crypto_covered_call",
-                        "crypto_covered_call_chain",
-                        "crypto_iv_term_structure",
-                        "crypto_vol_skew",
-                        "crypto_protective_put",
-                        "crypto_collar",
-                        "crypto_regime_overwrite",
-                        "crypto_covered_call_ladder",
-                        "crypto_option_roll",
-                        "crypto_options_book_mtm",
-                        "crypto_options_scenario",
-                    ],
-                    "defi": ["defi_protocols", "defi_protocol", "defi_chains"],
-                    "planning": [name for name, _d, _f in (extra_tools or ())],
-                    "meta": ["health", "describe"],
-                },
+                "categories": categories,
                 "symbology": {
                     "equities_etfs_indices": "Yahoo ticker, e.g. AAPL, SPY, ^GSPC",
                     "crypto_quotes": "CoinGecko coin id, e.g. bitcoin, ethereum, solana (NOT BTC-USD)",
@@ -388,6 +407,124 @@ def _validate_option_inputs(
     if volatility is not None and volatility < 0.0:
         return f"volatility must be >= 0 (got {volatility})"
     return None
+
+
+def _register_demo_options_tools(
+    mcp: FastMCP, disclaimer: str, filters: list[ResponseFilter]
+) -> None:
+    """Register public-demo MCP tools that never call live data providers."""
+
+    @mcp.tool(annotations=_RO_CLOSED)
+    def option_price(
+        spot: float, strike: float, days: int, volatility: float, kind: str = "call"
+    ) -> str:
+        """Educational Black-Scholes price + Greeks over caller-supplied inputs. Not advice."""
+        bad = _validate_option_inputs(spot=spot, strike=strike, days=days, volatility=volatility)
+        if bad is not None:
+            return _err("option_price", bad, filters, disclaimer)
+        k: OptionKind = "call"
+        if str(kind).lower().startswith("p"):
+            k = "put"
+        t = days / 365.0
+        return _ok(
+            "option_price",
+            {
+                "spot": spot,
+                "strike": strike,
+                "days": days,
+                "kind": k,
+                "price": round(bs_price(spot, strike, t, 0.04, volatility, k), 4),
+                "greeks": asdict(greeks(spot, strike, t, 0.04, volatility, k)),
+            },
+            filters,
+            disclaimer,
+        )
+
+    @mcp.tool(annotations=_RO_CLOSED)
+    def collar_book(
+        positions: list[dict[str, Any]],
+        notional_target: float = 1_000_000.0,
+        n_positions_target: int = 15,
+        n_positions_min: int = 12,
+        n_positions_max: int = 25,
+        max_position_weight_pct: float = 12.0,
+        max_sector_weight_pct: float = 25.0,
+    ) -> str:
+        """Assemble a collar-book worksheet from caller-supplied candidates.
+
+        No market data is fetched. Each position supplies its own spot, DTE,
+        midpoint net credit, and optional executable pricing. Not advice.
+        """
+        if not isinstance(positions, list) or not positions:
+            return _err("collar_book", "'positions' must be a non-empty list", filters, disclaimer)
+        if len(positions) > _COLLAR_BOOK_MAX_POSITIONS:
+            return _err(
+                "collar_book",
+                f"'positions' accepts at most {_COLLAR_BOOK_MAX_POSITIONS} entries",
+                filters,
+                disclaimer,
+            )
+        if not _COLLAR_BOOK_NOTIONAL_MIN <= notional_target <= _COLLAR_BOOK_NOTIONAL_MAX:
+            return _err(
+                "collar_book",
+                f"notional_target must be in [{_COLLAR_BOOK_NOTIONAL_MIN:.0f}, "
+                f"{_COLLAR_BOOK_NOTIONAL_MAX:.0f}]",
+                filters,
+                disclaimer,
+            )
+        for key, value in (
+            ("n_positions_min", n_positions_min),
+            ("n_positions_max", n_positions_max),
+            ("n_positions_target", n_positions_target),
+        ):
+            if not _COLLAR_BOOK_N_MIN <= value <= _COLLAR_BOOK_N_MAX:
+                return _err(
+                    "collar_book",
+                    f"{key} must be in [{_COLLAR_BOOK_N_MIN}, {_COLLAR_BOOK_N_MAX}]",
+                    filters,
+                    disclaimer,
+                )
+        if n_positions_min > n_positions_max:
+            return _err(
+                "collar_book",
+                "n_positions_min must be <= n_positions_max",
+                filters,
+                disclaimer,
+            )
+        for key, weight in (
+            ("max_position_weight_pct", max_position_weight_pct),
+            ("max_sector_weight_pct", max_sector_weight_pct),
+        ):
+            if not _COLLAR_BOOK_WEIGHT_MIN <= weight <= _COLLAR_BOOK_WEIGHT_MAX:
+                return _err(
+                    "collar_book",
+                    f"{key} must be in [{_COLLAR_BOOK_WEIGHT_MIN:.0f}, "
+                    f"{_COLLAR_BOOK_WEIGHT_MAX:.0f}]",
+                    filters,
+                    disclaimer,
+                )
+        parsed, err = _parse_collar_book_positions(positions)
+        if err is not None:
+            return _err("collar_book", err, filters, disclaimer)
+        result = assemble_collar_book(
+            parsed,
+            notional_target=notional_target,
+            n_positions_min=n_positions_min,
+            n_positions_max=n_positions_max,
+            n_positions_target=n_positions_target,
+            max_position_weight_pct=max_position_weight_pct,
+            max_sector_weight_pct=max_sector_weight_pct,
+        )
+        return _ok(
+            "collar_book",
+            {
+                "basis": "advisor_research_worksheet",
+                "book": asdict(result),
+                "count": len(parsed),
+            },
+            filters,
+            disclaimer,
+        )
 
 
 def _annualized_vol(market: MarketDataProvider, symbol: str) -> float:
@@ -691,8 +828,10 @@ def _register_equity_options_tools(
         residual, income, capital-weighted floor/cap, and explicit exclusions.
         Each position is {symbol, spot, dte, net_credit, dividend_income_window?,
         score?, sector?, expiration?, put_strike?, call_strike?, floor_pct?,
-        cap_pct?}; dollar inputs are per share. Places no orders and produces no
-        execution instructions. Not advice."""
+        cap_pct?, executable_net_credit?, call_bid?, put_ask?}; dollar inputs
+        are per share. Executable pricing uses bid-side call and ask-side put
+        when supplied. Places no orders and produces no execution instructions.
+        Not advice."""
         if not isinstance(positions, list) or not positions:
             return _err("collar_book", "'positions' must be a non-empty list", filters, disclaimer)
         if len(positions) > _COLLAR_BOOK_MAX_POSITIONS:
@@ -795,8 +934,17 @@ def _parse_collar_book_positions(
         if err is not None:
             return [], err
         optional: dict[str, float | None] = {}
-        for key in ("dividend_income_window", "score", "put_strike", "call_strike",
-                    "floor_pct", "cap_pct"):
+        for key in (
+            "dividend_income_window",
+            "score",
+            "put_strike",
+            "call_strike",
+            "floor_pct",
+            "cap_pct",
+            "executable_net_credit",
+            "call_bid",
+            "put_ask",
+        ):
             optional[key], err = _position_opt_num(entry, key)
             if err is not None:
                 return [], err
@@ -821,6 +969,9 @@ def _parse_collar_book_positions(
                 call_strike=optional["call_strike"],
                 floor_pct=optional["floor_pct"],
                 cap_pct=optional["cap_pct"],
+                executable_net_credit=optional["executable_net_credit"],
+                call_bid=optional["call_bid"],
+                put_ask=optional["put_ask"],
             )
         )
     return parsed, None
@@ -1038,7 +1189,7 @@ def _register_crypto_options_tools(
                 ChainQuote(
                     instrument_name=ins.instrument_name,
                     kind="call",
-                    strike=float(ins.strike),
+                    strike=float(cast(float, ins.strike)),
                     expiry_days=d,
                     premium=tk.mark_price if tk else None,
                     delta=tk.delta if tk else None,
@@ -1065,7 +1216,8 @@ def _register_crypto_options_tools(
             return [], None
         expiry = min({d for _, d in by_expiry}, key=lambda d: abs(d - target_days))
         at_expiry = sorted(
-            (ins for ins, d in by_expiry if d == expiry), key=lambda i: abs(i.strike - spot)
+            (ins for ins, d in by_expiry if d == expiry),
+            key=lambda i: abs(cast(float, i.strike) - spot),
         )
         quotes: list[ChainQuote] = []
         for ins in at_expiry[:limit]:
@@ -1074,7 +1226,7 @@ def _register_crypto_options_tools(
                 ChainQuote(
                     instrument_name=ins.instrument_name,
                     kind="call",
-                    strike=float(ins.strike),
+                    strike=float(cast(float, ins.strike)),
                     expiry_days=expiry,
                     premium=tk.mark_price if tk else None,
                     delta=tk.delta if tk else None,

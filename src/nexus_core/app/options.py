@@ -14,7 +14,8 @@ client as a public, read-only API:
   sigma are fetched/estimated per position when omitted.
 * ``POST /api/options/overlay/collar-book`` — multi-name collar BOOK assembly
   (≤50 pre-screened candidates): whole-contract sizing against a notional
-  target with per-position/per-sector caps. An advisor research WORKSHEET —
+  target with per-position/per-sector caps plus optional executable fill
+  modeling (short-call bid minus long-put ask). An advisor research WORKSHEET —
   no orders, no execution instructions.
 * ``GET /api/options/equity/{symbol}/expirations`` — listed equity option
   expiration dates by bucket (weekly/monthly) via MBOUM.
@@ -40,7 +41,7 @@ import statistics
 import time
 from dataclasses import asdict
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Body, HTTPException, Path, Query, Response
 
@@ -414,7 +415,9 @@ def _collar_book_positions(body: dict[str, Any]) -> list[CollarBookPosition]:
 
     ``symbol``, ``spot``, ``dte``, and ``net_credit`` are required per entry;
     type errors 400. Degenerate VALUES (``spot <= 0``, ``dte <= 0``) pass
-    through — the engine excludes them with a structured reason.
+    through — the engine excludes them with a structured reason. Optional
+    ``call_bid`` + ``put_ask`` or ``executable_net_credit`` let callers report a
+    conservative executable-yield haircut versus midpoint credit.
     """
     raw = body.get("positions")
     if not isinstance(raw, list) or not raw:
@@ -448,6 +451,9 @@ def _collar_book_positions(body: dict[str, Any]) -> list[CollarBookPosition]:
                 call_strike=_body_opt_num(entry, "call_strike"),
                 floor_pct=_body_opt_num(entry, "floor_pct"),
                 cap_pct=_body_opt_num(entry, "cap_pct"),
+                executable_net_credit=_body_opt_num(entry, "executable_net_credit"),
+                call_bid=_body_opt_num(entry, "call_bid"),
+                put_ask=_body_opt_num(entry, "put_ask"),
             )
         )
     return positions
@@ -493,7 +499,7 @@ def _chain_quotes(
         if days <= 0 or days > max_days:
             continue
         candidates.append((ins, int(round(days))))
-    candidates.sort(key=lambda c: abs(c[0].strike - spot))
+    candidates.sort(key=lambda c: abs(cast(float, c[0].strike) - spot))
     quotes: list[ChainQuote] = []
     for ins, days in candidates[:limit]:
         ticker = deribit.get_option_ticker(ins.instrument_name)
@@ -501,7 +507,7 @@ def _chain_quotes(
             ChainQuote(
                 instrument_name=ins.instrument_name,
                 kind="call",
-                strike=float(ins.strike),
+                strike=float(cast(float, ins.strike)),
                 expiry_days=days,
                 premium=ticker.mark_price if ticker else None,
                 delta=ticker.delta if ticker else None,
@@ -542,7 +548,8 @@ def _skew_chain(
         return [], None
     expiry = min({d for _, d in by_expiry}, key=lambda d: abs(d - target_days))
     at_expiry = sorted(
-        (ins for ins, d in by_expiry if d == expiry), key=lambda i: abs(i.strike - spot)
+        (ins for ins, d in by_expiry if d == expiry),
+        key=lambda i: abs(cast(float, i.strike) - spot),
     )
     quotes: list[ChainQuote] = []
     for ins in at_expiry[:limit]:
@@ -551,7 +558,7 @@ def _skew_chain(
             ChainQuote(
                 instrument_name=ins.instrument_name,
                 kind="call",
-                strike=float(ins.strike),
+                strike=float(cast(float, ins.strike)),
                 expiry_days=expiry,
                 premium=ticker.mark_price if ticker else None,
                 delta=ticker.delta if ticker else None,
@@ -725,7 +732,8 @@ def build_options_router(
             description=(
                 "{positions:[{symbol, spot, dte, net_credit, dividend_income_window?, "
                 "score?, sector?, expiration?, put_strike?, call_strike?, floor_pct?, "
-                "cap_pct?}] (1..50), notional_target?, n_positions_target?, "
+                "cap_pct?, executable_net_credit?, call_bid?, put_ask?}] (1..50), "
+                "notional_target?, n_positions_target?, "
                 "n_positions_min?, n_positions_max?, max_position_weight_pct?, "
                 "max_sector_weight_pct?}"
             ),
@@ -742,7 +750,9 @@ def build_options_router(
         execution instructions; the portfolio yield is reported without any
         yield-band policing. Dollar inputs are per share; candidates with
         ``spot <= 0`` or ``dte <= 0`` are excluded with a structured reason
-        rather than rejected.
+        rather than rejected. If ``call_bid`` + ``put_ask`` or
+        ``executable_net_credit`` are supplied, the output includes conservative
+        executable income/yield and the fill haircut versus midpoint credit.
         """
         params = _collar_book_params(body)
         positions = _collar_book_positions(body)

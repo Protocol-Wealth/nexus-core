@@ -28,6 +28,9 @@ def _pos(
     call_strike: float | None = None,
     floor_pct: float | None = None,
     cap_pct: float | None = None,
+    executable_net_credit: float | None = None,
+    call_bid: float | None = None,
+    put_ask: float | None = None,
 ) -> CollarBookPosition:
     return CollarBookPosition(
         symbol=symbol,
@@ -42,6 +45,9 @@ def _pos(
         call_strike=call_strike,
         floor_pct=floor_pct,
         cap_pct=cap_pct,
+        executable_net_credit=executable_net_credit,
+        call_bid=call_bid,
+        put_ask=put_ask,
     )
 
 
@@ -253,6 +259,31 @@ def test_dividend_income_window_adds_to_period_income() -> None:
     # Per contract: (2.0 + 0.5) × 100 vs 2.0 × 100 over the same window.
     ratio = with_div.positions[0].period_income / plain.positions[0].period_income
     assert math.isclose(ratio, 2.5 / 2.0, rel_tol=1e-9)
+
+
+def test_bid_ask_executable_credit_reports_fill_haircut() -> None:
+    result = assemble_collar_book([_pos(net_credit=2.0, call_bid=1.8, put_ask=0.3)])
+    holding = result.positions[0]
+    assert holding.stock_price == 100.0
+    assert holding.shares == 1200
+    assert holding.executable_net_credit == 1.5
+    assert holding.fill_haircut == 0.5
+    assert holding.period_income == 2400.0
+    assert holding.executable_period_income == 1800.0
+    assert holding.executable_yield_pct == 18.25
+    assert result.fill_haircut == 600.0
+    assert result.portfolio_yield_pct == 24.33
+    assert result.executable_portfolio_yield_pct == 18.25
+    assert result.fill_haircut_yield_pct == 6.08
+
+
+def test_explicit_executable_net_credit_wins_over_bid_ask() -> None:
+    result = assemble_collar_book(
+        [_pos(net_credit=2.0, executable_net_credit=1.25, call_bid=1.8, put_ask=0.3)]
+    )
+    holding = result.positions[0]
+    assert holding.executable_net_credit == 1.25
+    assert holding.fill_haircut == 0.75
 
 
 def test_n_positions_max_bounds_the_book() -> None:

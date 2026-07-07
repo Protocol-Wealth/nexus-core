@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### REST/JSON access boundary and public MCP demo profile
+
+#### Added
+
+- Added optional `NEXUS_ACCESS_MODE=restricted` / `NEXUS_API_KEYS` middleware for
+  `/api/*`, `/api/planning/tools/*`, and legacy `/mcp/tools/*`, accepting either
+  `Authorization: Bearer <key>` or `X-Nexus-Api-Key`. Default mode remains
+  `public` so existing deployments do not break until secrets are rolled.
+- Added `NEXUS_PUBLIC_MCP_PROFILE=demo` for hosted native `/mcp` deployments that
+  should expose only closed-world demo tools (`option_price`, `collar_book`,
+  `health`, `describe`) and avoid live provider-backed tool usage.
+- Added primary planning REST aliases at `GET /api/planning/tools` and
+  `POST /api/planning/tools/{tool_id}`; existing `/mcp/tools` aliases remain for
+  compatibility.
+- Updated source-rendered landing, MCP guide, `/llms.txt`, and root docs to
+  describe the intended split: open-source demo MCP for low-risk public use and
+  authenticated REST/JSON for production service consumers such as `pw-api`.
+
+### Collar book executable-fill modeling
+
+#### Added
+
+- Added conservative executable-fill fields to the multi-name collar-book engine
+  (`engine/pricing/collar_book.py`) and both caller surfaces. Each selected row
+  now reports `stock_price`, `shares`, optional `executable_net_credit`,
+  `fill_haircut`, executable income, and executable annualized yield when the
+  caller supplies either `executable_net_credit` or the executable bid/ask pair
+  (`call_bid` minus `put_ask`). The book summary reports portfolio-level
+  executable annual income/yield and the annualized fill haircut only when every
+  held name has executable pricing.
+- Updated the REST `POST /api/options/overlay/collar-book` parser and the MCP
+  `collar_book` parser to accept `executable_net_credit`, `call_bid`, and
+  `put_ask` as per-share inputs. The output remains an advisor research
+  worksheet: no orders, no execution instructions, no individualized advice.
+- Added route, MCP-parser, and engine coverage for bid-side call / ask-side put
+  executable pricing, explicit executable-credit precedence, share counts, and
+  partial-book behavior when not every held line has executable pricing.
+
 ### Cash-flow planning bridge tools
 
 #### Added

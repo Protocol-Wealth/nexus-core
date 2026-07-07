@@ -66,8 +66,9 @@ _PAGE = """\
   <p class="lede">
     A regime-adaptive financial analysis engine, exposed as a public API and as
     Model Context Protocol (MCP) tools. Market data, macro signals, options,
-    DeFi analytics, and PII-free planning math — no account or API key required.
-    Remote MCP clients may complete transparent OAuth with no login.
+    DeFi analytics, and PII-free planning math. Native MCP can run as a public
+    demo endpoint; production REST/JSON calculation paths can require a service
+    API key. Remote MCP clients may complete transparent OAuth with no login.
   </p>
 
   <div class="grid">
@@ -105,8 +106,8 @@ _PAGE = """\
 curl https://nexusmcp.site/api/regime
 
 # planning tools: contract handshake, then invoke one (educational, PII-free)
-curl https://nexusmcp.site/mcp/tools
-curl -X POST https://nexusmcp.site/mcp/tools/glide_path \\
+curl https://nexusmcp.site/api/planning/tools
+curl -X POST https://nexusmcp.site/api/planning/tools/glide_path \\
   -H 'Content-Type: application/json' \\
   -d '{{"currentAge": 40, "retirementAge": 65, "horizonAge": 95, "startEquityWeight": 0.8, "endEquityWeight": 0.4, "shape": "linear"}}'</code></pre>
 

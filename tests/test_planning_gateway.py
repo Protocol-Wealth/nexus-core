@@ -1013,6 +1013,16 @@ def test_new_tools_are_listed() -> None:
     assert "irmaa_headroom" in tools
 
 
+def test_rest_planning_alias_matches_legacy_mcp_tools() -> None:
+    c = _client()
+    assert c.get("/api/planning/tools").json() == c.get("/mcp/tools").json()
+    body = {"contractVersion": CONTRACT_VERSION, "age": 73, "balance": 500_000}
+    legacy = c.post("/mcp/tools/rmd", json=body)
+    rest = c.post("/api/planning/tools/rmd", json=body)
+    assert rest.status_code == legacy.status_code == 200
+    assert rest.json() == legacy.json()
+
+
 def test_analyze_rejects_identity_in_contract() -> None:
     bad = {"contract": {**_ROTH_CONTRACT, "ssn": "123-45-6789"}}
     r = _client().post("/mcp/tools/analyze_roth_conversion", json=bad)

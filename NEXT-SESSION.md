@@ -19,6 +19,26 @@ for change history read [CHANGELOG.md](CHANGELOG.md).
 - **Tooling note:** CI runs only lint/type/test + SPDX + license-scan + CodeQL — there is **no
   deploy step**; deploys are manual (see below).
 
+## Local source since last live smoke (2026-07-06)
+
+- `collar_book` now supports conservative executable-fill modeling over
+  caller-supplied pre-screened collar candidates. The engine plus REST/MCP
+  parsers accept `executable_net_credit` or `call_bid`/`put_ask` and return
+  stock price, shares, per-line fill haircut, executable income/yield, and
+  portfolio-level executable yield only when every held line has executable
+  pricing.
+- The access boundary now supports `NEXUS_PUBLIC_MCP_PROFILE=demo` for a
+  low-risk native MCP demo surface and `NEXUS_ACCESS_MODE=restricted` +
+  `NEXUS_API_KEYS` for `/api/*`, `/api/planning/tools/*`, and legacy
+  `/mcp/tools/*`. `pw-api` should call `/api/planning/tools/{tool_id}` with
+  `NEXUS_SERVICE_API_KEY` when restricted mode is enabled.
+- This is still an educational advisor worksheet. Do not convert it into an
+  order surface, live-chain attestation, custodian execution record, or
+  client-specific recommendation inside nexus-core.
+- Before PR/deploy, rerun the targeted collar-book route/engine/MCP tests plus
+  the full local gate if time permits; live endpoints were not re-smoked in this
+  local docs pass.
+
 ## What shipped recently
 
 The current public surface includes market/macro data, EMF scoring/regime,
@@ -53,7 +73,7 @@ gcloud run deploy nexus-core --source . --region us-central1 --project pwllc-pro
 BASE=https://nexus-core-XXXXXX-uc.a.run.app   # printed by the deploy
 curl $BASE/health
 curl $BASE/api/regime/signals    # NOTE: flat dict, not nested under "signals"
-curl $BASE/mcp/tools             # planning handshake: {contractVersion:"0.1.0", tools:[...]}
+curl $BASE/api/planning/tools    # planning handshake: {contractVersion:"0.1.0", tools:[...]}
 curl $BASE/llms.txt
 ```
 

@@ -22,15 +22,30 @@ Provided as-is under Apache-2.0. Educational use only — nothing here is invest
 Current live status is tracked in [CURRENT-STATE.md](CURRENT-STATE.md). Future
 work is issue-linked in [ROADMAP.md](ROADMAP.md) and GitHub Issues.
 
+Local source as of 2026-07-06 includes a not-yet-deployed collar-book
+realistic-fill layer: the engine plus REST/MCP parsers can accept a midpoint
+`net_credit` and either explicit `executable_net_credit` or `call_bid` /
+`put_ask`, then report stock price, shares, fill haircut, executable income, and
+executable annualized yield. This remains an advisor research worksheet, not an
+order surface or advice engine.
+
 ## What This Is
 
-Nexus Core is the open source foundation of the [Protocol Wealth research engine](https://nexusmcp.site) — a regime-aware financial-analysis and DeFi/market-data engine that exposes its capabilities as a public, read-only REST API and as MCP (Model Context Protocol) tools. Any MCP-compatible AI client (Claude, GPT, Gemini) can access regime-aware analysis without implementing financial domain logic. It is built on FastAPI + FastMCP (Python 3.12, sync `httpx`, `asyncpg`), runs `mypy --strict` + `ruff`, and is deployed on Google Cloud Run behind Cloudflare at [nexusmcp.site](https://nexusmcp.site).
+Nexus Core is the open source foundation of the [Protocol Wealth research engine](https://nexusmcp.site) — a regime-aware financial-analysis and DeFi/market-data engine that exposes its capabilities as a read-only REST API and as MCP (Model Context Protocol) tools. Any MCP-compatible AI client (Claude, GPT, Gemini) can access the public demo tool surface without implementing financial domain logic. Production consumers should use the REST/JSON endpoints through an authenticated service boundary. It is built on FastAPI + FastMCP (Python 3.12, sync `httpx`, `asyncpg`), runs `mypy --strict` + `ruff`, and is deployed on Google Cloud Run behind Cloudflare at [nexusmcp.site](https://nexusmcp.site).
 
 Built and tested in production by an SEC-registered RIA (Protocol Wealth LLC, CRD #335298).
 
 ## Public API
 
-The deployed surface is public, read-only, and carries no client data. No account or API key is required; remote MCP clients may complete a transparent OAuth handshake with no login. Every external integration degrades gracefully — to `None`, an empty result, or `503` — when its API key is absent.
+The deployed surface is read-only and carries no client data. The native `/mcp`
+transport can run as a public open-source demo endpoint; in production,
+`NEXUS_PUBLIC_MCP_PROFILE=demo` keeps that surface limited to closed-world
+calculation/demo tools. The REST/JSON calculation surfaces (`/api/*` and the
+planning JSON gateway) can be gated with `NEXUS_ACCESS_MODE=restricted` and
+`NEXUS_API_KEYS`, with `pw-api` sending a service bearer key. Remote MCP clients
+may complete a transparent OAuth handshake with no login. Every external
+integration degrades gracefully — to `None`, an empty result, or `503` — when
+its provider key is absent.
 
 For the PW Cash Flow OS + PW Planning Lab + PW Retirement Income Lab direction,
 Nexus Core is the public-safe calculation plane. It can accept de-identified
@@ -51,8 +66,8 @@ PWOS / pw-api / PWPortal.
 | `GET /mcp-guide` · `GET /llms.txt` | MCP client setup guide · agent site map (llmstxt.org) |
 | `GET /.well-known/security.txt` | RFC 9116 disclosure pointer |
 | `GET /api/usage` | Provider usage / quota report |
-| `POST /mcp` | Model Context Protocol over HTTP (FastMCP, also stdio). `tools/list` = research tools + `health`/`describe`/`get_quotes` + 27 planning tools (incl. `solve_goal`, `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio, `optimize_allocation`, `build_planning_report`, and the composite Roth/IRMAA trio); all read-only |
-| `GET /mcp/tools` · `POST /mcp/tools/{id}` | Planning REST gateway (pwplan-core, contractVersion `0.1.0`, PII-free) |
+| `POST /mcp` | Model Context Protocol over HTTP (FastMCP, also stdio). In full mode, `tools/list` = research tools + `health`/`describe`/`get_quotes` + 27 planning tools; in demo mode, only closed-world demo tools are registered. All tools are read-only |
+| `GET /api/planning/tools` · `POST /api/planning/tools/{id}` | Planning JSON gateway (pw-api / pwplan-core contractVersion `0.1.0`, PII-free). Legacy `/mcp/tools` aliases remain for compatibility |
 
 ### Regime & Scoring
 
@@ -79,7 +94,7 @@ PWOS / pw-api / PWPortal.
 | `GET /api/options/overlay/cash-secured-put` | Cash-secured-put overlay illustration |
 | `GET /api/options/overlay/collar` | Protective-collar overlay illustration |
 | `POST /api/options/overlay/collar-screen` | Batch equity collar screen (≤25 positions; dividend-aware theoretical pricing) |
-| `POST /api/options/overlay/collar-book` | Multi-name collar book assembly (≤50 pre-screened candidates; whole-contract sizing, position/sector caps) — advisor research worksheet, no orders |
+| `POST /api/options/overlay/collar-book` | Multi-name collar book assembly (≤50 pre-screened candidates; whole-contract sizing, position/sector caps; optional executable-fill haircut from bid-side call / ask-side put) — advisor research worksheet, no orders |
 | `GET /api/options/equity/{symbol}/expirations` | Listed equity option expirations by bucket (weekly/monthly; MBOUM-backed, 503 without key) |
 | `GET /api/options/equity/{symbol}/chain?expiration=` | Normalized single-expiration equity option chain — bid/ask, OI, IV, delta (expiration required) |
 | `GET /api/options/crypto/currencies` | Crypto option underliers + settlement model (Deribit) |
@@ -144,7 +159,8 @@ Nexus Core (FastAPI + FastMCP)
 ├── EMF Scoring (engine/scoring/emf)
 │   └── 8-check durability scoring + confidence tiers (SEC EDGAR fundamentals)
 ├── Options Pricing (engine/pricing)
-│   └── Black-Scholes price + Greeks, covered-call/CSP/collar overlays
+│   └── Black-Scholes price + Greeks, covered-call/CSP/collar overlays,
+│       collar-book sizing + executable-fill haircut worksheet
 ├── LP Analytics (engine/lp/uniswap_v3.py)
 │   └── Pure CLMM math: tick math, get_amounts_for_liquidity, exact IL, fee APR
 │       (protocol-agnostic — reused across ethereum/base/optimism/polygon)
@@ -263,10 +279,10 @@ pip install -e ".[all]"
 ```bash
 curl https://nexusmcp.site/health
 curl https://nexusmcp.site/api/regime          # current macro regime
-curl https://nexusmcp.site/mcp/tools            # planning contract + tool ids
+curl https://nexusmcp.site/api/planning/tools   # planning contract + tool ids
 
 # a planning tool (educational, PII-free — send age, never date of birth)
-curl -X POST https://nexusmcp.site/mcp/tools/glide_path \
+curl -X POST https://nexusmcp.site/api/planning/tools/glide_path \
   -H 'Content-Type: application/json' \
   -d '{"currentAge": 40, "retirementAge": 65, "horizonAge": 95,
        "startEquityWeight": 0.8, "endEquityWeight": 0.4, "shape": "linear"}'
@@ -303,7 +319,7 @@ deployment.
 
 ### Using with any MCP client
 
-The hosted MCP endpoint is public and read-only, so any MCP-compatible AI client (Claude, GPT, Gemini), or an agent platform such as SmythOS, can register `https://nexusmcp.site/mcp` as a read-only MCP server — no account or API key. Some remote clients complete transparent OAuth automatically; there is no user login. For example, in a `.mcp.json` (or any client config that follows the same shape):
+The hosted MCP endpoint is public and read-only, so any MCP-compatible AI client (Claude, GPT, Gemini), or an agent platform such as SmythOS, can register `https://nexusmcp.site/mcp` as a read-only demo MCP server. Some remote clients complete transparent OAuth automatically; there is no user login. Production integrations should call the REST/JSON API through `pw-api` with a service API key. For example, in a `.mcp.json` (or any client config that follows the same shape):
 
 ```json
 {
@@ -337,6 +353,9 @@ runs without any of them, with reduced data coverage.
 | `THEGRAPH_API_KEY` | Enables `/api/lp` (The Graph) |
 | `DATABASE_URL` | Persistence + `/api/benchmarks/history` (`503` when unset) |
 | `MCP_OAUTH_SIGNING_KEY` | Enables stateless transparent OAuth for remote MCP clients; omit locally to keep `/mcp` open |
+| `NEXUS_PUBLIC_MCP_PROFILE` | `full` (default) or `demo`; `demo` keeps hosted native `/mcp` limited to closed-world demo tools |
+| `NEXUS_ACCESS_MODE` | `public` (default) or `restricted`; restricted mode requires a Nexus API key on `/api/*` and planning JSON gateway paths |
+| `NEXUS_API_KEYS` | Comma-separated raw service keys or `sha256:<hex>` digests accepted by restricted mode |
 | `NEXUS_RATE_LIMIT_PER_MIN` | Per-IP request budget (default `60`) |
 | `NEXUS_CORS_ORIGINS` | Comma-separated CORS allow-list (default `*`) |
 

@@ -6,13 +6,13 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
 [AUDIT.md](AUDIT.md).
 
 - **Last live verified:** 2026-07-01 — live `/health` OK; live `/mcp/tools` returned 23 tools; GitHub: 7 open issues (#197-#203), 0 open PRs.
-- **Last local update:** 2026-07-05 — local `main` now includes Slice 0 docs-only boundary alignment, Slice 1 pure cash-flow planning bridge engine functions, and Slice 2 planning gateway/MCP wrappers for the PW Cash Flow OS + PW Planning Lab + PW Retirement Income Lab direction. Current source exposes 27 planning tools; live endpoints were not re-smoked in this pass.
+- **Last local update:** 2026-07-06 — local `main` now includes the 2026-07-05 Slice 0/1/2 cash-flow planning bridge work, local collar-book executable-fill modeling, and an optional Nexus REST/JSON access gate. The collar-book engine and REST/MCP parsers accept per-share `executable_net_credit` or `call_bid`/`put_ask` and report stock price, share count, fill haircut, executable income, and executable annualized yield. Current source exposes 27 planning tools; live endpoints were not re-smoked in this pass.
 - **Repo:** [github.com/Protocol-Wealth/nexus-core](https://github.com/Protocol-Wealth/nexus-core) — public, Apache-2.0
 - **Live:** [nexusmcp.site](https://nexusmcp.site) (Cloudflare → Cloud Run)
 - **Version:** 0.1.0
 - **Stack:** Python 3.12 · FastAPI · FastMCP · sync httpx · asyncpg · mypy `--strict` · ruff
 - **Tests:** CI-gated test suite (`pytest`)
-- **Posture:** public, read-only, no client data, no account/API key, transparent OAuth only for remote MCP handshakes, no public write endpoints
+- **Posture:** read-only, no client data, transparent OAuth only for remote MCP handshakes, no public write endpoints. Native `/mcp` can remain an open-source demo endpoint; `/api/*` and the planning JSON gateway can be API-key gated with `NEXUS_ACCESS_MODE=restricted`.
 
 ## Hybrid planning boundary
 
@@ -35,6 +35,26 @@ aggregates and do not ingest Monarch CSVs, raw transaction rows, merchant/payee
 strings, account nicknames, household records, advisor/client notes, approvals,
 release state, or audit trails.
 
+## Local collar-book executable-fill update
+
+Local source now supports a conservative execution worksheet for equity collar
+books. Callers still supply pre-screened positions; Nexus does not pull live
+chains, select trades, place orders, or make recommendations. When callers
+provide midpoint `net_credit` plus either explicit `executable_net_credit` or
+`call_bid` and `put_ask`, the collar-book output shows:
+
+- per-position `stock_price`, `shares`, midpoint period/annual income, executable
+  net credit, fill haircut, executable income, and executable annualized yield;
+- book-level executable annual income/yield and annualized fill-haircut yield
+  only when every held position has executable pricing; and
+- `None` for book-level executable fields when at least one held position lacks
+  executable pricing, avoiding a false mixed-denominator yield.
+
+This is the realistic-fill layer for the PWOS screen-to-chain / collar
+implementation workflow: bid-side call, ask-side put, still educational and
+public-safe. It is not a live-chain attestation, custodian execution record,
+client-specific recommendation, or order ticket.
+
 ## Public REST surface
 
 Every REST endpoint is anonymous GET unless noted. The `/mcp` transport accepts
@@ -42,6 +62,15 @@ POST and may require a transparent OAuth bearer token when `MCP_OAUTH_SIGNING_KE
 is configured; that flow has no user login and grants only public-scope access.
 External integrations degrade gracefully — when a provider key is absent the
 dependent endpoint returns `None` / empty / `503` rather than failing the service.
+
+Optional restricted mode lets production consumers keep the public native MCP
+transport as a low-risk demo while gating REST/JSON calculation paths. Set
+`NEXUS_PUBLIC_MCP_PROFILE=demo` to register only closed-world demo MCP tools,
+then set `NEXUS_ACCESS_MODE=restricted` plus `NEXUS_API_KEYS` to require
+`Authorization: Bearer <key>` or `X-Nexus-Api-Key` on `/api/*`,
+`/api/planning/tools/*`, and legacy `/mcp/tools/*`. `pw-api` should supply the
+matching `NEXUS_SERVICE_API_KEY`; CORS origin allow-lists remain a browser
+control, not an authentication boundary.
 
 ### Meta
 
@@ -82,6 +111,10 @@ dependent endpoint returns `None` / empty / `503` rather than failing the servic
 | `GET /api/options/overlay/covered-call` | Black-Scholes overlay illustration | — |
 | `GET /api/options/overlay/cash-secured-put` | Black-Scholes overlay illustration | — |
 | `GET /api/options/overlay/collar` | Black-Scholes overlay illustration | — |
+| `POST /api/options/overlay/collar-screen` | batch equity collar screen; theoretical premiums | market-data key optional |
+| `POST /api/options/overlay/collar-book` | advisor research worksheet; optional executable-fill haircut from call bid / put ask | — |
+| `GET /api/options/equity/{symbol}/expirations` | MBOUM listed equity option expirations | `MBOUM_API_KEY` |
+| `GET /api/options/equity/{symbol}/chain?expiration=` | MBOUM normalized single-expiration option chain | `MBOUM_API_KEY` |
 | `GET /api/options/crypto/currencies` | Deribit — supported underliers + settlement model | — |
 | `GET /api/options/crypto/{currency}/instruments` | Deribit — BTC/ETH (inverse) + SOL/XRP/TRX/AVAX (USDC-linear) | — |
 | `GET /api/options/crypto/instrument/{instrument_name}` | Deribit | — |
@@ -143,8 +176,9 @@ Compositions are buy-and-hold, base-100: BTC / ETH / SOL singles; ETH-USDC 50/50
 | Endpoint | Data source | Required key |
 |----------|-------------|--------------|
 | `POST /mcp` | FastMCP-over-HTTP transport (also `nexus-core mcp` over stdio) | — |
-| `GET /mcp/tools` | planning contract handshake — `{contractVersion, tools[]}` | — |
-| `POST /mcp/tools/{tool_id}` | planning gateway — invoke a planning tool (JSON in/out, PII-free) | — |
+| `GET /api/planning/tools` | planning contract handshake — `{contractVersion, tools[]}` | optional `NEXUS_API_KEYS` in restricted mode |
+| `POST /api/planning/tools/{tool_id}` | planning gateway — invoke a planning tool (JSON in/out, PII-free) | optional `NEXUS_API_KEYS` in restricted mode |
+| `GET /mcp/tools`, `POST /mcp/tools/{tool_id}` | legacy planning gateway aliases | optional `NEXUS_API_KEYS` in restricted mode |
 
 **MCP tool surface** (in `tools/list`, identical over HTTP + stdio; every tool is
 read-only with `readOnlyHint` + the educational disclaimer):
@@ -153,7 +187,9 @@ read-only with `readOnlyHint` + the educational disclaimer):
 - **Scoring** — `score_asset` (EMF 8-check; emits `NOT APPLICABLE` + `tier_note` on insufficient coverage)
 - **Market** — `get_quote`, `get_quotes` (batch), `get_price_history` (carry `as_of` / `source` / `market_status`)
 - **Economic** — `get_economic_series` (carries `as_of` observation date + `source`)
-- **Options** — `option_price`, `covered_call`, `cash_secured_put`, `collar`
+- **Options** — `option_price`, `covered_call`, `cash_secured_put`, `collar`,
+  `equity_collar_screen`, `collar_book` (advisor worksheet with optional
+  executable-fill haircut), `equity_option_expirations`, `equity_option_chain`
 - **Crypto options** — `crypto_option_instruments`, `crypto_option_ticker`,
   `crypto_covered_call` (settlement-aware overwrite), `crypto_covered_call_chain`
   (rank OTM calls by yield), `crypto_protective_put`, `crypto_collar`,
@@ -167,9 +203,10 @@ read-only with `readOnlyHint` + the educational disclaimer):
 - **Planning** (27 in current source; last live verification returned 23 on 2026-07-01) — `monte_carlo_decumulation`, `solve_goal`, `analyze_goals`, `project_cash_flow`, `cashflow_planning_bridge`, `cash_reserve_analysis`, `budget_pacing_projection`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `fire`, `risk_metrics`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`
 - **Meta** — `health` (per-upstream status), `describe` (catalog + symbology + contract version)
 
-All 27 current-source planning tools are served both natively through MCP and via the REST gateway
-(`POST /mcp/tools/{id}`) for the browser-based pwplan-core shell — same handlers,
-contractVersion `0.1.0`. The composite Roth/IRMAA case contract is
+All 27 current-source planning tools are served both natively through MCP and via
+the REST/JSON gateway (`POST /api/planning/tools/{id}`) for browser/server
+callers — same handlers, contractVersion `0.1.0`. Legacy `/mcp/tools/{id}`
+aliases remain. The composite Roth/IRMAA case contract is
 `PLANNING_CONTRACT_VERSION = 1.1.0`; the gateway envelope remains `0.1.0`.
 
 ## Code layout
@@ -235,6 +272,9 @@ contractVersion `0.1.0`. The composite Roth/IRMAA case contract is
 | `THEGRAPH_API_KEY` | `/api/lp` |
 | `DATABASE_URL` | persistence + `/api/benchmarks/history` (`503` when unset) |
 | `MCP_OAUTH_SIGNING_KEY` | stateless transparent OAuth for remote `/mcp`; omit locally to keep `/mcp` open |
+| `NEXUS_PUBLIC_MCP_PROFILE` | `full` (default) or `demo`; demo limits native `/mcp` to closed-world demo tools |
+| `NEXUS_ACCESS_MODE` | `public` (default) or `restricted`; restricted mode gates `/api/*` and planning JSON gateway paths |
+| `NEXUS_API_KEYS` | comma-separated raw service keys or `sha256:<hex>` digests |
 | `NEXUS_RATE_LIMIT_PER_MIN` | per-IP request budget (default `60`) |
 | `NEXUS_CORS_ORIGINS` | CORS allow-list |
 
@@ -275,6 +315,11 @@ key is absent.
   registry as read-only public-safe tools. They consume de-identified
   monthly-close aggregates only; production ingestion and workflow remain private
   PWOS/pw-api/PWPortal responsibilities.
+- **Collar-book executable-fill modeling (2026-07-06)** — local source now
+  reports stock price, share count, bid/ask fill haircut, executable income, and
+  executable annualized yield for pre-screened collar-book candidates when the
+  caller supplies executable pricing. REST and MCP parsers accept the same
+  optional fields; the output remains a public-safe advisor research worksheet.
 - **Guyton-Klinger dynamic withdrawals** — `monte_carlo_decumulation` accepts
   optional `guardrails` and returns `withdrawalRule`, `spendingByYear`, and
   `guardrailActivity` only when enabled.

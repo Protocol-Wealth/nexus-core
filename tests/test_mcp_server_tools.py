@@ -338,6 +338,8 @@ def test_collar_book_tool() -> None:
                         "spot": 100.0,
                         "dte": 30,
                         "net_credit": 2.0,
+                        "call_bid": 1.8,
+                        "put_ask": 0.3,
                         "sector": "Tech",
                         "put_strike": 85.0,
                         "call_strike": 110.0,
@@ -356,7 +358,11 @@ def test_collar_book_tool() -> None:
     assert set(holdings) == {"AAA", "BBB"}
     assert all(h["contracts"] >= 1 for h in holdings.values())
     assert holdings["AAA"]["floor_pct"] == 15.0  # derived from the put strike
+    assert holdings["AAA"]["stock_price"] == 100.0
+    assert holdings["AAA"]["executable_net_credit"] == 1.5
+    assert holdings["AAA"]["fill_haircut"] == 0.5
     assert book["notional_deployed"] > 0.0
+    assert book["fill_haircut"] is None  # BBB did not supply executable pricing.
     assert "not investment advice" in body["disclaimer"].lower()
 
 

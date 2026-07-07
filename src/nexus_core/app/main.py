@@ -16,6 +16,9 @@ Environment variable              Effect
 ``MBOUM_API_KEY``                 Adds MBOUM as a market-data fallback.
 ``MARKETSTACK_API_KEY``           Adds MarketStack as a market-data fallback.
 ``COINGECKO_API_KEY``             Raises CoinGecko rate limits (optional).
+``NEXUS_PUBLIC_MCP_PROFILE``      ``full`` (default) or ``demo``.
+``NEXUS_ACCESS_MODE``             ``public`` (default) or ``restricted``.
+``NEXUS_API_KEYS``                Comma-separated API keys or sha256:<hex> digests.
 ``NEXUS_RATE_LIMIT_PER_MIN``      Per-IP request budget (default ``60``).
 ``NEXUS_CORS_ORIGINS``            Comma-separated allow-list (default ``*``).
 ================================  ===========================================
@@ -56,6 +59,7 @@ from ..data.onchain import (
 from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..disclaimers import FULL as _FULL_DISCLAIMER
 from ..engine.regime import RegimeEngine
+from .access_gate import NexusAccessGate
 from .benchmarks import build_benchmarks_router
 from .chain import build_chain_router
 from .disclosure import render_disclosure_card
@@ -81,9 +85,10 @@ logger = logging.getLogger(__name__)
 
 _DESCRIPTION = f"""\
 Open, regime-adaptive financial analysis — market data, macro signals, options,
-DeFi analytics, and PII-free planning math. Public and read-only: no account or
-API key is required; remote MCP clients may complete transparent OAuth with no
-login.
+DeFi analytics, and PII-free planning math. Read-only by design: native MCP can
+run as a public demo endpoint, while REST/JSON calculation surfaces can require
+a Nexus API key in restricted mode. Remote MCP clients may complete transparent
+OAuth with no login.
 
 This is the analytical substrate of the [Protocol Wealth](https://protocolwealthllc.com)
 research engine, extracted under Apache-2.0. It carries no client data, no PII,
@@ -228,6 +233,12 @@ def create_app(
     # /mcp transport requests when a signing key is configured; a no-op otherwise.
     # Never touches /mcp/tools (planning), /api/*, or /mcp-guide.
     app.add_middleware(MCPAuthGate)
+
+    # Optional production gate for REST/JSON calculation surfaces. In
+    # NEXUS_ACCESS_MODE=restricted it protects /api/* and the planning JSON
+    # gateway (/api/planning/tools/* plus legacy /mcp/tools/*), while leaving the
+    # native /mcp demo transport and public docs open.
+    app.add_middleware(NexusAccessGate)
 
     # Added last → outermost: CORS wraps rate-limit responses too, and handles
     # preflight before the limiter sees the request.

@@ -77,9 +77,8 @@ _PAGE = """\
   <p class="lede">
     Nexus Core speaks the <a href="https://modelcontextprotocol.io" style="color:#c7d2fe">Model
     Context Protocol</a>, so any MCP-compatible AI client can call its
-    regime-aware financial analysis as tools — no account or API key. Remote
-    clients may complete transparent OAuth with no login. You can use the hosted
-    server or run your own.
+    public demo tools. Remote clients may complete transparent OAuth with no
+    login. You can use the hosted server or run your own.
   </p>
 
   <h2>Option A — Use the hosted server (no install)</h2>
@@ -237,24 +236,24 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     <a href="https://github.com/Protocol-Wealth/pwplan-core" style="color:#c7d2fe">pwplan-core</a>
     is the open-source, browser-based financial-planning shell. It runs entirely
     in the browser and calls nexus-core's planning engine directly over HTTP —
-    no account, no API key, no SDK. These are plain REST endpoints (distinct from
-    the MCP transport above), served with permissive CORS so a browser can reach
-    them.
+    no SDK. These are plain REST endpoints (distinct from the MCP transport
+    above). Production callers can send a Nexus service API key through the
+    REST/JSON boundary when restricted mode is enabled.
   </p>
   <h3>The handshake</h3>
   <p>
-    Call <code>GET /mcp/tools</code> first — it returns the contract version and
+    Call <code>GET /api/planning/tools</code> first — it returns the contract version and
     the available tool ids, so the client can confirm compatibility before
     sending any work:
   </p>
-  <pre><code>GET {mcp_url}tools
+  <pre><code>GET https://nexusmcp.site/api/planning/tools
 &rarr; {{ "contractVersion": "0.1.0", "tools": [ ... ] }}</code></pre>
   <p>
     The wire contract is <code>contractVersion 0.1.0</code> — every successful
     tool response echoes it, and the client rejects a mismatch.
   </p>
   <h3>The planning tools</h3>
-  <p>Invoke a tool with <code>POST /mcp/tools/{{tool_id}}</code> and a JSON body:</p>
+  <p>Invoke a tool with <code>POST /api/planning/tools/{{tool_id}}</code> and a JSON body. Legacy <code>/mcp/tools</code> aliases remain for older clients:</p>
   <ul>
     <li><code>monte_carlo_decumulation</code> — primary retirement decumulation simulation</li>
     <li><code>solve_goal</code> — solve one planning variable to a target success probability</li>

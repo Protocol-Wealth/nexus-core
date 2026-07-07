@@ -2,14 +2,16 @@
 # Copyright 2026 Protocol Wealth, LLC and contributors.
 """HTTP tool gateway for the planning engine.
 
-``POST /mcp/tools/{tool_id}`` runs a registered planning tool; ``GET /mcp/tools``
-reports the contract version and the available tool ids (a lightweight version
-handshake the consumer can poll).
+``POST /api/planning/tools/{tool_id}`` runs a registered planning tool;
+``GET /api/planning/tools`` reports the contract version and available tool ids.
+The legacy ``/mcp/tools`` aliases remain for compatibility while production
+callers migrate to REST/JSON naming.
 
 Contract behaviour (see :mod:`.contract`):
 
-- **Public, no account/API key.** Browser-callable; CORS + preflight are handled
-  by the app-level CORS middleware.
+- **Public by default, gated when configured.** The app-level
+  ``NexusAccessGate`` can require an API key for this gateway in restricted
+  deployments.
 - **PII-free.** Any identity-shaped key in the body is rejected ``400``.
 - **Versioned.** Every successful response echoes ``contractVersion``.
 - **Human-readable errors.** Error bodies are plain text shown verbatim in the
@@ -55,12 +57,18 @@ def build_planning_router(
     handlers = build_tool_handlers(market=market, regime_engine=regime_engine)
     available = sorted(handlers)
 
-    @router.get("/mcp/tools", summary="Planning tools + contract version")
+    @router.get("/api/planning/tools", summary="Planning tools + contract version")
+    @router.get("/mcp/tools", summary="Planning tools + contract version (legacy)")
     def list_planning_tools() -> dict[str, Any]:
         """Version handshake + tool discovery for the planning contract."""
         return {"contractVersion": CONTRACT_VERSION, "tools": available}
 
-    @router.post("/mcp/tools/{tool_id}", summary="Invoke a planning tool", response_model=None)
+    @router.post(
+        "/api/planning/tools/{tool_id}", summary="Invoke a planning tool", response_model=None
+    )
+    @router.post(
+        "/mcp/tools/{tool_id}", summary="Invoke a planning tool (legacy)", response_model=None
+    )
     async def call_planning_tool(
         tool_id: str, request: Request
     ) -> JSONResponse | PlainTextResponse:

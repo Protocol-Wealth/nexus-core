@@ -278,6 +278,8 @@ def test_collar_book_happy_path() -> None:
                     "expiration": "2026-08-15",
                     "put_strike": 85.0,
                     "call_strike": 110.0,
+                    "call_bid": 1.8,
+                    "put_ask": 0.3,
                 },
                 {"symbol": "BBB", "spot": 50.0, "dte": 30, "net_credit": 1.0},
             ],
@@ -300,6 +302,12 @@ def test_collar_book_happy_path() -> None:
     # Display passthrough + strike-derived floor/cap on AAA.
     assert holdings["AAA"]["expiration"] == "2026-08-15"
     assert holdings["AAA"]["floor_pct"] == 15.0
+    assert holdings["AAA"]["stock_price"] == 100.0
+    assert holdings["AAA"]["shares"] == 600
+    assert holdings["AAA"]["executable_net_credit"] == 1.5
+    assert holdings["AAA"]["fill_haircut"] == 0.5
+    assert holdings["AAA"]["executable_period_income"] == 1200.0
+    assert book["fill_haircut"] is None  # BBB did not supply executable pricing.
     # BBB has no strike data, so the capital-weighted aggregates are None.
     assert book["capital_weighted_floor_pct"] is None
     assert book["notional_deployed"] > 0.0
@@ -360,6 +368,7 @@ def test_collar_book_malformed_400() -> None:
         {"positions": [{**good, "score": "high"}]},
         {"positions": [{**good, "sector": 7}]},
         {"positions": [{**good, "put_strike": "x"}]},
+        {"positions": [{**good, "call_bid": "x"}]},
         {"positions": [good], "notional_target": 5_000},  # below 10,000
         {"positions": [good], "notional_target": 2e9},  # above 1e9
         {"positions": [good], "n_positions_target": 0},

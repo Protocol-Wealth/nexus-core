@@ -2,7 +2,8 @@
 
 Where Nexus Core is, what's landing now, and what's next. This is the
 deployable public surface — the read-only REST API + MCP transport that runs
-at [nexusmcp.site](https://nexusmcp.site) — not the full `nexus_core` library
+at [nexusmcp.site](https://nexusmcp.site), including its optional service-key
+REST boundary — not the full `nexus_core` library
 (optimization, risk, pricing, EDGAR, AI). For the library capabilities see the
 [README](README.md); for what the deployment exposes and excludes see
 [AUDIT.md](AUDIT.md).
@@ -10,12 +11,30 @@ at [nexusmcp.site](https://nexusmcp.site) — not the full `nexus_core` library
 Honest by design: "Done" means it runs in production today. No dates, no
 guarantees, no marketing.
 
+## Landing Now
+
+Local source includes a collar-book realistic-fill layer that has not yet been
+smoked on the live deployment. The engine plus REST/MCP parsers accept midpoint
+`net_credit` and optional executable pricing (`executable_net_credit` or
+`call_bid` minus `put_ask`) and return stock price, share count, per-position
+fill haircut, executable income/yield, and portfolio-level executable yield only
+when every held line has executable pricing. This is still an educational
+advisor worksheet: no live-chain attestation, no custodian execution record, no
+orders, and no individualized advice.
+
+Local source also includes an optional REST/JSON access boundary. Native `/mcp`
+can be deployed in `NEXUS_PUBLIC_MCP_PROFILE=demo` with only closed-world demo
+tools, while `/api/*`, `/api/planning/tools/*`, and legacy `/mcp/tools/*` can be
+gated by `NEXUS_ACCESS_MODE=restricted` + `NEXUS_API_KEYS`. Default mode remains
+public until production service keys are rolled.
+
 ## Done
 
 The current production surface. Python 3.12 · FastAPI · FastMCP · sync
-`httpx` · `asyncpg` · `mypy --strict` · `ruff`. CI-gated test suite. Public,
-read-only, no account/API key, no client data. Remote MCP may use transparent
-OAuth with no login. Every external integration degrades
+`httpx` · `asyncpg` · `mypy --strict` · `ruff`. CI-gated test suite. Read-only,
+no client data. Native MCP can run as a public demo endpoint; REST/JSON paths can
+be service-key gated. Remote MCP may use transparent OAuth with no login. Every
+external integration degrades
 gracefully to `None` / empty / `503` when its key is absent.
 
 ### Regime & scoring
@@ -102,8 +121,11 @@ gracefully to `None` / empty / `503` when its key is absent.
 - **`GET /api/usage`** — provider usage / quota report.
 - **`POST /mcp`** — MCP-over-HTTP transport (FastMCP, also `nexus-core mcp` over
   stdio) exposing the above as tools, plus `health` / `describe` / `get_quotes`
-  and the 27 current-source planning tools. `GET /mcp/tools` + `POST /mcp/tools/{id}` are the
-  REST planning gateway (contractVersion `0.1.0`) for the pwplan-core shell.
+  and the 27 current-source planning tools in full mode; demo mode registers
+  only closed-world demo tools. `GET /api/planning/tools` +
+  `POST /api/planning/tools/{id}` are the REST planning gateway
+  (contractVersion `0.1.0`) for service/browser callers, with `/mcp/tools`
+  compatibility aliases.
   The same handler set serves native MCP and REST, including
   `solve_goal`, `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio,
   `optimize_allocation`,
@@ -216,11 +238,13 @@ config surface for the `regime_overlay` delta multipliers (the `defensiveness` k
 is the per-request version today). The pwdemo.com browser + chat surface that drives
 these tools is built/iterated in the separate **pw-demo** repo, not here.
 
-Agent/analytics capability ideas — open issue #201 (from the consumer-diagnostic roadmap, not yet built):
-real *equity* options chains + IV (Tradier) and IV-rank to replace the theoretical σ
-(crypto already uses live Deribit IV); `score_portfolio` (sleeve-level aggregate of
-the 8-check); `defi_yields` / `defi_risk`; a `resolve_symbol` resolver; and structured
-provenance/versioning (`framework_version`) on score outputs for Rule 17a-4 reproducibility.
+Agent/analytics capability ideas — open issue #201 (from the consumer-diagnostic roadmap):
+equity options chain plumbing exists through MBOUM expirations/chains and the
+local collar-book worksheet now accepts executable fill inputs, but IV-rank /
+VRP / 25Δ skew, a full stock-screen-to-chain pipeline, `score_portfolio`
+(sleeve-level aggregate of the 8-check), `defi_yields` / `defi_risk`, a
+`resolve_symbol` resolver, and structured provenance/versioning
+(`framework_version`) on score outputs remain future work.
 
 **Equity-research vertical — open issue #203; full plan in [`docs/STOCK-RESEARCH-ENHANCEMENT.md`](docs/STOCK-RESEARCH-ENHANCEMENT.md).**
 Today an MCP client can run a stock idea through the regime + EMF durability lens
@@ -250,5 +274,6 @@ first. The gate-free Claude Code connection + reference agent
 ---
 
 Apache-2.0 · USPTO #64/034,229 (defensive) · OIN member. New work preserves
-the public-surface contract: no account/API-key gate on REST endpoints, no public
-write routes, no client data, no breaking changes to existing response shapes.
+the public-surface contract: read-only educational outputs, no public write
+routes, no client data, no breaking changes to existing response shapes, and
+optional service-key gating for production REST/JSON consumers.
