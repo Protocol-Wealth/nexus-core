@@ -262,6 +262,8 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     <li><code>cashflow_planning_bridge</code> — derived monthly close values into planning assumptions</li>
     <li><code>cash_reserve_analysis</code> — cash reserve coverage and funding status</li>
     <li><code>budget_pacing_projection</code> — month-end budget pace from aggregate spending</li>
+    <li><code>education_funding</code> — education cost FV and savings-need solver</li>
+    <li><code>education_vehicle_rules</code> — reference 529 / Coverdell / UGMA-UTMA rule table</li>
     <li><code>glide_path</code> — equity weight by age across the horizon</li>
     <li><code>tax_aware_withdrawal</code> — RMD-first, tax-efficient withdrawal sequencing with optional birthYear policy</li>
     <li><code>correlation_matrix</code> — real-data return correlation across asset classes</li>

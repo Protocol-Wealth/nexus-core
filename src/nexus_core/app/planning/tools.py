@@ -28,6 +28,7 @@ from ...data.providers import MarketDataProvider
 from ...disclaimers import FULL
 from ...engine.planning import (
     Direction,
+    EducationStudentCase,
     GlidePathShape,
     GuardrailParams,
     InfeasiblePlanError,
@@ -40,6 +41,8 @@ from ...engine.planning import (
     cashflow_planning_bridge,
     compute_glide_path,
     correlation_matrix,
+    education_funding,
+    education_result_to_wire,
     fire,
     irmaa_headroom,
     monte_carlo_decumulation,
@@ -47,6 +50,7 @@ from ...engine.planning import (
     project_cash_flow,
     rebalance,
     reference_bracket_table,
+    reference_education_vehicle_rules,
     reference_irmaa_table,
     reference_state_rule,
     regime_conditioned_swr,
@@ -1090,6 +1094,89 @@ def _build_planning_report_tool(
     return {"report": report, "disclaimer": FULL}
 
 
+_MAX_EDUCATION_STUDENTS = 12
+_MAX_EDUCATION_FUNDING_YEARS = 8
+
+
+def _parse_education_student(raw: Any, index: int) -> EducationStudentCase:
+    if not isinstance(raw, dict):
+        raise PlanningInputError(f"students[{index}] must be an object")
+    subject_ref = raw.get("subjectRef", raw.get("subject_ref", f"student-{index + 1}"))
+    if not isinstance(subject_ref, str):
+        raise PlanningInputError(f"students[{index}].subjectRef must be a string")
+    years_until_start = _as_int(raw, "yearsUntilStart")
+    funding_years = _as_int(raw, "fundingYears")
+    if not 0 <= years_until_start <= 80:
+        raise PlanningInputError("yearsUntilStart must be an integer in [0, 80]")
+    if not 1 <= funding_years <= _MAX_EDUCATION_FUNDING_YEARS:
+        raise PlanningInputError(
+            f"fundingYears must be an integer in [1, {_MAX_EDUCATION_FUNDING_YEARS}]"
+        )
+    return EducationStudentCase(
+        subject_ref=subject_ref,
+        annual_cost=_as_number(raw, "annualCost"),
+        years_until_start=years_until_start,
+        funding_years=funding_years,
+        current_savings=_opt_num(raw, "currentSavings", 0.0),
+        monthly_contribution=_opt_num(raw, "monthlyContribution", 0.0),
+    )
+
+
+def education_funding_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``education_funding`` — cost FV + education savings-need solver."""
+
+    raw_students = _require(body, "students")
+    if not isinstance(raw_students, list) or not raw_students:
+        raise PlanningInputError("students must be a non-empty list")
+    if len(raw_students) > _MAX_EDUCATION_STUDENTS:
+        raise PlanningInputError(f"students must have at most {_MAX_EDUCATION_STUDENTS} entries")
+    try:
+        result = education_funding(
+            students=[_parse_education_student(raw, i) for i, raw in enumerate(raw_students)],
+            tuition_inflation=_as_number(body, "tuitionInflation"),
+            after_tax_return=_as_number(body, "afterTaxReturn"),
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+    return education_result_to_wire(result)
+
+
+def education_vehicle_rules_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``education_vehicle_rules`` — reference 529/Coverdell/UGMA-UTMA table."""
+
+    tax_year = body.get("taxYear", 2026)
+    if isinstance(tax_year, bool) or not isinstance(tax_year, int):
+        raise PlanningInputError("taxYear must be an integer")
+    try:
+        rules = reference_education_vehicle_rules(tax_year)
+    except TableError as exc:
+        raise PlanningInputError(str(exc)) from exc
+    return {
+        "taxYear": tax_year,
+        "tableVersion": rules[0].table_version if rules else "empty",
+        "rules": [
+            {
+                "taxYear": rule.tax_year,
+                "vehicle": rule.vehicle,
+                "label": rule.label,
+                "contributionLimit": rule.contribution_limit,
+                "annualGiftExclusion": rule.annual_gift_exclusion,
+                "fiveYearSuperfundingSingle": rule.five_year_superfunding_single,
+                "fiveYearSuperfundingMarriedJoint": (rule.five_year_superfunding_married_joint),
+                "magiPhaseoutSingle": rule.magi_phaseout_single,
+                "magiPhaseoutMarriedJoint": rule.magi_phaseout_married_joint,
+                "qualifiedDistributionTreatment": rule.qualified_distribution_treatment,
+                "nonqualifiedDistributionPenaltyRate": (
+                    rule.nonqualified_distribution_penalty_rate
+                ),
+                "notes": list(rule.notes),
+                "tableVersion": rule.table_version,
+            }
+            for rule in rules
+        ],
+    }
+
+
 def _resolve_seed(body: dict[str, Any]) -> int:
     """Return the seed to use: the supplied non-negative int, or a fresh one."""
     seed = body.get("seed")
@@ -2050,6 +2137,8 @@ def build_tool_handlers(
         "cashflow_planning_bridge": cashflow_planning_bridge_tool,
         "cash_reserve_analysis": cash_reserve_analysis_tool,
         "budget_pacing_projection": budget_pacing_projection_tool,
+        "education_funding": education_funding_tool,
+        "education_vehicle_rules": education_vehicle_rules_tool,
         "glide_path": glide_path_tool,
         "tax_aware_withdrawal": tax_aware_withdrawal_tool,
         "correlation_matrix": correlation_matrix_tool,
@@ -2081,6 +2170,8 @@ __all__ = [
     "build_tool_handlers",
     "cash_reserve_analysis_tool",
     "cashflow_planning_bridge_tool",
+    "education_funding_tool",
+    "education_vehicle_rules_tool",
     "fire_tool",
     "glide_path_tool",
     "irmaa_headroom_tool",

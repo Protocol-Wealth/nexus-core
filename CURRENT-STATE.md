@@ -14,20 +14,19 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   CSV/XLSX ingestion remains private PWOS/pw-api data, not nexus-core data.
 - **Last live verified:** 2026-07-06 ET / 2026-07-07 UTC — live `/health` OK;
   hosted REST/JSON planning paths require a Nexus API key; the pw-api service
-  bearer key opens the 27-tool planning contract; hosted native `/mcp` keeps
+  bearer key opened the then-current 27-tool planning contract; hosted native `/mcp` keeps
   transparent OAuth active and exposes only the demo MCP tools
   `option_price`, `collar_book`, `health`, and `describe`.
-- **Last local update:** 2026-07-07 — current branch adds report-grade Monte
-  Carlo diagnostics for Wealth Roadmap consumers: Wilson confidence intervals
-  for `successProbability`, sticky depletion curves, failed-path conditional
-  shortfall percentiles, first-decade return deciles, a run manifest with a
-  de-identified assumptions hash and confidence-width quality flags, and
-  Guyton-Klinger cut/raise timing stats. `main` also centralizes the
-  SECURE/SECURE 2.0 RMD start-age policy in `tax.rmd_start_age` and the
-  illustrative federal tax/IRMAA reference tables in a version-stamped provider
-  registry, includes the Student-t Monte Carlo covariance-scaling correction,
-  the 2026-07-05 Slice 0/1/2 cash-flow planning bridge work, collar-book
-  executable-fill modeling, and the restricted REST/JSON access gate.
+- **Last local update:** 2026-07-07 — current branch adds S1 education funding:
+  `education_funding` for multi-student cost FV / savings-need calculations and
+  `education_vehicle_rules` for a 2026 reference 529 / Coverdell / UGMA-UTMA
+  comparison table. `main` also adds report-grade Monte Carlo diagnostics for
+  Wealth Roadmap consumers, centralizes the SECURE/SECURE 2.0 RMD start-age
+  policy in `tax.rmd_start_age`, centralizes illustrative federal tax/IRMAA
+  reference tables in a version-stamped provider registry, includes the
+  Student-t Monte Carlo covariance-scaling correction, the 2026-07-05 Slice
+  0/1/2 cash-flow planning bridge work, collar-book executable-fill modeling,
+  and the restricted REST/JSON access gate.
 - **Repo:** [github.com/Protocol-Wealth/nexus-core](https://github.com/Protocol-Wealth/nexus-core) — public, Apache-2.0
 - **Live:** [nexusmcp.site](https://nexusmcp.site) (Cloudflare → Cloud Run)
 - **Version:** 0.1.0
@@ -230,10 +229,10 @@ read-only with `readOnlyHint` + the educational disclaimer):
   `crypto_options_book_mtm` / `crypto_options_scenario`. Full overwriting + hedge
   suite is on BOTH the REST surface (`/api/options/crypto/{currency}/...`) and MCP.
 - **DeFi** — `defi_protocols`, `defi_protocol`, `defi_chains`
-- **Planning** (27 in current source; last live verification returned 23 on 2026-07-01) — `monte_carlo_decumulation`, `solve_goal`, `analyze_goals`, `project_cash_flow`, `cashflow_planning_bridge`, `cash_reserve_analysis`, `budget_pacing_projection`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `fire`, `risk_metrics`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`
+- **Planning** (29 in current source; last live verification opened the prior 27-tool contract on 2026-07-07 UTC) — `monte_carlo_decumulation`, `solve_goal`, `analyze_goals`, `project_cash_flow`, `cashflow_planning_bridge`, `cash_reserve_analysis`, `budget_pacing_projection`, `education_funding`, `education_vehicle_rules`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `fire`, `risk_metrics`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`
 - **Meta** — `health` (per-upstream status), `describe` (catalog + symbology + contract version)
 
-All 27 current-source planning tools are served both natively through MCP and via
+All 29 current-source planning tools are served both natively through MCP and via
 the REST/JSON gateway (`POST /api/planning/tools/{id}`) for browser/server
 callers — same handlers, contractVersion `0.1.0`. Legacy `/mcp/tools/{id}`
 aliases remain. The composite Roth/IRMAA case contract is
@@ -353,9 +352,10 @@ key is absent.
 - **Guyton-Klinger dynamic withdrawals** — `monte_carlo_decumulation` accepts
   optional `guardrails` and returns `withdrawalRule`, `spendingByYear`,
   `guardrailActivity`, and report-oriented `guardrailStats` only when enabled.
-- **Planning surface now 27 tools in current source** — includes `solve_goal`,
+- **Planning surface now 29 tools in current source** — includes `solve_goal`,
   `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio,
-  `optimize_allocation`, `build_planning_report`, and the composite Roth/IRMAA trio.
+  `education_funding`, `education_vehicle_rules`, `optimize_allocation`,
+  `build_planning_report`, and the composite Roth/IRMAA trio.
 - **Uniswap V3 owned-position enumeration** — `GET /api/lp/uniswap-v3/{chain}/positions?owner=`
   lists open positions before USD valuation.
 - **Research-data cleanup** — FMP/FinanceToolkit path removed; supported future

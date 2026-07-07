@@ -354,6 +354,30 @@ class AcaSituation:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class EducationVehicleRule:
+    """Reference education-savings vehicle rules for one tax year.
+
+    These public rules are for display and assumption stamping, not for tax
+    advice or state-plan selection. State-specific 529 caps, deductions, credits,
+    investment menus, and recapture rules stay outside this public engine table.
+    """
+
+    tax_year: int
+    vehicle: str
+    label: str
+    contribution_limit: float | None
+    annual_gift_exclusion: float | None
+    five_year_superfunding_single: float | None
+    five_year_superfunding_married_joint: float | None
+    magi_phaseout_single: tuple[float, float] | None
+    magi_phaseout_married_joint: tuple[float, float] | None
+    qualified_distribution_treatment: str
+    nonqualified_distribution_penalty_rate: float | None
+    notes: tuple[str, ...]
+    table_version: str
+
+
 # --- illustrative reference factories (NOT for production use as-is) --------
 
 # Illustrative current-basis figures. These reference registries are explicit by
@@ -500,6 +524,97 @@ class ReferenceTaxTableProvider:
 _REFERENCE_PROVIDER = ReferenceTaxTableProvider()
 
 
+_REFERENCE_EDUCATION_RULES_VERSION_BY_YEAR: dict[int, str] = {
+    2026: "education-vehicle-reference-2026-irs-pub970-giftfaq-v1",
+}
+
+
+def reference_education_vehicle_rules(tax_year: int = 2026) -> tuple[EducationVehicleRule, ...]:
+    """Reference 529 / Coverdell / UGMA-UTMA comparison rules.
+
+    Source basis checked on 2026-07-07: IRS Topic 310 and Publication 970 for
+    Coverdell ESA limits/phaseouts; IRS gift-tax FAQ for the 2026 annual
+    gift-tax exclusion. The 529 five-year figure is annual exclusion × 5; review
+    Form 709 handling and state-specific limits before using in advice.
+    """
+
+    if tax_year not in _REFERENCE_EDUCATION_RULES_VERSION_BY_YEAR:
+        available = ", ".join(str(y) for y in sorted(_REFERENCE_EDUCATION_RULES_VERSION_BY_YEAR))
+        raise TableError(
+            f"no reference education vehicle rules registered for tax year {tax_year}; "
+            f"available years: {available}"
+        )
+    version = _REFERENCE_EDUCATION_RULES_VERSION_BY_YEAR[tax_year]
+    annual_exclusion = 19_000.0
+    return (
+        EducationVehicleRule(
+            tax_year=tax_year,
+            vehicle="529",
+            label="529 qualified tuition program",
+            contribution_limit=None,
+            annual_gift_exclusion=annual_exclusion,
+            five_year_superfunding_single=annual_exclusion * 5.0,
+            five_year_superfunding_married_joint=annual_exclusion * 10.0,
+            magi_phaseout_single=None,
+            magi_phaseout_married_joint=None,
+            qualified_distribution_treatment=(
+                "Federal tax-free when used for qualified education expenses."
+            ),
+            nonqualified_distribution_penalty_rate=0.10,
+            notes=(
+                "No federal annual contribution cap; state aggregate account limits vary.",
+                "Five-year gift-tax election figure is illustrative and requires Form 709 review.",
+                "Nonqualified-distribution penalty generally applies to the earnings portion.",
+                "State tax deductions/credits and recapture rules are not modeled.",
+            ),
+            table_version=version,
+        ),
+        EducationVehicleRule(
+            tax_year=tax_year,
+            vehicle="coverdell_esa",
+            label="Coverdell education savings account",
+            contribution_limit=2_000.0,
+            annual_gift_exclusion=None,
+            five_year_superfunding_single=None,
+            five_year_superfunding_married_joint=None,
+            magi_phaseout_single=(95_000.0, 110_000.0),
+            magi_phaseout_married_joint=(190_000.0, 220_000.0),
+            qualified_distribution_treatment=(
+                "Federal tax-free to the extent distributions do not exceed qualified education expenses."
+            ),
+            nonqualified_distribution_penalty_rate=0.10,
+            notes=(
+                "Total contributions for one beneficiary cannot exceed $2,000 per year.",
+                "Excess contributions can trigger a 6% excise tax while excess remains.",
+                "Nonqualified-distribution penalty generally applies to the earnings portion.",
+                "Beneficiary age and special-needs rules are not modeled by this table.",
+            ),
+            table_version=version,
+        ),
+        EducationVehicleRule(
+            tax_year=tax_year,
+            vehicle="ugma_utma",
+            label="UGMA/UTMA custodial account",
+            contribution_limit=None,
+            annual_gift_exclusion=annual_exclusion,
+            five_year_superfunding_single=None,
+            five_year_superfunding_married_joint=None,
+            magi_phaseout_single=None,
+            magi_phaseout_married_joint=None,
+            qualified_distribution_treatment=(
+                "No federal qualified-education tax exclusion; assets are custodial property."
+            ),
+            nonqualified_distribution_penalty_rate=None,
+            notes=(
+                "Transfers are generally irrevocable gifts to the minor.",
+                "Income taxation and financial-aid treatment depend on facts not modeled here.",
+                "Use only as a planning comparison; not an account recommendation.",
+            ),
+            table_version=version,
+        ),
+    )
+
+
 def reference_bracket_table(year: int = 2026) -> BracketTable:
     """An illustrative current-basis :class:`BracketTable`. Verify before real use."""
     return _REFERENCE_PROVIDER.bracket_table(year)
@@ -615,6 +730,7 @@ __all__ = [
     "AcaCliffMode",
     "AcaSituation",
     "BracketTable",
+    "EducationVehicleRule",
     "FilingStatus",
     "IrmaaTable",
     "IrmaaTier",
@@ -625,6 +741,7 @@ __all__ = [
     "TaxTableProvider",
     "reference_aca_situation",
     "reference_bracket_table",
+    "reference_education_vehicle_rules",
     "reference_irmaa_table",
     "reference_state_rule",
 ]

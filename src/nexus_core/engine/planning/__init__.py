@@ -25,6 +25,20 @@ from .cashflow_bridge import (
     cashflow_planning_bridge,
 )
 from .correlation import correlation_matrix
+from .education import (
+    EducationCostResult,
+    EducationCostYear,
+    EducationFundingResult,
+    EducationSavingsNeed,
+    EducationSavingsProjection,
+    EducationStudentCase,
+    EducationStudentResult,
+    education_cost_fv,
+    education_funding,
+    education_result_to_wire,
+    education_savings_need,
+    education_savings_projection,
+)
 from .fire import fire
 from .glide_path import GlidePathShape, compute_glide_path
 from .goal_solve import (
@@ -39,7 +53,11 @@ from .irmaa import irmaa_headroom
 from .monte_carlo import GuardrailParams, monte_carlo_decumulation
 from .rebalance import rebalance
 from .regime_swr import regime_conditioned_swr
-from .result_schema import roth_conversion_analysis_schema
+from .result_schema import (
+    education_funding_result_schema,
+    education_vehicle_rules_result_schema,
+    roth_conversion_analysis_schema,
+)
 from .risk_metrics import risk_metrics
 from .rmd import rmd
 from .roth_analysis import analyze_roth_conversion, sequence_conversions
@@ -49,11 +67,13 @@ from .social_security import social_security_claiming
 from .tables import (
     AcaSituation,
     BracketTable,
+    EducationVehicleRule,
     IrmaaTable,
     IrmaaTier,
     StateConversionRule,
     reference_aca_situation,
     reference_bracket_table,
+    reference_education_vehicle_rules,
     reference_irmaa_table,
     reference_state_rule,
 )
@@ -66,6 +86,14 @@ __all__ = [
     "AcaSituation",
     "BracketTable",
     "Direction",
+    "EducationCostResult",
+    "EducationCostYear",
+    "EducationFundingResult",
+    "EducationSavingsNeed",
+    "EducationSavingsProjection",
+    "EducationStudentCase",
+    "EducationStudentResult",
+    "EducationVehicleRule",
     "GlidePathShape",
     "InfeasiblePlanError",
     "IrmaaTable",
@@ -85,6 +113,13 @@ __all__ = [
     "cash_reserve_analysis",
     "cashflow_planning_bridge",
     "correlation_matrix",
+    "education_cost_fv",
+    "education_funding",
+    "education_result_to_wire",
+    "education_funding_result_schema",
+    "education_savings_need",
+    "education_savings_projection",
+    "education_vehicle_rules_result_schema",
     "fire",
     "irmaa_headroom",
     "monte_carlo_decumulation",
@@ -94,6 +129,7 @@ __all__ = [
     "rebalance",
     "reference_aca_situation",
     "reference_bracket_table",
+    "reference_education_vehicle_rules",
     "reference_irmaa_table",
     "reference_state_rule",
     "regime_conditioned_swr",

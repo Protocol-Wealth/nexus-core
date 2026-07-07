@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Protocol Wealth, LLC and contributors.
-"""JSON-Schema for the RothConversionAnalysis output, derived from the dataclasses.
+"""JSON-Schema helpers for planning outputs.
 
 The output half of the planning ABI is as load-bearing as the input. Rather than
 hand-maintain a second JSON file that could silently drift from
@@ -94,4 +94,204 @@ def roth_conversion_analysis_schema() -> dict[str, Any]:
     return schema
 
 
-__all__ = ["roth_conversion_analysis_schema"]
+_MONEY = {"type": "number"}
+_NULLABLE_MONEY = {"type": ["number", "null"]}
+_STRING_ARRAY = {"type": "array", "items": {"type": "string"}}
+_SUBJECT_REF_SCHEMA = {
+    "type": "string",
+    "minLength": 1,
+    "maxLength": 80,
+    "pattern": "^[A-Za-z0-9._:-]+$",
+}
+
+
+def education_funding_result_schema() -> dict[str, Any]:
+    """Draft-2020-12 JSON-Schema for the ``education_funding`` wire result."""
+
+    money_need = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "targetFv",
+            "currentSavings",
+            "afterTaxReturn",
+            "yearsUntilStart",
+            "monthly",
+            "annual",
+            "lumpSum",
+        ],
+        "properties": {
+            "targetFv": _MONEY,
+            "currentSavings": _MONEY,
+            "afterTaxReturn": _MONEY,
+            "yearsUntilStart": {"type": "integer"},
+            "monthly": _MONEY,
+            "annual": _MONEY,
+            "lumpSum": _MONEY,
+        },
+    }
+    cost_schedule_row = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["yearIndex", "yearsFromNow", "cost", "costAtGoalStart"],
+        "properties": {
+            "yearIndex": {"type": "integer"},
+            "yearsFromNow": {"type": "integer"},
+            "cost": _MONEY,
+            "costAtGoalStart": _MONEY,
+        },
+    }
+    cost = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "annualCost",
+            "tuitionInflation",
+            "yearsUntilStart",
+            "fundingYears",
+            "firstYearCost",
+            "totalFutureCost",
+            "totalCostAtGoalStart",
+            "costSchedule",
+        ],
+        "properties": {
+            "annualCost": _MONEY,
+            "tuitionInflation": _MONEY,
+            "yearsUntilStart": {"type": "integer"},
+            "fundingYears": {"type": "integer"},
+            "firstYearCost": _MONEY,
+            "totalFutureCost": _MONEY,
+            "totalCostAtGoalStart": _MONEY,
+            "costSchedule": {"type": "array", "items": cost_schedule_row},
+        },
+    }
+    student = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "subjectRef",
+            "cost",
+            "projectedSavingsAtStart",
+            "savingsGapAtStart",
+            "savingsNeed",
+        ],
+        "properties": {
+            "subjectRef": _SUBJECT_REF_SCHEMA,
+            "cost": cost,
+            "projectedSavingsAtStart": _MONEY,
+            "savingsGapAtStart": _MONEY,
+            "savingsNeed": money_need,
+        },
+    }
+    schema = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://nexusmcp.site/schemas/education-funding-result-0.1.0.json",
+        "title": "EducationFundingResult",
+        "description": "PII-free output of the education_funding planning tool.",
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["tuitionInflation", "afterTaxReturn", "students", "householdTotals"],
+        "properties": {
+            "tuitionInflation": _MONEY,
+            "afterTaxReturn": _MONEY,
+            "students": {"type": "array", "items": student},
+            "householdTotals": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "totalFutureCost",
+                    "totalCostAtGoalStart",
+                    "projectedSavingsAtStart",
+                    "savingsGapAtStart",
+                    "savingsNeed",
+                ],
+                "properties": {
+                    "totalFutureCost": _MONEY,
+                    "totalCostAtGoalStart": _MONEY,
+                    "projectedSavingsAtStart": _MONEY,
+                    "savingsGapAtStart": _MONEY,
+                    "savingsNeed": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["monthly", "annual", "lumpSum"],
+                        "properties": {
+                            "monthly": _MONEY,
+                            "annual": _MONEY,
+                            "lumpSum": _MONEY,
+                        },
+                    },
+                },
+            },
+        },
+    }
+    return schema
+
+
+def education_vehicle_rules_result_schema() -> dict[str, Any]:
+    """Draft-2020-12 JSON-Schema for the ``education_vehicle_rules`` wire result."""
+
+    rule = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "taxYear",
+            "vehicle",
+            "label",
+            "contributionLimit",
+            "annualGiftExclusion",
+            "fiveYearSuperfundingSingle",
+            "fiveYearSuperfundingMarriedJoint",
+            "magiPhaseoutSingle",
+            "magiPhaseoutMarriedJoint",
+            "qualifiedDistributionTreatment",
+            "nonqualifiedDistributionPenaltyRate",
+            "notes",
+            "tableVersion",
+        ],
+        "properties": {
+            "taxYear": {"type": "integer"},
+            "vehicle": {"type": "string"},
+            "label": {"type": "string"},
+            "contributionLimit": _NULLABLE_MONEY,
+            "annualGiftExclusion": _NULLABLE_MONEY,
+            "fiveYearSuperfundingSingle": _NULLABLE_MONEY,
+            "fiveYearSuperfundingMarriedJoint": _NULLABLE_MONEY,
+            "magiPhaseoutSingle": {
+                "type": ["array", "null"],
+                "prefixItems": [_MONEY, _MONEY],
+                "minItems": 2,
+                "maxItems": 2,
+            },
+            "magiPhaseoutMarriedJoint": {
+                "type": ["array", "null"],
+                "prefixItems": [_MONEY, _MONEY],
+                "minItems": 2,
+                "maxItems": 2,
+            },
+            "qualifiedDistributionTreatment": {"type": "string"},
+            "nonqualifiedDistributionPenaltyRate": _NULLABLE_MONEY,
+            "notes": _STRING_ARRAY,
+            "tableVersion": {"type": "string"},
+        },
+    }
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://nexusmcp.site/schemas/education-vehicle-rules-result-0.1.0.json",
+        "title": "EducationVehicleRulesResult",
+        "description": "PII-free output of the education_vehicle_rules planning tool.",
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["taxYear", "tableVersion", "rules"],
+        "properties": {
+            "taxYear": {"type": "integer"},
+            "tableVersion": {"type": "string"},
+            "rules": {"type": "array", "items": rule},
+        },
+    }
+
+
+__all__ = [
+    "education_funding_result_schema",
+    "education_vehicle_rules_result_schema",
+    "roth_conversion_analysis_schema",
+]

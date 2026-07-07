@@ -45,6 +45,11 @@ exhibits, run manifests with de-identified assumption hashes and confidence
 quality flags, and Guyton-Klinger cut/raise timing stats. These are additive
 response fields; existing request shapes remain unchanged.
 
+Current source also starts the S1 education-funding slice: `education_funding`
+adds multi-student education cost FV and savings-need calculations, and
+`education_vehicle_rules` adds a 2026 reference comparison table for 529 plans,
+Coverdell ESAs, and UGMA/UTMA custodial accounts. Inputs stay de-identified.
+
 The collar-book realistic-fill layer is part of current source. The engine plus
 REST/MCP parsers accept midpoint `net_credit` and optional executable pricing
 (`executable_net_credit` or `call_bid` minus `put_ask`) and return stock price,
