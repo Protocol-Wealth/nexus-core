@@ -14,7 +14,8 @@ covariance-scaling correction plus the RMD start-age policy kernel shared by
 `rmd`, `tax_aware_withdrawal`, and the Roth composite. Current branch also
 centralizes federal tax/IRMAA reference-table lookup behind a version-stamped
 provider registry and adds Monte Carlo report diagnostics for Wealth Roadmap
-output quality, plus S1 education funding tools. Live endpoints were not
+output quality, plus S1 education funding tools and S8 multi-account
+waterfall / Monte Carlo goal-schedule support. Live endpoints were not
 re-smoked._
 
 ## Orient yourself in 5 minutes
@@ -77,6 +78,14 @@ re-smoked._
   and are exposed through the planning gateway/native MCP registry. Inputs are
   annual costs, year offsets, funding years, current savings, contributions, and
   opaque `subjectRef` values only.
+- **Current S8 waterfall state:** `project_cash_flow` stays single-bucket when
+  callers omit account buckets. With `accountBalances`, it reports taxable /
+  traditional / Roth balances, taxable-first withdrawals, and early-withdrawal
+  penalties. `monte_carlo_decumulation` and `solve_goal` accept optional
+  de-identified `goals`; the wrapper sorts them by priority, earlier projection
+  year, input order, and funding-year index, then the engine funds them
+  path-by-path after base spending and before growth, echoing
+  `goalFundingSchedule` and per-goal funding statistics.
 
 ## Before you commit (the gate — mirrors CI)
 
@@ -121,11 +130,11 @@ so pace the calls.
 
 The first correctness items have landed locally: Student-t covariance scaling,
 single-kernel RMD start-age policy, shared tax/IRMAA table providers, Monte
-Carlo report diagnostics, and S1 education funding. Continue with the
-consolidated Wealth Roadmap sequence: multi-account deterministic waterfall,
-income layering, historical blend, state/local tax coverage, and
-household/survivor modeling. Keep each item one PR and preserve the
-public/private planning boundary.
+Carlo report diagnostics, S1 education funding, and S8 multi-account waterfall /
+Monte Carlo goal scheduling. Continue with the consolidated Wealth Roadmap
+sequence: income layering, historical blend, state/local tax coverage, and
+household/survivor modeling. Keep each item one PR and preserve the public/private
+planning boundary.
 
 ### Public-safe planning/report analytics extraction (#197)
 

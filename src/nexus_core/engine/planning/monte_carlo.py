@@ -224,6 +224,7 @@ def _assumptions_hash(
     correlation: list[list[float]],
     initial_balance: float,
     net_spend_by_year: list[float],
+    goal_funding_schedule: list[dict[str, Any]],
     return_model: str,
     current_regime: str,
     guardrails: GuardrailParams | None,
@@ -238,12 +239,85 @@ def _assumptions_hash(
         "correlation": correlation,
         "initialBalance": initial_balance,
         "netSpendByYear": net_spend_by_year,
+        "goalFundingSchedule": goal_funding_schedule,
         "returnModel": return_model,
         "currentRegime": current_regime,
         "guardrails": asdict(guardrails) if guardrails is not None else None,
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _normalise_goal_funding_schedule(
+    goal_funding_schedule: list[dict[str, Any]] | None,
+    *,
+    years: int,
+) -> list[dict[str, Any]]:
+    if goal_funding_schedule is None:
+        return []
+    rows: list[dict[str, Any]] = []
+    for index, row in enumerate(goal_funding_schedule):
+        if not isinstance(row, dict):
+            raise ValueError("goal_funding_schedule rows must be objects")
+        goal_id = row.get("id")
+        if not isinstance(goal_id, str) or not goal_id:
+            raise ValueError("goal_funding_schedule rows need a non-empty id")
+        projection_year = row.get("projectionYear")
+        if (
+            isinstance(projection_year, bool)
+            or not isinstance(projection_year, int)
+            or not 1 <= projection_year <= years
+        ):
+            raise ValueError(
+                f"goal_funding_schedule[{index}].projectionYear must be inside the horizon"
+            )
+        amount = row.get("amount")
+        if (
+            isinstance(amount, bool)
+            or not isinstance(amount, (int, float))
+            or not np.isfinite(amount)
+            or amount < 0.0
+        ):
+            raise ValueError(f"goal_funding_schedule[{index}].amount must be non-negative")
+        rows.append(
+            {
+                "id": goal_id,
+                "projectionYear": projection_year,
+                "amount": float(amount),
+                "priority": int(row.get("priority", index + 1)),
+                "inputOrder": int(row.get("inputOrder", index)),
+                "fundingYearIndex": int(row.get("fundingYearIndex", 0)),
+            }
+        )
+    return rows
+
+
+def _goal_funding_stats(
+    *,
+    requested_by_goal: dict[str, float],
+    funded_by_goal: dict[str, np.ndarray],
+    goal_order: list[str],
+) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    for goal_id in goal_order:
+        requested = requested_by_goal[goal_id]
+        funded = funded_by_goal[goal_id]
+        ratio = np.ones_like(funded) if requested <= 0.0 else np.minimum(funded / requested, 1.0)
+        fully_funded = ratio >= 0.999999
+        percentiles = np.percentile(funded, [10, 50, 90])
+        rows.append(
+            {
+                "id": goal_id,
+                "requestedAmount": round(requested, 2),
+                "fullyFundedProbability": round(float(np.mean(fully_funded)), 4),
+                "averageFundedRatio": round(float(np.mean(ratio)), 4),
+                "fundedAmountPercentiles": {
+                    f"p{p}": round(float(v), 2)
+                    for p, v in zip([10, 50, 90], percentiles, strict=True)
+                },
+            }
+        )
+    return {"goals": rows}
 
 
 def _depletion_curve(
@@ -358,6 +432,7 @@ def monte_carlo_decumulation(
     current_regime: str,
     current_age: int | None = None,
     guardrails: GuardrailParams | None = None,
+    goal_funding_schedule: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run the decumulation simulation and return the contract response fields.
 
@@ -399,6 +474,20 @@ def monte_carlo_decumulation(
         port_returns = base_returns
 
     net = np.asarray(net_spend_by_year, dtype=float)
+    goal_rows = _normalise_goal_funding_schedule(goal_funding_schedule, years=years)
+    goals_by_year: dict[int, list[dict[str, Any]]] = {}
+    requested_by_goal: dict[str, float] = {}
+    funded_by_goal: dict[str, np.ndarray] = {}
+    goal_order: list[str] = []
+    for row in goal_rows:
+        goal_id = str(row["id"])
+        if goal_id not in requested_by_goal:
+            requested_by_goal[goal_id] = 0.0
+            funded_by_goal[goal_id] = np.zeros(paths)
+            goal_order.append(goal_id)
+        requested_by_goal[goal_id] += float(row["amount"])
+        goals_by_year.setdefault(int(row["projectionYear"]) - 1, []).append(row)
+
     balance = np.full(paths, float(initial_balance))
     # Per-year percentile bands — the projection fan / cone of outcomes. The
     # balance array at each step is the full cross-path distribution; keep
@@ -459,7 +548,15 @@ def monte_carlo_decumulation(
         requested_by_path = np.full(paths, float(requested)) if requested.ndim == 0 else requested
         positive_request = np.maximum(requested_by_path, 0.0)
         cumulative_shortfall += np.maximum(positive_request - np.maximum(balance_before, 0.0), 0.0)
-        balance = (balance - this_w) * (1.0 + port_returns[:, year])
+        balance_after_withdrawal = balance - this_w
+        for goal in goals_by_year.get(year, []):
+            goal_id = str(goal["id"])
+            requested_goal = float(goal["amount"])
+            funded = np.minimum(np.maximum(balance_after_withdrawal, 0.0), requested_goal)
+            balance_after_withdrawal -= funded
+            cumulative_shortfall += requested_goal - funded
+            funded_by_goal[goal_id] += funded
+        balance = balance_after_withdrawal * (1.0 + port_returns[:, year])
         np.maximum(balance, 0.0, out=balance)
         newly_depleted = (first_depletion_year < 0) & (balance <= 0.0)
         first_depletion_year[newly_depleted] = year
@@ -552,6 +649,7 @@ def monte_carlo_decumulation(
                 correlation=correlation,
                 initial_balance=initial_balance,
                 net_spend_by_year=net_spend_by_year,
+                goal_funding_schedule=goal_rows,
                 return_model=return_model,
                 current_regime=current_regime,
                 guardrails=guardrails,
@@ -587,6 +685,12 @@ def monte_carlo_decumulation(
             raise_count=raise_count,
             first_cut_year=first_cut_year,
             current_age=current_age,
+        )
+    if goal_rows:
+        response["goalFunding"] = _goal_funding_stats(
+            requested_by_goal=requested_by_goal,
+            funded_by_goal=funded_by_goal,
+            goal_order=goal_order,
         )
     return response
 

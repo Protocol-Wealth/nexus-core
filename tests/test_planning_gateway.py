@@ -343,6 +343,125 @@ def test_monte_carlo_spend_schedule_late_ltc_bump_lowers_success() -> None:
     assert shocked["depletionStats"]["depletionAgePercentiles"]["p50"] >= 60
 
 
+def test_monte_carlo_goals_add_ordered_schedule_and_lower_success() -> None:
+    base_payload = {
+        **_MC_PAYLOAD,
+        "paths": 400,
+        "seed": 2468,
+        "returnModel": "multivariate_normal",
+    }
+    market = _FakeMarket()
+    regime = _FakeRegimeEngine()
+    base = _monte_carlo_decumulation_tool(base_payload, market, regime)
+    with_goals = _monte_carlo_decumulation_tool(
+        {
+            **base_payload,
+            "goals": [
+                {"id": "wish-late", "tier": "wish", "targetAmount": 1_200_000, "yearsToGoal": 20},
+                {"id": "need-soon", "tier": "need", "targetAmount": 350_000, "yearsToGoal": 10},
+                {"id": "want-soon", "tier": "want", "targetAmount": 250_000, "yearsToGoal": 10},
+            ],
+        },
+        market,
+        regime,
+    )
+
+    assert with_goals["successProbability"] < base["successProbability"]
+    assert with_goals["goalFundingPolicy"] == {
+        "mode": "priority_then_earlier_year_then_input_order",
+        "basis": "path_level_priority_funding_after_base_spend_before_growth",
+    }
+    assert [row["id"] for row in with_goals["goalFundingSchedule"]] == [
+        "need-soon",
+        "want-soon",
+        "wish-late",
+    ]
+    assert [row["projectionYear"] for row in with_goals["goalFundingSchedule"]] == [11, 11, 21]
+    assert "goalFunding" in with_goals
+
+
+def test_monte_carlo_goals_allocate_path_level_by_priority() -> None:
+    payload = {
+        "contractVersion": "0.1.0",
+        "currentAge": 60,
+        "retirementAge": 60,
+        "horizonAge": 62,
+        "accounts": [{"type": "taxable", "balance": 100_000, "allocation": {"cash": 1.0}}],
+        "assetClasses": [
+            {"id": "cash", "label": "Cash", "expectedReturn": 0.0, "volatility": 0.0, "lambda": 0.0}
+        ],
+        "correlations": None,
+        "annualSpend": 0,
+        "spendColaRate": 0,
+        "guaranteedIncome": [],
+        "filingStatus": "single",
+        "returnModel": "multivariate_normal",
+        "paths": 50,
+        "seed": 1357,
+        "goals": [
+            {"id": "want-1", "tier": "want", "targetAmount": 80_000, "yearsToGoal": 0},
+            {"id": "need-1", "tier": "need", "targetAmount": 80_000, "yearsToGoal": 0},
+        ],
+    }
+
+    result = _monte_carlo_decumulation_tool(payload, _FakeMarket(), _FakeRegimeEngine())
+    by_id = {row["id"]: row for row in result["goalFunding"]["goals"]}
+
+    assert [row["id"] for row in result["goalFundingSchedule"]] == ["need-1", "want-1"]
+    assert by_id["need-1"]["fullyFundedProbability"] == 1.0
+    assert by_id["need-1"]["fundedAmountPercentiles"]["p50"] == 80_000.0
+    assert by_id["want-1"]["fullyFundedProbability"] == 0.0
+    assert by_id["want-1"]["fundedAmountPercentiles"]["p50"] == 20_000.0
+
+
+def test_solve_goal_with_goals_returns_confirmed_goal_funding() -> None:
+    body = {
+        "contractVersion": "0.1.0",
+        "solveFor": "initial_savings",
+        "targetSuccess": 0.95,
+        "bounds": {"min": 100_000, "max": 220_000},
+        "currentAge": 60,
+        "retirementAge": 60,
+        "horizonAge": 62,
+        "accounts": [{"type": "taxable", "balance": 100_000, "allocation": {"cash": 1.0}}],
+        "assetClasses": [
+            {"id": "cash", "label": "Cash", "expectedReturn": 0.0, "volatility": 0.0, "lambda": 0.0}
+        ],
+        "correlations": None,
+        "annualSpend": 0,
+        "spendColaRate": 0,
+        "guaranteedIncome": [],
+        "returnModel": "multivariate_normal",
+        "paths": 50,
+        "seed": 1357,
+        "goals": [
+            {"id": "need-1", "tier": "need", "targetAmount": 80_000, "yearsToGoal": 0},
+            {"id": "want-1", "tier": "want", "targetAmount": 80_000, "yearsToGoal": 0},
+        ],
+    }
+
+    result = _solve_goal_tool(body, _FakeMarket(), _FakeRegimeEngine())
+
+    assert result["solveFor"] == "initial_savings"
+    assert result["goalFundingPolicy"]["basis"] == (
+        "path_level_priority_funding_after_base_spend_before_growth"
+    )
+    assert [row["id"] for row in result["goalFundingSchedule"]] == ["need-1", "want-1"]
+    assert result["goalFunding"]["goals"][0]["fullyFundedProbability"] == 1.0
+
+
+def test_monte_carlo_goal_outside_horizon_returns_400() -> None:
+    with pytest.raises(PlanningInputError, match="inside the Monte Carlo horizon"):
+        _monte_carlo_decumulation_tool(
+            {
+                **_MC_PAYLOAD,
+                "goals": [{"id": "late-1", "targetAmount": 1, "yearsToGoal": 50}],
+            },
+            _FakeMarket(),
+            _FakeRegimeEngine(),
+        )
+
+
 def test_monte_carlo_retirement_age_lifts_success() -> None:
     # Accumulating until 65 must beat withdrawing from 45 (the no-retirementAge case).
     with_ret = _client().post("/mcp/tools/monte_carlo_decumulation", json=_MC_PAYLOAD).json()
@@ -1193,9 +1312,9 @@ def test_project_cash_flow_happy_path() -> None:
         "currentLiabilities": 250_000,
         "baseYear": 2026,
     }
-    r = _client().post("/mcp/tools/project_cash_flow", json=payload)
-    assert r.status_code == 200, r.text
-    body = r.json()
+    response = _call_gateway_tool("project_cash_flow", payload)
+    assert isinstance(response, JSONResponse)
+    body = _response_json(response)
     assert body["contractVersion"] == CONTRACT_VERSION
     assert len(body["years"]) == 90 - 45 + 1
     first = body["years"][0]
@@ -1207,10 +1326,37 @@ def test_project_cash_flow_happy_path() -> None:
     assert body["assumptions"]["filingStatus"] == "married_joint"
 
 
+def test_project_cash_flow_account_balances_gateway() -> None:
+    payload = {
+        "contractVersion": "0.1.0",
+        "currentAge": 70,
+        "retirementAge": 65,
+        "terminalAge": 72,
+        "currentIncome": 0,
+        "currentExpenses": 70_000,
+        "retirementIncome": 20_000,
+        "filingStatus": "single",
+        "accountBalances": {"taxable": 25_000, "traditional": 175_000, "roth": 0},
+        "accountReturns": {"taxable": 0.03, "traditional": 0.03, "roth": 0.03},
+        "earlyWithdrawalPenaltyRate": 0,
+    }
+    response = _call_gateway_tool("project_cash_flow", payload)
+    assert isinstance(response, JSONResponse)
+    body = _response_json(response)
+
+    assert body["aggregate"]["startingPortfolio"] == 200_000
+    assert body["aggregate"]["startingAccountBalances"]["taxable"] == 25_000
+    first = body["years"][0]
+    assert first["withdrawalsByAccount"]["taxable"] == pytest.approx(25_000.0)
+    assert first["withdrawalsByAccount"]["traditional"] > 0.0
+    assert first["accountBalances"]["taxable"] == pytest.approx(0.0)
+    assert body["assumptions"]["withdrawalOrder"] == ["taxable", "traditional", "roth"]
+
+
 def test_project_cash_flow_bad_horizon_400() -> None:
-    r = _client().post(
-        "/mcp/tools/project_cash_flow",
-        json={
+    response = _call_gateway_tool(
+        "project_cash_flow",
+        {
             "contractVersion": "0.1.0",
             "currentAge": 60,
             "retirementAge": 65,
@@ -1220,14 +1366,14 @@ def test_project_cash_flow_bad_horizon_400() -> None:
             "currentPortfolio": 100_000,
         },
     )
-    assert r.status_code == 400
-    assert "terminal_age" in r.text
+    assert response.status_code == 400
+    assert "terminal_age" in _response_text(response)
 
 
 def test_project_cash_flow_bad_filing_status_400() -> None:
-    r = _client().post(
-        "/mcp/tools/project_cash_flow",
-        json={
+    response = _call_gateway_tool(
+        "project_cash_flow",
+        {
             "contractVersion": "0.1.0",
             "currentAge": 40,
             "retirementAge": 65,
@@ -1238,8 +1384,8 @@ def test_project_cash_flow_bad_filing_status_400() -> None:
             "filingStatus": "joint",
         },
     )
-    assert r.status_code == 400
-    assert "filing_status" in r.text
+    assert response.status_code == 400
+    assert "filing_status" in _response_text(response)
 
 
 def test_cashflow_planning_bridge_gateway() -> None:

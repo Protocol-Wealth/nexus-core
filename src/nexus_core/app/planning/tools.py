@@ -106,6 +106,10 @@ _RETURN_MODELS = (
     "emf_regime",
 )
 _SPEND_SCHEDULE_MODES = frozenset({"delta", "override", "one_time"})
+_GOAL_TIER_PRIORITIES = {"need": 10, "want": 50, "wish": 90}
+_OPAQUE_REF_ALLOWED_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-"
+)
 
 # ── Goal solver (solve_goal) ─────────────────────────────────────────────────
 # A fixed seed pins the success curve across search iterations (an unseeded MC
@@ -469,6 +473,22 @@ def _optional_number(body: dict[str, Any], key: str, default: float) -> float:
     return float(value)
 
 
+def _optional_number_map(body: dict[str, Any], key: str) -> dict[str, float] | None:
+    value = body.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise PlanningInputError(f"{key} must be an object or omitted")
+    out: dict[str, float] = {}
+    for item_key, item_value in value.items():
+        if not isinstance(item_key, str):
+            raise PlanningInputError(f"{key} keys must be strings")
+        if isinstance(item_value, bool) or not isinstance(item_value, (int, float)):
+            raise PlanningInputError(f"{key} values must be numbers")
+        out[item_key] = float(item_value)
+    return out
+
+
 def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``project_cash_flow`` — year-by-year cash flow + net worth + lifetime tax."""
     filing_status = body.get("filingStatus", "married_joint")
@@ -478,6 +498,14 @@ def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
     if base_year is not None and (isinstance(base_year, bool) or not isinstance(base_year, int)):
         raise PlanningInputError("baseYear must be an integer or omitted")
     tax_year = _optional_int(body, "taxYear")
+    account_balances = _optional_number_map(body, "accountBalances")
+    account_returns = _optional_number_map(body, "accountReturns")
+    if "currentPortfolio" in body:
+        current_portfolio = _as_number(body, "currentPortfolio")
+    elif account_balances is not None:
+        current_portfolio = sum(account_balances.values())
+    else:
+        current_portfolio = _as_number(body, "currentPortfolio")
     try:
         return project_cash_flow(
             current_age=_as_int(body, "currentAge"),
@@ -485,7 +513,7 @@ def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
             terminal_age=_as_int(body, "terminalAge"),
             current_income=_as_number(body, "currentIncome"),
             current_expenses=_as_number(body, "currentExpenses"),
-            current_portfolio=_as_number(body, "currentPortfolio"),
+            current_portfolio=current_portfolio,
             filing_status=cast(Any, filing_status),
             income_growth_rate=_optional_number(body, "incomeGrowthRate", 0.03),
             expense_inflation_rate=_optional_number(body, "expenseInflationRate", 0.025),
@@ -494,6 +522,12 @@ def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
             current_liabilities=_optional_number(body, "currentLiabilities", 0.0),
             base_year=base_year,
             tax_year=2026 if tax_year is None else tax_year,
+            account_balances=account_balances,
+            account_returns=account_returns,
+            early_withdrawal_penalty_age=_optional_number(body, "earlyWithdrawalPenaltyAge", 59.5),
+            early_withdrawal_penalty_rate=_optional_number(
+                body, "earlyWithdrawalPenaltyRate", 0.10
+            ),
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
@@ -1344,6 +1378,123 @@ def _apply_spend_schedule(
     return spend
 
 
+def _goal_priority(raw: dict[str, Any], index: int) -> int:
+    priority = raw.get("priority")
+    if priority is not None:
+        if isinstance(priority, bool) or not isinstance(priority, int) or not 1 <= priority <= 100:
+            raise PlanningInputError(f"goals[{index}].priority must be an integer in [1, 100]")
+        return priority
+    tier = raw.get("tier", raw.get("importance", "want"))
+    if not isinstance(tier, str) or tier not in _GOAL_TIER_PRIORITIES:
+        raise PlanningInputError(
+            f"goals[{index}].tier must be one of {', '.join(_GOAL_TIER_PRIORITIES)}"
+        )
+    return _GOAL_TIER_PRIORITIES[tier]
+
+
+def _is_opaque_ref(value: str) -> bool:
+    return (
+        1 <= len(value) <= 80
+        and all(ch in _OPAQUE_REF_ALLOWED_CHARS for ch in value)
+        and any(ch.isdigit() or ch in "._:-" for ch in value)
+    )
+
+
+def _parse_monte_carlo_goal_schedule(
+    body: dict[str, Any],
+    *,
+    current_age: int,
+    years: int,
+) -> list[dict[str, Any]]:
+    """Convert optional goal list into ordered one/multi-year spend additions.
+
+    Each goal is de-identified by opaque ``id``, sorted by priority -> earlier
+    year -> input order, and emitted as explicit schedule rows. The engine uses
+    these rows for path-level priority funding, and the wrapper echoes them for
+    audit/replay.
+    """
+    raw_goals = body.get("goals", [])
+    if raw_goals is None:
+        return []
+    if not isinstance(raw_goals, list):
+        raise PlanningInputError("goals must be a list or omitted")
+    if len(raw_goals) > _MAX_GOALS:
+        raise PlanningInputError(f"at most {_MAX_GOALS} goals are supported")
+
+    rows: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for index, raw in enumerate(raw_goals):
+        if not isinstance(raw, dict):
+            raise PlanningInputError(f"goals[{index}] must be an object")
+        goal_id = raw.get("id")
+        if not isinstance(goal_id, str) or not _is_opaque_ref(goal_id):
+            raise PlanningInputError(
+                f"goals[{index}].id must be an opaque token of 1-80 letters, digits, '.', '_', ':', or '-'"
+            )
+        if goal_id in seen_ids:
+            raise PlanningInputError(f"duplicate goal id '{goal_id}'")
+        seen_ids.add(goal_id)
+        target = raw.get("targetAmount")
+        if (
+            isinstance(target, bool)
+            or not isinstance(target, (int, float))
+            or not math.isfinite(float(target))
+            or target < 0
+        ):
+            raise PlanningInputError(f"goals[{index}].targetAmount must be non-negative")
+        years_to_goal = raw.get("yearsToGoal")
+        if (
+            isinstance(years_to_goal, bool)
+            or not isinstance(years_to_goal, int)
+            or not 0 <= years_to_goal < years
+        ):
+            raise PlanningInputError(
+                f"goals[{index}].yearsToGoal must be an integer inside the Monte Carlo horizon"
+            )
+        funding_years = raw.get("fundingYears", 1)
+        if (
+            isinstance(funding_years, bool)
+            or not isinstance(funding_years, int)
+            or not 1 <= funding_years <= 40
+        ):
+            raise PlanningInputError(f"goals[{index}].fundingYears must be an integer in [1, 40]")
+        if years_to_goal + funding_years > years:
+            raise PlanningInputError(f"goals[{index}] funding years extend beyond horizonAge")
+        inflation = raw.get("inflationRate", 0.0)
+        if (
+            isinstance(inflation, bool)
+            or not isinstance(inflation, (int, float))
+            or not math.isfinite(float(inflation))
+            or inflation <= -1
+        ):
+            raise PlanningInputError(f"goals[{index}].inflationRate must be a number > -1")
+        priority = _goal_priority(raw, index)
+        annual_base = float(target) / funding_years
+        for funding_index in range(funding_years):
+            projection_index = years_to_goal + funding_index
+            amount = annual_base * (1.0 + float(inflation)) ** projection_index
+            rows.append(
+                {
+                    "id": goal_id,
+                    "priority": priority,
+                    "inputOrder": index,
+                    "fundingYearIndex": funding_index,
+                    "projectionYear": projection_index + 1,
+                    "age": current_age + projection_index,
+                    "amount": round(amount, 2),
+                }
+            )
+    rows.sort(
+        key=lambda row: (
+            int(row["priority"]),
+            int(row["projectionYear"]),
+            int(row["inputOrder"]),
+            int(row["fundingYearIndex"]),
+        )
+    )
+    return rows
+
+
 def _net_spend_schedule(
     *,
     current_age: int,
@@ -1510,6 +1661,7 @@ class _MonteCarloContext:
     initial_balance: float
     net_spend: list[float]
     guardrails: GuardrailParams | None
+    goal_funding_schedule: list[dict[str, Any]]
     body: dict[str, Any]
 
 
@@ -1575,6 +1727,9 @@ def _prepare_monte_carlo(
         spend_cola=float(spend_cola),
         body=body,
     )
+    goal_funding_schedule = _parse_monte_carlo_goal_schedule(
+        body, current_age=current_age, years=years
+    )
     guardrails = _parse_guardrails(body, spend_cola=float(spend_cola))
 
     paths = body.get("paths", 10000)
@@ -1614,6 +1769,7 @@ def _prepare_monte_carlo(
         initial_balance=initial_balance,
         net_spend=net_spend,
         guardrails=guardrails,
+        goal_funding_schedule=goal_funding_schedule,
         body=body,
     )
 
@@ -1648,6 +1804,7 @@ def _run_monte_carlo(
         current_regime=ctx.current_regime,
         current_age=ctx.current_age,
         guardrails=guardrails,
+        goal_funding_schedule=ctx.goal_funding_schedule,
     )
 
 
@@ -1670,12 +1827,19 @@ def _monte_carlo_decumulation_tool(
 ) -> dict[str, Any]:
     """``monte_carlo_decumulation`` — the primary decumulation simulation."""
     ctx = _prepare_monte_carlo(body, market, regime_engine)
-    return _run_monte_carlo(
+    result = _run_monte_carlo(
         ctx,
         initial_balance=ctx.initial_balance,
         net_spend_by_year=ctx.net_spend,
         guardrails=ctx.guardrails,
     )
+    if ctx.goal_funding_schedule:
+        result["goalFundingPolicy"] = {
+            "mode": "priority_then_earlier_year_then_input_order",
+            "basis": "path_level_priority_funding_after_base_spend_before_growth",
+        }
+        result["goalFundingSchedule"] = ctx.goal_funding_schedule
+    return result
 
 
 def _total_guaranteed_income(body: dict[str, Any]) -> float:
@@ -1751,7 +1915,7 @@ def _schedule_for(
     annual_contribution: float = 0.0,
 ) -> list[float]:
     """Rebuild the net-spend schedule with one field overridden (cheap; no network)."""
-    return _net_spend_schedule(
+    net_spend = _net_spend_schedule(
         current_age=ctx.current_age,
         retirement_age=ctx.retirement_age if retirement_age is None else retirement_age,
         years=ctx.years,
@@ -1760,6 +1924,7 @@ def _schedule_for(
         body=ctx.body,
         annual_contribution=annual_contribution,
     )
+    return net_spend
 
 
 def _round_solve_x(solve_for: str, x: float) -> float | int:
@@ -1945,6 +2110,13 @@ def _solve_goal_tool(
         ],
         "terminalValues": confirm["terminalValues"],
     }
+    if ctx.goal_funding_schedule:
+        response["goalFundingPolicy"] = {
+            "mode": "priority_then_earlier_year_then_input_order",
+            "basis": "path_level_priority_funding_after_base_spend_before_growth",
+        }
+        response["goalFundingSchedule"] = ctx.goal_funding_schedule
+        response["goalFunding"] = confirm.get("goalFunding")
     if solve_for in ("annual_contribution", "savings_rate"):
         # Accumulation modeled as a real in-engine inflow — an exact run, not an
         # FV approximation. Surfaced as an enum so the method is auditable.

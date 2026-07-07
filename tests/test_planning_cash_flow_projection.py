@@ -55,6 +55,106 @@ def test_structure_and_keys() -> None:
     assert row["phase"] == "accumulation"
 
 
+def test_multi_account_reconciles_single_bucket_with_identical_returns_no_penalties() -> None:
+    common = {
+        "current_age": 70,
+        "retirement_age": 65,
+        "terminal_age": 73,
+        "current_income": 0.0,
+        "retirement_income": 20_000.0,
+        "current_expenses": 55_000.0,
+        "current_portfolio": 200_000.0,
+        "filing_status": "single",
+        "expected_return": 0.04,
+        "expense_inflation_rate": 0.0,
+    }
+    single = _project(**common)
+    multi = _project(
+        **common,
+        account_balances={"taxable": 0.0, "traditional": 200_000.0, "roth": 0.0},
+        account_returns={"taxable": 0.04, "traditional": 0.04, "roth": 0.04},
+    )
+
+    assert len(single["years"]) == len(multi["years"])
+    for single_row, multi_row in zip(single["years"], multi["years"], strict=True):
+        assert multi_row["portfolioBalance"] == pytest.approx(single_row["portfolioBalance"])
+        assert multi_row["netWorth"] == pytest.approx(single_row["netWorth"])
+        assert multi_row["taxes"] == pytest.approx(single_row["taxes"])
+        assert multi_row["accountBalances"]["taxable"] >= 0.0
+        assert multi_row["accountBalances"]["traditional"] >= 0.0
+        assert multi_row["accountBalances"]["roth"] >= 0.0
+
+    assert multi["aggregate"]["endingPortfolio"] == pytest.approx(
+        single["aggregate"]["endingPortfolio"]
+    )
+    assert multi["aggregate"]["lifetimeEarlyWithdrawalPenalties"] == 0.0
+    assert multi["assumptions"]["withdrawalOrder"] == ["taxable", "traditional", "roth"]
+
+
+def test_multi_account_deficit_draws_taxable_first_then_traditional() -> None:
+    result = _project(
+        current_age=70,
+        retirement_age=65,
+        terminal_age=71,
+        current_income=0.0,
+        retirement_income=0.0,
+        current_expenses=75_000.0,
+        current_portfolio=250_000.0,
+        filing_status="single",
+        account_balances={"taxable": 20_000.0, "traditional": 230_000.0, "roth": 0.0},
+    )
+    y0 = result["years"][0]
+
+    assert y0["withdrawalsByAccount"]["taxable"] == pytest.approx(20_000.0)
+    assert y0["withdrawalsByAccount"]["traditional"] > 0.0
+    assert y0["withdrawalsByAccount"]["roth"] == 0.0
+    assert y0["accountBalances"]["taxable"] == pytest.approx(0.0)
+    assert y0["earlyWithdrawalPenalty"] == 0.0
+
+
+def test_multi_account_penalty_applies_before_59_half() -> None:
+    result = _project(
+        current_age=50,
+        retirement_age=45,
+        terminal_age=51,
+        current_income=0.0,
+        retirement_income=0.0,
+        current_expenses=40_000.0,
+        current_portfolio=120_000.0,
+        filing_status="single",
+        account_balances={"taxable": 0.0, "traditional": 120_000.0, "roth": 0.0},
+        early_withdrawal_penalty_rate=0.10,
+    )
+    y0 = result["years"][0]
+
+    assert y0["withdrawalsByAccount"]["traditional"] > 0.0
+    assert y0["ordinaryTaxes"] > 0.0
+    assert y0["earlyWithdrawalPenalty"] == pytest.approx(
+        round(y0["withdrawalsByAccount"]["traditional"] * 0.10, 2), abs=0.02
+    )
+    assert result["aggregate"]["lifetimeEarlyWithdrawalPenalties"] > 0.0
+
+
+def test_multi_account_roth_draw_is_not_ordinary_taxable() -> None:
+    result = _project(
+        current_age=70,
+        retirement_age=65,
+        terminal_age=71,
+        current_income=0.0,
+        retirement_income=0.0,
+        current_expenses=50_000.0,
+        current_portfolio=100_000.0,
+        filing_status="single",
+        account_balances={"taxable": 0.0, "traditional": 0.0, "roth": 100_000.0},
+    )
+    y0 = result["years"][0]
+
+    assert y0["withdrawalsByAccount"]["roth"] == pytest.approx(50_000.0)
+    assert y0["ordinaryTaxes"] == 0.0
+    assert y0["taxes"] == 0.0
+    assert result["assumptions"]["ordinaryTaxWithdrawalAccounts"] == ["traditional"]
+
+
 def test_accumulation_exact_arithmetic() -> None:
     # No growth/inflation/return: each working year nets income - tax - expenses,
     # saved into a non-growing portfolio, so it stacks linearly.
