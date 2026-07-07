@@ -19,7 +19,8 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-FilingStatus = Literal["single", "married_joint", "married_separate", "head_of_household"]
+from .tables import FilingStatus, TableError, reference_bracket_table
+
 AccountType = Literal["taxable", "traditional", "roth"]
 
 _FILING_STATUSES: tuple[FilingStatus, ...] = (
@@ -57,62 +58,6 @@ RMD_START_AGE_POLICY_VERSION = "secure2.0-goodfaith-73-per-89FR58644"
 # issued as of this policy date. policy_version:
 # "secure2.0-goodfaith-73-per-89FR58644".
 RmdStartAge = int | float
-
-#: 2025 standard deduction by filing status (illustrative basis).
-_STD_DEDUCTION: dict[FilingStatus, float] = {
-    "single": 15_000.0,
-    "married_joint": 30_000.0,
-    "married_separate": 15_000.0,
-    "head_of_household": 22_500.0,
-}
-
-#: Ordinary brackets: (upper_bound_of_bracket, marginal_rate); last is open-ended.
-_ORDINARY_BRACKETS: dict[FilingStatus, list[tuple[float, float]]] = {
-    "single": [
-        (11_925, 0.10),
-        (48_475, 0.12),
-        (103_350, 0.22),
-        (197_300, 0.24),
-        (250_525, 0.32),
-        (626_350, 0.35),
-        (float("inf"), 0.37),
-    ],
-    "married_joint": [
-        (23_850, 0.10),
-        (96_950, 0.12),
-        (206_700, 0.22),
-        (394_600, 0.24),
-        (501_050, 0.32),
-        (751_600, 0.35),
-        (float("inf"), 0.37),
-    ],
-    "married_separate": [
-        (11_925, 0.10),
-        (48_475, 0.12),
-        (103_350, 0.22),
-        (197_300, 0.24),
-        (250_525, 0.32),
-        (375_800, 0.35),
-        (float("inf"), 0.37),
-    ],
-    "head_of_household": [
-        (17_000, 0.10),
-        (64_850, 0.12),
-        (103_350, 0.22),
-        (197_300, 0.24),
-        (250_500, 0.32),
-        (626_350, 0.35),
-        (float("inf"), 0.37),
-    ],
-}
-
-#: Long-term capital-gains breakpoints: (0%_upper, 15%_upper); above ⇒ 20%.
-_LTCG_BREAKPOINTS: dict[FilingStatus, tuple[float, float]] = {
-    "single": (48_350, 533_400),
-    "married_joint": (96_700, 600_050),
-    "married_separate": (48_350, 300_000),
-    "head_of_household": (64_750, 566_700),
-}
 
 #: IRS Uniform Lifetime Table factors (2022+), ages 73..100. Beyond ⇒ last value.
 _RMD_FACTORS: dict[int, float] = {
@@ -188,14 +133,16 @@ def rmd_factor(age: int) -> float:
     return _rmd_factor(age)
 
 
-def ordinary_brackets(filing_status: FilingStatus) -> list[tuple[float, float]]:
+def ordinary_brackets(
+    filing_status: FilingStatus, *, year: int = 2026
+) -> list[tuple[float, float]]:
     """Progressive ordinary brackets ``(upper_bound, rate)`` in taxable-income space."""
-    return list(_ORDINARY_BRACKETS[filing_status])
+    return reference_bracket_table(year).brackets_for(filing_status)
 
 
-def standard_deduction(filing_status: FilingStatus) -> float:
+def standard_deduction(filing_status: FilingStatus, *, year: int = 2026) -> float:
     """Standard deduction for ``filing_status`` (illustrative current basis)."""
-    return _STD_DEDUCTION[filing_status]
+    return reference_bracket_table(year).standard_deduction[filing_status]
 
 
 def ordinary_tax(
@@ -204,6 +151,7 @@ def ordinary_tax(
     *,
     brackets: list[tuple[float, float]] | None = None,
     std_deduction: float | None = None,
+    year: int = 2026,
 ) -> float:
     """Progressive federal ordinary tax after the standard deduction.
 
@@ -211,8 +159,13 @@ def ordinary_tax(
     caller can inject a snapshot-able table (the composite Roth/IRMAA analysis
     does this); both default to the built-in current-basis values.
     """
-    ded = _STD_DEDUCTION[filing_status] if std_deduction is None else std_deduction
-    brk = _ORDINARY_BRACKETS[filing_status] if brackets is None else brackets
+    if brackets is None or std_deduction is None:
+        table = reference_bracket_table(year)
+        ded = table.standard_deduction[filing_status] if std_deduction is None else std_deduction
+        brk = table.brackets_for(filing_status) if brackets is None else brackets
+    else:
+        ded = std_deduction
+        brk = brackets
     taxable = max(0.0, income - ded)
     tax = 0.0
     lower = 0.0
@@ -225,11 +178,17 @@ def ordinary_tax(
     return tax
 
 
-def _ltcg_tax(gains: float, ordinary_income: float, filing_status: FilingStatus) -> float:
+def _ltcg_tax(
+    gains: float,
+    ordinary_income: float,
+    filing_status: FilingStatus,
+    *,
+    year: int,
+) -> float:
     """LTCG tax; rate selected by where ordinary income sits in the breakpoints."""
     if gains <= 0:
         return 0.0
-    zero_upper, fifteen_upper = _LTCG_BREAKPOINTS[filing_status]
+    zero_upper, fifteen_upper = reference_bracket_table(year).ltcg_breakpoints[filing_status]
     if ordinary_income < zero_upper:
         rate = 0.0
     elif ordinary_income < fifteen_upper:
@@ -260,6 +219,10 @@ def tax_aware_withdrawal(
     status: FilingStatus = filing_status
     if gross_need < 0:
         raise ValueError("grossNeed must be non-negative")
+    try:
+        tax_table = reference_bracket_table(year)
+    except TableError as exc:
+        raise ValueError(str(exc)) from exc
 
     balances: dict[str, float] = {"taxable": 0.0, "traditional": 0.0, "roth": 0.0}
     for account in accounts:
@@ -301,9 +264,11 @@ def tax_aware_withdrawal(
     #    taxable account's assumed gain fraction is LTCG; roth is tax-free.
     base = other_taxable_income
     trad = withdrawn["traditional"]
-    tax_traditional = ordinary_tax(base + trad, status) - ordinary_tax(base, status)
+    tax_traditional = ordinary_tax(base + trad, status, year=year) - ordinary_tax(
+        base, status, year=year
+    )
     gains = withdrawn["taxable"] * _TAXABLE_GAIN_FRACTION
-    tax_taxable = _ltcg_tax(gains, base + trad, status)
+    tax_taxable = _ltcg_tax(gains, base + trad, status, year=year)
 
     tax_by_type = {"taxable": tax_taxable, "traditional": tax_traditional, "roth": 0.0}
     rows = [
@@ -324,6 +289,8 @@ def tax_aware_withdrawal(
         "effectiveRate": round(effective_rate, 4),
         "rmdStartAge": start_age,
         "rmdStartAgePolicyVersion": RMD_START_AGE_POLICY_VERSION,
+        "taxTableYear": tax_table.year,
+        "taxTableVersion": tax_table.table_version,
         "rmdSatisfied": withdrawn["traditional"] + 1e-6 >= rmd,
     }
 

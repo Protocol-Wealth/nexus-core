@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .tables import reference_bracket_table
 from .tax import FilingStatus, ordinary_brackets, standard_deduction
 
 _INF = float("inf")
@@ -28,6 +29,7 @@ def bracket_headroom(
     target_rate: float | None = None,
     brackets: list[tuple[float, float]] | None = None,
     std_deduction: float | None = None,
+    year: int = 2026,
 ) -> dict[str, Any]:
     """Marginal bracket + room before the next rate (and optionally a target rate).
 
@@ -40,6 +42,8 @@ def bracket_headroom(
             built-in table (lets a caller inject a snapshot-able bracket table).
         std_deduction: Optional deduction overriding the built-in standard
             deduction (e.g. an itemized total or a senior-adjusted figure).
+        year: Registered federal tax-table year to use when ``brackets`` and/or
+            ``std_deduction`` are omitted.
 
     Returns:
         ``taxableIncome`` (after the standard deduction), ``marginalRate``, the
@@ -56,9 +60,17 @@ def bracket_headroom(
     if target_rate is not None and not 0.0 <= target_rate < 1.0:
         raise ValueError("target_rate must be in [0, 1)")
 
-    if brackets is None:
-        brackets = ordinary_brackets(filing_status)
-    deduction = standard_deduction(filing_status) if std_deduction is None else std_deduction
+    table_version = "caller-provided-unversioned"
+    if brackets is None or std_deduction is None:
+        table = reference_bracket_table(year)
+        table_version = table.table_version
+        if brackets is None:
+            brackets = ordinary_brackets(filing_status, year=year)
+        deduction = (
+            standard_deduction(filing_status, year=year) if std_deduction is None else std_deduction
+        )
+    else:
+        deduction = std_deduction
     taxable = max(0.0, taxable_income - deduction)
 
     floor = 0.0
@@ -80,6 +92,8 @@ def bracket_headroom(
         "bracketCeiling": None if ceiling == _INF else round(ceiling, 2),
         "roomToNextBracket": None if ceiling == _INF else round(ceiling - taxable, 2),
         "nextRate": next_rate,
+        "taxTableYear": year,
+        "taxTableVersion": table_version,
     }
 
     if target_rate is not None:

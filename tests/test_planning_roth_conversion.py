@@ -13,9 +13,7 @@ from nexus_core.engine.planning.tax import ordinary_tax
 def test_conversion_tax_is_the_incremental_ordinary_tax() -> None:
     """The conversion tax must equal the bracket-creep-aware incremental tax."""
     income, conversion = 100_000.0, 80_000.0
-    expected = ordinary_tax(income + conversion, "single") - ordinary_tax(
-        income, "single"
-    )
+    expected = ordinary_tax(income + conversion, "single") - ordinary_tax(income, "single")
     out = roth_conversion(
         current_taxable_income=income,
         filing_status="single",
@@ -26,6 +24,8 @@ def test_conversion_tax_is_the_incremental_ordinary_tax() -> None:
     )
     assert out["conversionTax"] == round(expected, 2)
     assert out["effectiveConversionRate"] == round(expected / conversion, 4)
+    assert out["taxTableYear"] == 2026
+    assert out["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
     # A large conversion stacking on income should creep past one flat bracket.
     assert out["effectiveConversionRate"] > 0.0
 
@@ -47,9 +47,7 @@ def test_single_bracket_conversion_hand_values() -> None:
     assert out["rothSeed"] == 7_800.0
     assert out["externalTaxPaidToday"] == 0.0
     assert out["convertedAfterTaxValue"] == pytest.approx(7_800.0 * factor, abs=0.01)
-    assert out["notConvertedAfterTaxValue"] == pytest.approx(
-        10_000.0 * factor * 0.76, abs=0.01
-    )
+    assert out["notConvertedAfterTaxValue"] == pytest.approx(10_000.0 * factor * 0.76, abs=0.01)
     # benefit = factor * amount * (retirement_rate - effective_rate)
     assert out["netBenefit"] == pytest.approx(10_000.0 * factor * 0.02, abs=0.01)
 
@@ -62,9 +60,7 @@ def test_breakeven_is_the_effective_conversion_rate() -> None:
         "growth_rate": 0.06,
         "years": 15,
     }
-    eff = roth_conversion(**base, retirement_marginal_rate=0.10)[
-        "breakevenRetirementRate"
-    ]
+    eff = roth_conversion(**base, retirement_marginal_rate=0.10)["breakevenRetirementRate"]
     # Above breakeven -> converting wins; below -> it loses; at it -> ~neutral.
     assert roth_conversion(**base, retirement_marginal_rate=eff + 0.05)["netBenefit"] > 0
     assert roth_conversion(**base, retirement_marginal_rate=eff - 0.05)["netBenefit"] < 0
@@ -89,14 +85,10 @@ def test_payment_mode_changes_seed_but_not_net_benefit() -> None:
     # Seed + today's cash differ between the modes...
     assert from_outside["rothSeed"] == 50_000.0
     assert from_outside["externalTaxPaidToday"] == from_outside["conversionTax"]
-    assert from_account["rothSeed"] == round(
-        50_000.0 - from_account["conversionTax"], 2
-    )
+    assert from_account["rothSeed"] == round(50_000.0 - from_account["conversionTax"], 2)
     assert from_account["externalTaxPaidToday"] == 0.0
     # ...but the net benefit is mode-invariant under the equal-growth assumption.
-    assert from_outside["netBenefit"] == pytest.approx(
-        from_account["netBenefit"], abs=0.01
-    )
+    assert from_outside["netBenefit"] == pytest.approx(from_account["netBenefit"], abs=0.01)
 
 
 def test_zero_years_is_present_value() -> None:

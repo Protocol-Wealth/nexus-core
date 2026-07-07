@@ -32,6 +32,12 @@ SECURE/SECURE 2.0 birth-year table, with age-only callers remaining compatible
 at the legacy age-73 default and birth-year-aware callers receiving the 1960+
 age-75 rule plus the documented 1959 good-faith age-73 treatment.
 
+Current source also centralizes illustrative federal tax and IRMAA reference
+tables behind a version-stamped provider registry. Tax-sensitive public tools
+fail closed for unregistered table years instead of silently reusing a stale
+basis, and outputs carry the table version needed for reproducible report
+manifests.
+
 The collar-book realistic-fill layer is part of current source. The engine plus
 REST/MCP parsers accept midpoint `net_credit` and optional executable pricing
 (`executable_net_credit` or `call_bid` minus `put_ask`) and return stock price,

@@ -38,8 +38,18 @@ def test_structure_and_keys() -> None:
     assert len(result["years"]) == 70 - 40 + 1
     row = result["years"][0]
     assert set(row) == {
-        "age", "year", "phase", "earnedIncome", "retirementIncome", "income",
-        "expenses", "taxes", "netCashFlow", "portfolioBalance", "liabilities", "netWorth",
+        "age",
+        "year",
+        "phase",
+        "earnedIncome",
+        "retirementIncome",
+        "income",
+        "expenses",
+        "taxes",
+        "netCashFlow",
+        "portfolioBalance",
+        "liabilities",
+        "netWorth",
     }
     assert row["age"] == 40
     assert row["phase"] == "accumulation"
@@ -92,9 +102,13 @@ def test_lifetime_tax_rollup() -> None:
 def test_already_retired_has_no_earned_income() -> None:
     # retirement_age below current_age => every projected year is retirement.
     result = _project(
-        current_age=70, retirement_age=65, terminal_age=73,
-        current_income=0.0, retirement_income=20_000.0,
-        current_expenses=60_000.0, current_portfolio=500_000.0,
+        current_age=70,
+        retirement_age=65,
+        terminal_age=73,
+        current_income=0.0,
+        retirement_income=20_000.0,
+        current_expenses=60_000.0,
+        current_portfolio=500_000.0,
     )
     for row in result["years"]:
         assert row["phase"] == "retirement"
@@ -109,9 +123,13 @@ def test_already_retired_has_no_earned_income() -> None:
 
 def test_retirement_income_cola_grows() -> None:
     result = _project(
-        current_age=66, retirement_age=65, terminal_age=68,
-        current_income=0.0, retirement_income=30_000.0,
-        current_expenses=20_000.0, current_portfolio=1_000_000.0,
+        current_age=66,
+        retirement_age=65,
+        terminal_age=68,
+        current_income=0.0,
+        retirement_income=30_000.0,
+        current_expenses=20_000.0,
+        current_portfolio=1_000_000.0,
         expense_inflation_rate=0.02,
     )
     incomes = [r["retirementIncome"] for r in result["years"]]
@@ -124,9 +142,13 @@ def test_deficit_withdrawal_is_grossed_up_for_tax() -> None:
     # A retired year where guaranteed income cannot cover spending: the withdrawal
     # must cover expenses AND the tax on the withdrawal itself.
     result = _project(
-        current_age=70, retirement_age=65, terminal_age=71,
-        current_income=0.0, retirement_income=20_000.0,
-        current_expenses=60_000.0, current_portfolio=2_000_000.0,
+        current_age=70,
+        retirement_age=65,
+        terminal_age=71,
+        current_income=0.0,
+        retirement_income=20_000.0,
+        current_expenses=60_000.0,
+        current_portfolio=2_000_000.0,
         filing_status="single",
     )
     y0 = result["years"][0]
@@ -140,9 +162,13 @@ def test_deficit_withdrawal_is_grossed_up_for_tax() -> None:
 
 def test_depletion_marks_age_and_floors_at_zero() -> None:
     result = _project(
-        current_age=80, retirement_age=65, terminal_age=85,
-        current_income=0.0, retirement_income=10_000.0,
-        current_expenses=80_000.0, current_portfolio=30_000.0,
+        current_age=80,
+        retirement_age=65,
+        terminal_age=85,
+        current_income=0.0,
+        retirement_income=10_000.0,
+        current_expenses=80_000.0,
+        current_portfolio=30_000.0,
         filing_status="single",
     )
     agg = result["aggregate"]
@@ -158,9 +184,13 @@ def test_post_depletion_tax_is_on_base_income_only() -> None:
     # on money that was never withdrawn (the regression: taxing the desired draw
     # post-depletion massively overstated lifetime tax + the effective rate).
     result = _project(
-        current_age=80, retirement_age=65, terminal_age=83,
-        current_income=0.0, retirement_income=40_000.0,
-        current_expenses=100_000.0, current_portfolio=50_000.0,
+        current_age=80,
+        retirement_age=65,
+        terminal_age=83,
+        current_income=0.0,
+        retirement_income=40_000.0,
+        current_expenses=100_000.0,
+        current_portfolio=50_000.0,
         filing_status="single",
     )
     y0, y1, y2, y3 = result["years"]
@@ -216,6 +246,8 @@ def test_assumptions_echoed() -> None:
     result = _project(income_growth_rate=0.04, expected_return=0.06)
     a = result["assumptions"]
     assert a["filingStatus"] == "married_joint"
+    assert a["taxTableYear"] == 2026
+    assert a["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
     assert a["incomeGrowthRate"] == pytest.approx(0.04)
     assert a["expectedReturn"] == pytest.approx(0.06)
     assert a["retirementIncomeGrowthRate"] == pytest.approx(a["expenseInflationRate"])
@@ -236,6 +268,7 @@ def test_determinism() -> None:
         ({"current_portfolio": -1.0}, "current_portfolio must be a finite non-negative"),
         ({"expected_return": -1.5}, "expected_return must be a finite number > -1"),
         ({"filing_status": "joint"}, "filing_status must be one of"),
+        ({"tax_year": 2027}, "no reference federal tax table registered"),
     ],
 )
 def test_validation_errors(overrides: dict[str, Any], fragment: str) -> None:

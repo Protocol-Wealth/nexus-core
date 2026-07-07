@@ -1026,6 +1026,14 @@ def test_analyze_roth_conversion_gateway() -> None:
     assert y0["recommended_amount"] > 0
     # reference tables were used (no caller injection) -> snapshot says so.
     assert body["snapshot"]["irmaa_table_source"] == "engine_reference"
+    assert (
+        "Federal tax table version: federal-income-tax-reference-2026-illustrative-v1."
+        in body["assumptions"]
+    )
+    assert (
+        "IRMAA table version: irmaa-reference-2025-married_joint-illustrative-v1."
+        in body["assumptions"]
+    )
     assert body["disclaimer"]  # disclaimer attached
 
 
@@ -1035,6 +1043,9 @@ def test_sequence_conversions_gateway() -> None:
     body = r.json()
     assert len(body["recommended_by_year"]) == 2
     assert body["total_recommended"] > 0
+    assert body["bracketTableYear"] == 2026
+    assert body["bracketTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
+    assert body["irmaaTableVersion"] == "irmaa-reference-2025-married_joint-illustrative-v1"
 
 
 def test_irmaa_headroom_gateway() -> None:

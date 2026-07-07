@@ -155,7 +155,11 @@ def analyze_roth_conversion(
         sequence=summary,
         do_nothing=do_nothing,
         snapshot=snapshot,
-        assumptions=_ASSUMPTIONS,
+        assumptions=_ASSUMPTIONS
+        + (
+            f"Federal tax table version: {bracket_table.table_version}.",
+            f"IRMAA table version: {irmaa_table.table_version}.",
+        ),
         disclaimer=MC_DISCLAIMER,
     )
 

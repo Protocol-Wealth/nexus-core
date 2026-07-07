@@ -43,6 +43,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from .tables import reference_bracket_table
 from .tax import FilingStatus, ordinary_tax
 
 #: DoS / sanity bounds for the public, unauthenticated surface.
@@ -68,6 +69,7 @@ def _withdrawal_and_tax(
     base_ordinary: float,
     expenses: float,
     filing_status: FilingStatus,
+    tax_year: int,
 ) -> tuple[float, float]:
     """Desired portfolio withdrawal + the year's federal ordinary tax.
 
@@ -77,18 +79,18 @@ def _withdrawal_and_tax(
     solve for the withdrawal that — grossed up for its own tax — makes
     ``base_ordinary + withdrawal − tax == expenses``.
     """
-    tax_no_draw = ordinary_tax(base_ordinary, filing_status)
+    tax_no_draw = ordinary_tax(base_ordinary, filing_status, year=tax_year)
     if base_ordinary - tax_no_draw >= expenses:
         return 0.0, tax_no_draw
     withdrawal = max(0.0, expenses - base_ordinary)
     for _ in range(_GROSS_UP_ITERS):
-        tax = ordinary_tax(base_ordinary + withdrawal, filing_status)
+        tax = ordinary_tax(base_ordinary + withdrawal, filing_status, year=tax_year)
         next_withdrawal = max(0.0, expenses - base_ordinary + tax)
         if abs(next_withdrawal - withdrawal) < 0.005:
             withdrawal = next_withdrawal
             break
         withdrawal = next_withdrawal
-    return withdrawal, ordinary_tax(base_ordinary + withdrawal, filing_status)
+    return withdrawal, ordinary_tax(base_ordinary + withdrawal, filing_status, year=tax_year)
 
 
 def project_cash_flow(
@@ -106,6 +108,7 @@ def project_cash_flow(
     retirement_income: float = 0.0,
     current_liabilities: float = 0.0,
     base_year: int | None = None,
+    tax_year: int = 2026,
 ) -> dict[str, Any]:
     """Year-by-year cash-flow + net-worth projection with a lifetime tax rollup.
 
@@ -130,6 +133,8 @@ def project_cash_flow(
             for the net-worth line (>= 0).
         base_year: Calendar year of ``current_age``; when given each row's
             ``year`` is the calendar year, else the 0-based index.
+        tax_year: Registered federal tax-table year used for ordinary-tax
+            calculations throughout the projection.
 
     Returns:
         ``years`` (per-year rows), ``aggregate`` (lifetime totals, peak/ending
@@ -183,7 +188,10 @@ def project_cash_flow(
             raise ValueError(f"{name} must be a finite number > -1")
     if base_year is not None and (isinstance(base_year, bool) or not isinstance(base_year, int)):
         raise ValueError("base_year must be an integer or omitted")
+    if isinstance(tax_year, bool) or not isinstance(tax_year, int):
+        raise ValueError("tax_year must be an integer")
 
+    tax_table = reference_bracket_table(tax_year)
     num_years = terminal_age - current_age + 1
     portfolio = float(current_portfolio)
     liabilities = float(current_liabilities)
@@ -203,9 +211,7 @@ def project_cash_flow(
         age = current_age + k
         retired = age >= retirement_age
         earned_income = 0.0 if retired else current_income * (1.0 + income_growth_rate) ** k
-        retire_income = (
-            retirement_income * (1.0 + expense_inflation_rate) ** k if retired else 0.0
-        )
+        retire_income = retirement_income * (1.0 + expense_inflation_rate) ** k if retired else 0.0
         base_ordinary = earned_income + retire_income
         expenses = current_expenses * (1.0 + expense_inflation_rate) ** k
 
@@ -213,6 +219,7 @@ def project_cash_flow(
             base_ordinary=base_ordinary,
             expenses=expenses,
             filing_status=filing_status,
+            tax_year=tax_year,
         )
 
         if withdrawal <= 0.0:
@@ -232,7 +239,7 @@ def project_cash_flow(
             if actual_withdrawal < withdrawal:
                 if depletion_age is None:
                     depletion_age = age
-                tax = ordinary_tax(base_ordinary + actual_withdrawal, filing_status)
+                tax = ordinary_tax(base_ordinary + actual_withdrawal, filing_status, year=tax_year)
             portfolio = (available - actual_withdrawal) * (1.0 + expected_return)
             net_cash_flow = -actual_withdrawal
             lifetime_withdrawals += actual_withdrawal
@@ -294,6 +301,8 @@ def project_cash_flow(
 
     assumptions = {
         "filingStatus": filing_status,
+        "taxTableYear": tax_table.year,
+        "taxTableVersion": tax_table.table_version,
         "incomeGrowthRate": round(income_growth_rate, 6),
         "expenseInflationRate": round(expense_inflation_rate, 6),
         "expectedReturn": round(expected_return, 6),

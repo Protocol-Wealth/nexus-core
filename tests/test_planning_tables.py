@@ -41,6 +41,7 @@ def test_bracket_table_round_trips_through_wire_form() -> None:
     assert parsed.brackets_for("single") == bt.brackets_for("single")
     assert math.isinf(parsed.brackets_for("single")[-1][0])  # top bracket preserved as inf
     assert parsed.standard_deduction == bt.standard_deduction
+    assert parsed.table_version == bt.table_version
     assert parsed.niit_threshold == bt.niit_threshold
     assert parsed.ss_provisional_thresholds == bt.ss_provisional_thresholds
 
@@ -50,12 +51,28 @@ def test_irmaa_table_round_trips_through_wire_form() -> None:
     parsed = IrmaaTable.from_dict(asdict(it))
     assert parsed.source_year == 2025
     assert parsed.filing_status == "married_joint"
+    assert parsed.table_version == it.table_version
     assert [t.magi_floor for t in parsed.tiers] == [t.magi_floor for t in it.tiers]
+
+
+def test_reference_bracket_table_rejects_unregistered_year() -> None:
+    with pytest.raises(TableError, match="no reference federal tax table registered"):
+        reference_bracket_table(2027)
+
+
+def test_reference_irmaa_table_rejects_unregistered_source_year() -> None:
+    with pytest.raises(TableError, match="no reference IRMAA table registered"):
+        reference_irmaa_table("single", 2026)
 
 
 def test_state_rule_from_dict() -> None:
     rule = StateConversionRule.from_dict(
-        {"state_code": "pa", "treatment": "exempt_retirement", "rate": 0.0307, "retirement_exempt_age": 59}
+        {
+            "state_code": "pa",
+            "treatment": "exempt_retirement",
+            "rate": 0.0307,
+            "retirement_exempt_age": 59,
+        }
     )
     assert rule.state_code == "PA"
     assert rule.treatment == "exempt_retirement"
@@ -85,7 +102,8 @@ def test_bracket_table_requires_open_ended_top_bracket() -> None:
             ),
             senior_bonus_deduction_per_senior=6_000.0,
             senior_bonus_phaseout=dict.fromkeys(
-                ("single", "married_joint", "married_separate", "head_of_household"), (75_000.0, 0.06)
+                ("single", "married_joint", "married_separate", "head_of_household"),
+                (75_000.0, 0.06),
             ),
             ltcg_breakpoints=dict.fromkeys(
                 ("single", "married_joint", "married_separate", "head_of_household"),
