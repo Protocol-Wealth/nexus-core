@@ -67,6 +67,13 @@ into a per-year stacked income timeline. Inputs are de-identified numeric
 assumptions and account-type buckets only; no labels, account IDs, raw
 transactions, or client records enter the public engine.
 
+Current source also adds the S3 historical-blend slice. `historical_blend`
+builds calendar-year returns, trailing 1/3/5/7/10-year windows, YTD and
+last-quarter non-annualized windows, growth-of-dollar, and annualized mean /
+sigma-band exhibits from aligned monthly public proxy returns. The wrapper
+sources public asset-class histories; the pure engine sees only de-identified
+return series and weights.
+
 The collar-book realistic-fill layer is part of current source. The engine plus
 REST/MCP parsers accept midpoint `net_credit` and optional executable pricing
 (`executable_net_credit` or `call_bid` minus `put_ask`) and return stock price,

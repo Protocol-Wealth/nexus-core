@@ -66,6 +66,28 @@ def test_derive_findings_partial_data_does_not_raise() -> None:
     # Missing fields just yield fewer bullets, never an exception.
     assert derive_findings("asset_allocation", {}) == []
     assert derive_findings("capital_market_assumptions", {"assetClasses": []}) == []
+    assert derive_findings("historical_blend", {"statistics": {}}) == []
+
+
+def test_derive_findings_historical_blend() -> None:
+    findings = derive_findings(
+        "historical_blend",
+        {
+            "months": 120,
+            "startMonth": "2016-04",
+            "endMonth": "2026-03",
+            "statistics": {"annualizedMean": 0.071, "annualizedVolatility": 0.122},
+        },
+    )
+
+    assert any(
+        "Hypothetical historical index-blend illustration covers 120 monthly returns" in finding
+        for finding in findings
+    )
+    assert any(
+        "Illustrative annualized historical blend return 7.1%" in finding and "12.2%" in finding
+        for finding in findings
+    )
 
 
 def test_assemble_report_orders_by_taxonomy() -> None:
@@ -146,9 +168,7 @@ def test_build_report_happy_path() -> None:
 
 
 def test_build_report_exclude_regime() -> None:
-    body = _build(
-        {"sections": [{"kind": "executive_summary"}], "includeRegime": False}
-    ).json()
+    body = _build({"sections": [{"kind": "executive_summary"}], "includeRegime": False}).json()
     assert "regime" not in body["report"]
     assert body["report"]["title"] == "Planning Analysis Report"  # default title
 

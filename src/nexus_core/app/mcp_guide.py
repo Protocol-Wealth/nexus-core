@@ -269,6 +269,7 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     <li><code>tax_aware_withdrawal</code> — RMD-first, tax-efficient withdrawal sequencing with optional birthYear policy</li>
     <li><code>correlation_matrix</code> — real-data return correlation across asset classes</li>
     <li><code>capital_market_assumptions</code> — forward return / volatility / correlation assumptions</li>
+    <li><code>historical_blend</code> — historical index-blend returns, trailing windows, growth-of-dollar, and sigma bands</li>
     <li><code>regime_return_generator</code> — live regime + transition matrix for path generation</li>
     <li><code>roth_conversion</code> — convert-now vs. leave-pre-tax after-tax comparison + breakeven rate</li>
     <li><code>sequence_of_returns_stress</code> — ordering effect on a fixed return set (worst/best/as-given)</li>

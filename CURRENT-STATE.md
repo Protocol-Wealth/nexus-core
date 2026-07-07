@@ -17,17 +17,17 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   bearer key opened the then-current 27-tool planning contract; hosted native `/mcp` keeps
   transparent OAuth active and exposes only the demo MCP tools
   `option_price`, `collar_book`, `health`, and `describe`.
-- **Last local update:** 2026-07-07 — current branch adds S8 planning-waterfall
-  support: `project_cash_flow` can optionally split the deterministic portfolio
-  into taxable / traditional / Roth buckets with a taxable-first withdrawal
-  waterfall, and `monte_carlo_decumulation` / `solve_goal` can optionally fold
-  priority-ordered de-identified goals into path-level funding. `main` also
-  adds S1 education funding, report-grade Monte Carlo diagnostics for Wealth
-  Roadmap consumers, centralizes the SECURE/SECURE 2.0 RMD start-age policy in
-  `tax.rmd_start_age`, centralizes illustrative federal tax/IRMAA reference
-  tables in a version-stamped provider registry, includes the Student-t Monte
-  Carlo covariance-scaling correction, the 2026-07-05 Slice 0/1/2 cash-flow
-  planning bridge work, collar-book executable-fill modeling, and the restricted
+- **Last local update:** 2026-07-07 — current branch adds the S3
+  `historical_blend` planning tool: public proxy histories are converted to
+  aligned monthly returns in the wrapper, while the pure engine emits
+  calendar-year returns, trailing windows, growth-of-dollar, and annualized
+  mean/sigma bands for Wealth Roadmap historical-context exhibits. `main` also
+  adds S1 education funding, S8 deterministic/Monte Carlo goal-waterfall
+  support, S2 income layering, report-grade Monte Carlo diagnostics for Wealth
+  Roadmap consumers, the SECURE/SECURE 2.0 RMD start-age policy kernel,
+  version-stamped federal tax/IRMAA reference tables, the Student-t Monte Carlo
+  covariance-scaling correction, the 2026-07-05 Slice 0/1/2 cash-flow planning
+  bridge work, collar-book executable-fill modeling, and the restricted
   REST/JSON access gate.
 - **Repo:** [github.com/Protocol-Wealth/nexus-core](https://github.com/Protocol-Wealth/nexus-core) — public, Apache-2.0
 - **Live:** [nexusmcp.site](https://nexusmcp.site) (Cloudflare → Cloud Run)
@@ -231,10 +231,10 @@ read-only with `readOnlyHint` + the educational disclaimer):
   `crypto_options_book_mtm` / `crypto_options_scenario`. Full overwriting + hedge
   suite is on BOTH the REST surface (`/api/options/crypto/{currency}/...`) and MCP.
 - **DeFi** — `defi_protocols`, `defi_protocol`, `defi_chains`
-- **Planning** (30 in current source; live deployment can lag source) — `monte_carlo_decumulation`, `solve_goal`, `analyze_goals`, `project_cash_flow`, `cashflow_planning_bridge`, `cash_reserve_analysis`, `budget_pacing_projection`, `education_funding`, `education_vehicle_rules`, `income_layering`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `fire`, `risk_metrics`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`
+- **Planning** (31 in current source; live deployment can lag source) — `monte_carlo_decumulation`, `solve_goal`, `analyze_goals`, `project_cash_flow`, `cashflow_planning_bridge`, `cash_reserve_analysis`, `budget_pacing_projection`, `education_funding`, `education_vehicle_rules`, `income_layering`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `historical_blend`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `fire`, `risk_metrics`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`
 - **Meta** — `health` (per-upstream status), `describe` (catalog + symbology + contract version)
 
-All 30 current-source planning tools are served both natively through MCP and via
+All 31 current-source planning tools are served both natively through MCP and via
 the REST/JSON gateway (`POST /api/planning/tools/{id}`) for browser/server
 callers — same handlers, contractVersion `0.1.0`. Legacy `/mcp/tools/{id}`
 aliases remain. The composite Roth/IRMAA case contract is
@@ -362,10 +362,10 @@ key is absent.
   draws are not ordinary income in multi-account mode. `monte_carlo_decumulation`
   and `solve_goal` can also accept de-identified `goals`, echo the generated
   `goalFundingSchedule`, and return per-goal path-level funding statistics.
-- **Planning surface now 30 tools in current source** — includes `solve_goal`,
+- **Planning surface now 31 tools in current source** — includes `solve_goal`,
   `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio,
   `education_funding`, `education_vehicle_rules`, `income_layering`,
-  `optimize_allocation`,
+  `historical_blend`, `optimize_allocation`,
   `build_planning_report`, and the composite Roth/IRMAA trio.
 - **Uniswap V3 owned-position enumeration** — `GET /api/lp/uniswap-v3/{chain}/positions?owner=`
   lists open positions before USD valuation.

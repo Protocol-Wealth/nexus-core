@@ -433,9 +433,128 @@ def income_layering_result_schema() -> dict[str, Any]:
     }
 
 
+def historical_blend_result_schema() -> dict[str, Any]:
+    """Draft-2020-12 JSON-Schema for the ``historical_blend`` wire result."""
+
+    rate_map = {"type": "object", "additionalProperties": _MONEY}
+    asset_class = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["id", "label", "weight"],
+        "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "weight": _MONEY},
+    }
+    calendar_row = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["year", "months", "return", "complete"],
+        "properties": {
+            "year": {"type": "integer"},
+            "months": {"type": "integer"},
+            "return": _MONEY,
+            "complete": {"type": "boolean"},
+        },
+    }
+    window_row = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["window", "months", "return", "annualized"],
+        "properties": {
+            "window": {"type": "string"},
+            "months": {"type": "integer"},
+            "return": _MONEY,
+            "annualized": {"type": "boolean"},
+        },
+    }
+    growth_row = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["month", "value"],
+        "properties": {"month": {"type": "string"}, "value": _MONEY},
+    }
+    sigma_bands = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["minus4Sigma", "minus2Sigma", "mean", "plus2Sigma", "plus4Sigma"],
+        "properties": {
+            "minus4Sigma": _MONEY,
+            "minus2Sigma": _MONEY,
+            "mean": _MONEY,
+            "plus2Sigma": _MONEY,
+            "plus4Sigma": _MONEY,
+        },
+    }
+    statistics_schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["annualizedMean", "annualizedVolatility", "sigmaBands"],
+        "properties": {
+            "annualizedMean": _MONEY,
+            "annualizedVolatility": _MONEY,
+            "sigmaBands": sigma_bands,
+        },
+    }
+    assumptions = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "incomeReinvested",
+            "feesTaxesCostsIncluded",
+            "directIndexInvestmentPossible",
+            "returnFrequency",
+        ],
+        "properties": {
+            "incomeReinvested": {"type": "boolean"},
+            "feesTaxesCostsIncluded": {"type": "boolean"},
+            "directIndexInvestmentPossible": {"type": "boolean"},
+            "returnFrequency": {"type": "string"},
+        },
+    }
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://nexusmcp.site/schemas/historical-blend-result-0.1.0.json",
+        "title": "HistoricalBlendResult",
+        "description": "PII-free output of the historical_blend planning tool.",
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "contractVersion",
+            "weights",
+            "rebalanceFrequency",
+            "months",
+            "startMonth",
+            "endMonth",
+            "calendarYearReturns",
+            "annualizedReturns",
+            "growthOfDollar",
+            "statistics",
+            "assumptions",
+            "disclaimer",
+            "asOf",
+            "assetClasses",
+        ],
+        "properties": {
+            "contractVersion": {"type": "string"},
+            "weights": rate_map,
+            "rebalanceFrequency": {"type": "string"},
+            "months": {"type": "integer"},
+            "startMonth": {"type": "string"},
+            "endMonth": {"type": "string"},
+            "calendarYearReturns": {"type": "array", "items": calendar_row},
+            "annualizedReturns": {"type": "array", "items": window_row},
+            "growthOfDollar": {"type": "array", "items": growth_row},
+            "statistics": statistics_schema,
+            "assumptions": assumptions,
+            "disclaimer": {"type": "string"},
+            "asOf": {"type": "string"},
+            "assetClasses": {"type": "array", "items": asset_class},
+        },
+    }
+
+
 __all__ = [
     "education_funding_result_schema",
     "education_vehicle_rules_result_schema",
+    "historical_blend_result_schema",
     "income_layering_result_schema",
     "roth_conversion_analysis_schema",
 ]

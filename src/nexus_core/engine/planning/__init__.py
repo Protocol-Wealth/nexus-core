@@ -49,6 +49,7 @@ from .goal_solve import (
     solve_monotone,
 )
 from .goals import GOAL_KINDS, analyze_goals
+from .historical_blend import HISTORICAL_BLEND_DISCLAIMER, historical_blend
 from .income_layering import IncomeStream, SocialSecurityIncome, income_layering
 from .irmaa import irmaa_headroom
 from .monte_carlo import GuardrailParams, monte_carlo_decumulation
@@ -57,6 +58,7 @@ from .regime_swr import regime_conditioned_swr
 from .result_schema import (
     education_funding_result_schema,
     education_vehicle_rules_result_schema,
+    historical_blend_result_schema,
     income_layering_result_schema,
     roth_conversion_analysis_schema,
 )
@@ -97,6 +99,7 @@ __all__ = [
     "EducationStudentResult",
     "EducationVehicleRule",
     "GlidePathShape",
+    "HISTORICAL_BLEND_DISCLAIMER",
     "InfeasiblePlanError",
     "IncomeStream",
     "IrmaaTable",
@@ -125,6 +128,8 @@ __all__ = [
     "education_savings_projection",
     "education_vehicle_rules_result_schema",
     "fire",
+    "historical_blend",
+    "historical_blend_result_schema",
     "irmaa_headroom",
     "income_layering",
     "income_layering_result_schema",
