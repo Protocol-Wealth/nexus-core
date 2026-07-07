@@ -192,13 +192,8 @@ def _multi_account_withdrawal_and_tax(
         return 0.0, 0.0, tax_no_draw, 0.0, dict.fromkeys(_ACCOUNT_TYPES, 0.0)
 
     desired = max(0.0, expenses - base_ordinary)
-    allocation = dict.fromkeys(_ACCOUNT_TYPES, 0.0)
-    actual = 0.0
-    ordinary = tax_no_draw
-    penalty = 0.0
     for _ in range(_GROSS_UP_ITERS):
         allocation = _allocate_withdrawal(balances, desired)
-        actual = sum(allocation.values())
         taxable_withdrawal = _selected_account_draw(
             allocation, _ORDINARY_TAXABLE_WITHDRAWAL_ACCOUNTS
         )
