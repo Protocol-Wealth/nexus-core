@@ -290,8 +290,152 @@ def education_vehicle_rules_result_schema() -> dict[str, Any]:
     }
 
 
+def income_layering_result_schema() -> dict[str, Any]:
+    """Draft-2020-12 JSON-Schema for the ``income_layering`` wire result."""
+
+    account_balances = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["taxable", "traditional", "roth"],
+        "properties": {"taxable": _MONEY, "traditional": _MONEY, "roth": _MONEY},
+    }
+    layer = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["source", "gross", "tax", "net"],
+        "properties": {
+            "source": {"type": "string"},
+            "gross": _MONEY,
+            "tax": _MONEY,
+            "net": _MONEY,
+        },
+    }
+    year = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "age",
+            "year",
+            "spendingTarget",
+            "layers",
+            "totalGross",
+            "totalTax",
+            "netIncome",
+            "gap",
+            "surplusAfterTax",
+            "effectiveTaxRate",
+            "endingAccountBalances",
+        ],
+        "properties": {
+            "age": {"type": "integer"},
+            "year": {"type": "integer"},
+            "spendingTarget": _MONEY,
+            "layers": {"type": "array", "items": layer},
+            "totalGross": _MONEY,
+            "totalTax": _MONEY,
+            "netIncome": _MONEY,
+            "gap": _MONEY,
+            "surplusAfterTax": _MONEY,
+            "effectiveTaxRate": _MONEY,
+            "endingAccountBalances": account_balances,
+            "bracketHeadroom": {"type": "object"},
+        },
+    }
+    source_total = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["gross", "tax", "net"],
+        "properties": {"gross": _MONEY, "tax": _MONEY, "net": _MONEY},
+    }
+    rollups = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "projectionYears",
+            "currentAge",
+            "terminalAge",
+            "retirementAge",
+            "totalSpendingTarget",
+            "totalGrossIncome",
+            "totalTax",
+            "totalNetIncome",
+            "totalGap",
+            "totalSurplusAfterTax",
+            "firstGapAge",
+            "startingAccountBalances",
+            "endingAccountBalances",
+            "sourceTotals",
+            "rmdStartAge",
+            "rmdStartAgePolicyVersion",
+        ],
+        "properties": {
+            "projectionYears": {"type": "integer"},
+            "currentAge": {"type": "integer"},
+            "terminalAge": {"type": "integer"},
+            "retirementAge": {"type": "integer"},
+            "totalSpendingTarget": _MONEY,
+            "totalGrossIncome": _MONEY,
+            "totalTax": _MONEY,
+            "totalNetIncome": _MONEY,
+            "totalGap": _MONEY,
+            "totalSurplusAfterTax": _MONEY,
+            "firstGapAge": {"type": ["integer", "null"]},
+            "startingAccountBalances": account_balances,
+            "endingAccountBalances": account_balances,
+            "sourceTotals": {"type": "object", "additionalProperties": source_total},
+            "rmdStartAge": _MONEY,
+            "rmdStartAgePolicyVersion": {"type": "string"},
+        },
+    }
+    assumptions = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "filingStatus",
+            "taxTableYear",
+            "taxTableVersion",
+            "spendingInflationRate",
+            "wageGrowthRate",
+            "expectedReturn",
+            "accountReturns",
+            "withdrawalOrder",
+            "socialSecurityClaimAge",
+            "socialSecurityFraAge",
+            "bracketFillTargetRate",
+        ],
+        "properties": {
+            "filingStatus": {"type": "string"},
+            "taxTableYear": {"type": "integer"},
+            "taxTableVersion": {"type": "string"},
+            "spendingInflationRate": _MONEY,
+            "wageGrowthRate": _MONEY,
+            "expectedReturn": _MONEY,
+            "accountReturns": account_balances,
+            "withdrawalOrder": _STRING_ARRAY,
+            "socialSecurityClaimAge": {"type": ["integer", "null"]},
+            "socialSecurityFraAge": {"type": ["integer", "null"]},
+            "bracketFillTargetRate": {"type": ["number", "null"]},
+        },
+    }
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://nexusmcp.site/schemas/income-layering-result-0.1.0.json",
+        "title": "IncomeLayeringResult",
+        "description": "PII-free output of the income_layering planning tool.",
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["years", "rollups", "assumptions"],
+        "properties": {
+            "years": {"type": "array", "items": year},
+            "rollups": rollups,
+            "assumptions": assumptions,
+        },
+    }
+
+
 __all__ = [
     "education_funding_result_schema",
     "education_vehicle_rules_result_schema",
+    "income_layering_result_schema",
     "roth_conversion_analysis_schema",
 ]

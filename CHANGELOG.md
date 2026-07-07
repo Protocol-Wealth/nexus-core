@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Income layering S2
+
+#### Added
+
+- Added the public-safe `income_layering` planning tool for deterministic
+  per-year stacked income timelines: earned income, Social Security,
+  pension/annuity streams, forced RMDs, tax-aware portfolio withdrawals, and
+  optional federal bracket-fill layering.
+- Added an `IncomeLayeringResult` JSON Schema and native-MCP/REST discovery
+  entries so consumers can render the Income Lab timeline without creating a
+  separate tax or RMD kernel.
+
 ### Multi-account waterfall S8
 
 #### Added

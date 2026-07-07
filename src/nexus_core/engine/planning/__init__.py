@@ -49,6 +49,7 @@ from .goal_solve import (
     solve_monotone,
 )
 from .goals import GOAL_KINDS, analyze_goals
+from .income_layering import IncomeStream, SocialSecurityIncome, income_layering
 from .irmaa import irmaa_headroom
 from .monte_carlo import GuardrailParams, monte_carlo_decumulation
 from .rebalance import rebalance
@@ -56,6 +57,7 @@ from .regime_swr import regime_conditioned_swr
 from .result_schema import (
     education_funding_result_schema,
     education_vehicle_rules_result_schema,
+    income_layering_result_schema,
     roth_conversion_analysis_schema,
 )
 from .risk_metrics import risk_metrics
@@ -96,6 +98,7 @@ __all__ = [
     "EducationVehicleRule",
     "GlidePathShape",
     "InfeasiblePlanError",
+    "IncomeStream",
     "IrmaaTable",
     "IrmaaTier",
     "PlanningContract",
@@ -103,6 +106,7 @@ __all__ = [
     "RothConversionAnalysis",
     "SolvePoint",
     "SolveResult",
+    "SocialSecurityIncome",
     "StateConversionRule",
     "analyze_goals",
     "analyze_roth_conversion",
@@ -122,6 +126,8 @@ __all__ = [
     "education_vehicle_rules_result_schema",
     "fire",
     "irmaa_headroom",
+    "income_layering",
+    "income_layering_result_schema",
     "monte_carlo_decumulation",
     "planning_contract_schema",
     "portfolio_xray",

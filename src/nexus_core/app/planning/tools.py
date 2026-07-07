@@ -31,7 +31,9 @@ from ...engine.planning import (
     EducationStudentCase,
     GlidePathShape,
     GuardrailParams,
+    IncomeStream,
     InfeasiblePlanError,
+    SocialSecurityIncome,
     SolveResult,
     analyze_goals,
     analyze_roth_conversion,
@@ -44,6 +46,7 @@ from ...engine.planning import (
     education_funding,
     education_result_to_wire,
     fire,
+    income_layering,
     irmaa_headroom,
     monte_carlo_decumulation,
     portfolio_xray,
@@ -529,6 +532,130 @@ def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
                 body, "earlyWithdrawalPenaltyRate", 0.10
             ),
         )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def _parse_social_security_income(body: dict[str, Any]) -> SocialSecurityIncome | None:
+    value = body.get("socialSecurity")
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise PlanningInputError("socialSecurity must be an object or omitted")
+    allowed = {"piaMonthly", "claimAge", "fraAge", "colaRate"}
+    extra = set(value) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"socialSecurity only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
+        )
+    try:
+        fra_age = _optional_int(value, "fraAge")
+        return SocialSecurityIncome(
+            pia_monthly=_as_number(value, "piaMonthly"),
+            claim_age=_as_int(value, "claimAge"),
+            fra_age=67 if fra_age is None else fra_age,
+            cola_rate=_optional_number(value, "colaRate", 0.0),
+        )
+    except PlanningInputError:
+        raise
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def _parse_income_streams(body: dict[str, Any]) -> tuple[IncomeStream, ...]:
+    value = body.get("incomeStreams", [])
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise PlanningInputError("incomeStreams must be a list or omitted")
+    allowed = {"kind", "annualAmount", "startAge", "endAge", "colaRate"}
+    streams: list[IncomeStream] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise PlanningInputError(f"incomeStreams[{index}] must be an object")
+        extra = set(item) - allowed
+        if extra:
+            raise PlanningInputError(
+                f"incomeStreams[{index}] only accepts {', '.join(sorted(allowed))}; "
+                f"got {sorted(extra)}"
+            )
+        kind = _as_str(item, "kind")
+        if kind not in {"pension", "annuity"}:
+            raise PlanningInputError(f"incomeStreams[{index}].kind must be pension or annuity")
+        streams.append(
+            IncomeStream(
+                kind=cast(Any, kind),
+                annual_amount=_as_number(item, "annualAmount"),
+                start_age=_as_int(item, "startAge"),
+                end_age=_optional_int(item, "endAge"),
+                cola_rate=_optional_number(item, "colaRate", 0.0),
+            )
+        )
+    return tuple(streams)
+
+
+def income_layering_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``income_layering`` — year-by-year stacked retirement income timeline."""
+    allowed = {
+        "contractVersion",
+        "currentAge",
+        "terminalAge",
+        "spendingTarget",
+        "retirementAge",
+        "earnedIncome",
+        "wageGrowthRate",
+        "spendingInflationRate",
+        "filingStatus",
+        "taxYear",
+        "baseYear",
+        "socialSecurity",
+        "incomeStreams",
+        "accountBalances",
+        "accountReturns",
+        "expectedReturn",
+        "bracketFillTargetRate",
+        "birthYear",
+    }
+    extra = set(body) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"income_layering only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
+        )
+    filing_status = body.get("filingStatus", "married_joint")
+    if not isinstance(filing_status, str):
+        raise PlanningInputError("filingStatus must be a string or omitted")
+    base_year = body.get("baseYear")
+    if base_year is not None and (isinstance(base_year, bool) or not isinstance(base_year, int)):
+        raise PlanningInputError("baseYear must be an integer or omitted")
+    tax_year = _optional_int(body, "taxYear")
+    retirement_age = _optional_int(body, "retirementAge")
+    bracket_fill = body.get("bracketFillTargetRate")
+    if bracket_fill is not None and (
+        isinstance(bracket_fill, bool) or not isinstance(bracket_fill, (int, float))
+    ):
+        raise PlanningInputError("bracketFillTargetRate must be a number or omitted")
+    try:
+        return income_layering(
+            current_age=_as_int(body, "currentAge"),
+            terminal_age=_as_int(body, "terminalAge"),
+            spending_target=_as_number(body, "spendingTarget"),
+            retirement_age=retirement_age,
+            earned_income=_optional_number(body, "earnedIncome", 0.0),
+            wage_growth_rate=_optional_number(body, "wageGrowthRate", 0.03),
+            spending_inflation_rate=_optional_number(body, "spendingInflationRate", 0.025),
+            filing_status=cast(Any, filing_status),
+            tax_year=2026 if tax_year is None else tax_year,
+            base_year=base_year,
+            social_security=_parse_social_security_income(body),
+            income_streams=_parse_income_streams(body),
+            account_balances=_optional_number_map(body, "accountBalances"),
+            account_returns=_optional_number_map(body, "accountReturns"),
+            expected_return=_optional_number(body, "expectedReturn", 0.05),
+            bracket_fill_target_rate=float(bracket_fill) if bracket_fill is not None else None,
+            birth_year=_optional_int(body, "birthYear"),
+        )
+    except InfeasiblePlanError as exc:
+        raise PlanningInfeasibleError(str(exc)) from exc
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
 
@@ -2311,6 +2438,7 @@ def build_tool_handlers(
         "budget_pacing_projection": budget_pacing_projection_tool,
         "education_funding": education_funding_tool,
         "education_vehicle_rules": education_vehicle_rules_tool,
+        "income_layering": income_layering_tool,
         "glide_path": glide_path_tool,
         "tax_aware_withdrawal": tax_aware_withdrawal_tool,
         "correlation_matrix": correlation_matrix_tool,
@@ -2344,6 +2472,7 @@ __all__ = [
     "cashflow_planning_bridge_tool",
     "education_funding_tool",
     "education_vehicle_rules_tool",
+    "income_layering_tool",
     "fire_tool",
     "glide_path_tool",
     "irmaa_headroom_tool",

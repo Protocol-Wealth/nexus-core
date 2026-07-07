@@ -86,6 +86,12 @@ re-smoked._
   year, input order, and funding-year index, then the engine funds them
   path-by-path after base spending and before growth, echoing
   `goalFundingSchedule` and per-goal funding statistics.
+- **Current S2 income-layering state:** `income_layering` composes earned income,
+  Social Security, pension/annuity streams, forced RMDs, tax-aware withdrawals,
+  and optional bracket-fill analysis into a stacked per-year income timeline.
+  Inputs are numeric assumptions and account-type buckets only; private labels,
+  account identifiers, raw transactions, approvals, and release/audit state stay
+  outside the public repo.
 
 ## Before you commit (the gate — mirrors CI)
 

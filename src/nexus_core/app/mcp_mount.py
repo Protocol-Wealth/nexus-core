@@ -121,6 +121,14 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "comparison table for a tax year, including gift-exclusion and "
         "Coverdell phaseout fields. JSON request object in `body`."
     ),
+    "income_layering": (
+        "Income layering: deterministic per-year stacked income timeline filling "
+        "a spending target with earned income, Social Security, pension/annuity "
+        "streams, forced RMDs, and tax-aware portfolio withdrawals. Optional "
+        "bracket-fill shows additional traditional withdrawals up to a target "
+        "federal marginal rate. De-identified numeric inputs only. JSON request "
+        "object in `body`."
+    ),
     "glide_path": "Equity-weight glide path by age across the horizon. JSON request object in `body`.",
     "tax_aware_withdrawal": (
         "RMD-first, tax-efficient withdrawal sequencing with optional birthYear "
@@ -285,10 +293,10 @@ def build_configured_server(
     the EMF ``score_asset`` (sharing the REST ``/api/score`` context builder +
     framework, so MCP and REST return identical scores), market quotes/history,
     FRED economic series, DefiLlama TVL, the options pricing/overlay + Deribit
-    crypto-option tools, and the 29 planning tools (monte_carlo_decumulation,
+    crypto-option tools, and the 30 planning tools (monte_carlo_decumulation,
     solve_goal, analyze_goals, project_cash_flow, cashflow_planning_bridge,
     cash_reserve_analysis, budget_pacing_projection, education_funding,
-    education_vehicle_rules, glide_path, tax_aware_withdrawal,
+    education_vehicle_rules, income_layering, glide_path, tax_aware_withdrawal,
     correlation_matrix,
     regime_return_generator,
     capital_market_assumptions, roth_conversion, sequence_of_returns_stress, rmd,

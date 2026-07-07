@@ -216,7 +216,7 @@ def test_planning_response_carries_disclaimer() -> None:
 def test_list_tools_version_handshake() -> None:
     body = _list_gateway_tools()
     assert body["contractVersion"] == CONTRACT_VERSION
-    assert len(body["tools"]) == 29
+    assert len(body["tools"]) == 30
     assert "glide_path" in body["tools"]
     assert "correlation_matrix" in body["tools"]
     assert "capital_market_assumptions" in body["tools"]
@@ -242,6 +242,7 @@ def test_list_tools_version_handshake() -> None:
     assert "budget_pacing_projection" in body["tools"]
     assert "education_funding" in body["tools"]
     assert "education_vehicle_rules" in body["tools"]
+    assert "income_layering" in body["tools"]
 
 
 _MC_PAYLOAD: dict[str, Any] = {
