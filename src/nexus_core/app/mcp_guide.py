@@ -185,7 +185,7 @@ nexus-core mcp        # MCP server over stdio</code></pre>
     <tr><td>Options</td><td>Black-Scholes price + Greeks; covered-call / cash-secured-put / collar overlays</td></tr>
     <tr><td>Crypto options</td><td>Deribit instruments + IV/Greeks (BTC, ETH, SOL, XRP, TRX, AVAX)</td></tr>
     <tr><td>DeFi</td><td>DefiLlama TVL by protocol and chain</td></tr>
-    <tr><td>Planning</td><td>32 PII-free tools: Monte Carlo, goal funding, deterministic cash flow, education, income layering, risk profile scoring, allocation optimization, Roth/IRMAA, report assembly</td></tr>
+    <tr><td>Planning</td><td>33 PII-free tools: Monte Carlo, goal funding, deterministic cash flow, education, income layering, risk profile scoring, allocation optimization, performance math, Roth/IRMAA, report assembly</td></tr>
   </table>
   <p>
     Everything is read-only, public, and educational — no side effects, no
@@ -282,6 +282,7 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     <li><code>risk_profile_score</code> — fixed-question risk questionnaire → optimizer-compatible riskProfile</li>
     <li><code>fire</code> — FIRE / Coast-FIRE calculator</li>
     <li><code>risk_metrics</code> — annualized return/volatility, Sharpe, Sortino, drawdown, VaR/CVaR</li>
+    <li><code>performance_analysis</code> — TWR, MWR/XIRR, fee drag, and benchmark-relative return math</li>
     <li><code>rebalance</code> — target-vs-current drift and self-financing trade list</li>
     <li><code>irmaa_headroom</code> — projected Medicare IRMAA headroom</li>
     <li><code>analyze_roth_conversion</code> — composite Roth conversion analysis under tax + IRMAA ceilings</li>

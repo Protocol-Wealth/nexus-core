@@ -180,7 +180,7 @@ nexus-core --version
 | `/api/solana/price/{mint}`, `/api/solana/prices?mints=` | Solana SPL token USD prices (Jupiter v3, keyless — no API key) |
 | `/api/benchmarks`, `/api/benchmarks/series?days=`, `/api/benchmarks/history?days=` | Base-100 hold-strategy returns (BTC/ETH/SOL + ETH-USDC 50/50,60/40,70/30 + ETH-BTC 50/50; USDC held at $1; buy-and-hold). `/series` on-demand from CoinGecko; `/history` from persisted daily snapshots |
 | `/api/usage` | Provider usage/quota report (non-sensitive; no keys, no client data) |
-| `/mcp` | MCP-over-HTTP transport (FastMCP) — exempt from the rate limiter. Full mode registers research tools + `health`/`describe`/`get_quotes`, the current-source 32 planning tools, and equity options helpers including `collar_book`; demo mode registers closed-world demo tools only. Every tool is `readOnlyHint` + carries the disclaimer |
+| `/mcp` | MCP-over-HTTP transport (FastMCP) — exempt from the rate limiter. Full mode registers research tools + `health`/`describe`/`get_quotes`, the current-source 33 planning tools, and equity options helpers including `collar_book`; demo mode registers closed-world demo tools only. Every tool is `readOnlyHint` + carries the disclaimer |
 | `/api/planning/tools`, `POST /api/planning/tools/{id}` | Planning JSON gateway (pw-api / pwplan-core contractVersion `0.1.0`, PII-free). Legacy `/mcp/tools` aliases remain |
 | `/docs`, `/openapi.json`, `/mcp-guide`, `/llms.txt`, `/.well-known/security.txt` | OpenAPI (servers + tags), MCP setup guide, agent site map, RFC 9116 disclosure |
 

@@ -119,6 +119,7 @@ def test_mcp_guide_documents_pwplan_core_integration() -> None:
         "risk_profile_score",
         "fire",
         "risk_metrics",
+        "performance_analysis",
         "rebalance",
         "irmaa_headroom",
         "analyze_roth_conversion",

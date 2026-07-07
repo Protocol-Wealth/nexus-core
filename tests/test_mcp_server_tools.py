@@ -195,6 +195,7 @@ _PLANNING_TOOL_IDS = {
     "risk_profile_score",
     "fire",
     "risk_metrics",
+    "performance_analysis",
     "rebalance",
     "irmaa_headroom",
     "analyze_roth_conversion",

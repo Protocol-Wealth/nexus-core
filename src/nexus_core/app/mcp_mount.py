@@ -226,6 +226,12 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "max drawdown, and historical VaR/CVaR for a supplied periodic return "
         "series. JSON request object in `body`."
     ),
+    "performance_analysis": (
+        "Composite public-safe performance math: time-weighted return, "
+        "money-weighted return/XIRR, fee drag, and benchmark-relative return "
+        "deltas from de-identified numeric series. Illustration only, not advice. "
+        "JSON request object in `body`."
+    ),
     "rebalance": (
         "Rebalance-to-target: per-asset drift from target weights and the "
         "self-financing trade list (with one-way turnover) for the blended "
@@ -311,7 +317,7 @@ def build_configured_server(
     the EMF ``score_asset`` (sharing the REST ``/api/score`` context builder +
     framework, so MCP and REST return identical scores), market quotes/history,
     FRED economic series, DefiLlama TVL, the options pricing/overlay + Deribit
-    crypto-option tools, and the 32 planning tools (monte_carlo_decumulation,
+    crypto-option tools, and the 33 planning tools (monte_carlo_decumulation,
     solve_goal, analyze_goals, project_cash_flow, cashflow_planning_bridge,
     cash_reserve_analysis, budget_pacing_projection, education_funding,
     education_vehicle_rules, income_layering, glide_path, tax_aware_withdrawal,
@@ -320,7 +326,8 @@ def build_configured_server(
     regime_return_generator,
     capital_market_assumptions, roth_conversion, sequence_of_returns_stress, rmd,
     tax_bracket_headroom, social_security_claiming, regime_conditioned_swr,
-    portfolio_xray, optimize_allocation, risk_profile_score, fire, risk_metrics, rebalance, the
+    portfolio_xray, optimize_allocation, risk_profile_score, fire, risk_metrics,
+    performance_analysis, rebalance, the
     composite Roth/IRMAA trio analyze_roth_conversion, sequence_conversions,
     irmaa_headroom, plus build_planning_report) — the same handlers the REST
     planning gateway serves, so the MCP transport and ``POST /mcp/tools/{id}``

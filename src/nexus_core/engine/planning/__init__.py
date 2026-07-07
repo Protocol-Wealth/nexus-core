@@ -53,6 +53,16 @@ from .historical_blend import HISTORICAL_BLEND_DISCLAIMER, historical_blend
 from .income_layering import IncomeStream, SocialSecurityIncome, income_layering
 from .irmaa import irmaa_headroom
 from .monte_carlo import GuardrailParams, monte_carlo_decumulation
+from .performance import (
+    FlowTiming,
+    MwrCashFlow,
+    TwrPeriod,
+    benchmark_relative,
+    fee_drag,
+    money_weighted_return,
+    performance_analysis,
+    time_weighted_return,
+)
 from .rebalance import rebalance
 from .regime_swr import regime_conditioned_swr
 from .result_schema import (
@@ -60,6 +70,7 @@ from .result_schema import (
     education_vehicle_rules_result_schema,
     historical_blend_result_schema,
     income_layering_result_schema,
+    performance_analysis_result_schema,
     risk_profile_result_schema,
     roth_conversion_analysis_schema,
 )
@@ -121,12 +132,14 @@ __all__ = [
     "EducationStudentCase",
     "EducationStudentResult",
     "EducationVehicleRule",
+    "FlowTiming",
     "GlidePathShape",
     "HISTORICAL_BLEND_DISCLAIMER",
     "InfeasiblePlanError",
     "IncomeStream",
     "IrmaaTable",
     "IrmaaTier",
+    "MwrCashFlow",
     "PlanningContract",
     "PlanningContractError",
     "RISK_BANDS",
@@ -145,8 +158,10 @@ __all__ = [
     "StateRetirementExclusionBand",
     "StateTaxEstimate",
     "StateTaxRule",
+    "TwrPeriod",
     "analyze_goals",
     "analyze_roth_conversion",
+    "benchmark_relative",
     "bracket_headroom",
     "budget_pacing_projection",
     "compute_glide_path",
@@ -164,13 +179,17 @@ __all__ = [
     "fire",
     "estimate_state_income_tax",
     "estimate_state_income_tax_components",
+    "fee_drag",
     "historical_blend",
     "historical_blend_result_schema",
     "household_social_security_benefits",
     "irmaa_headroom",
     "income_layering",
     "income_layering_result_schema",
+    "money_weighted_return",
     "monte_carlo_decumulation",
+    "performance_analysis",
+    "performance_analysis_result_schema",
     "planning_contract_schema",
     "portfolio_xray",
     "project_cash_flow",
@@ -198,4 +217,5 @@ __all__ = [
     "state_code_for_year",
     "state_tax_notes",
     "tax_aware_withdrawal",
+    "time_weighted_return",
 ]
