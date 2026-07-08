@@ -370,6 +370,8 @@ def inherited_ira_analysis(
     return {
         "taxYear": tax_year,
         "taxTableVersion": table.table_version,
+        "taxTableSource": table.source,
+        "taxTableLastVerified": table.last_verified,
         "yearsRemaining": years_remaining,
         "beneficiaryClassification": classification,
         "carveOuts": list(inherited_ira_beneficiary_carveouts()),
@@ -390,6 +392,8 @@ def inherited_ira_analysis(
             "targetRate": _rate(target_rate),
             "distributionTiming": "end_of_year_for_equal_and_smoothed; immediate_year_1_for_lump_sum",
             "taxScope": "federal_ordinary_income_only",
+            "taxTableSource": table.source,
+            "taxTableLastVerified": table.last_verified,
             "annualRmdScope": (
                 "strategy comparison only; this v1 does not calculate separate "
                 "beneficiary life-expectancy annual RMD compliance amounts for "

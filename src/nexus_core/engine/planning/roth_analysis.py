@@ -140,11 +140,20 @@ def analyze_roth_conversion(
         contract_version=PLANNING_CONTRACT_VERSION,
         bracket_table_year=bracket_table.year,
         bracket_table_source=bracket_table_source,
+        bracket_table_version=bracket_table.table_version,
+        bracket_table_reference_source=bracket_table.source,
+        bracket_table_last_verified=bracket_table.last_verified,
         irmaa_tiers_source_year=irmaa_table.source_year,
         irmaa_inflation_assumption=irmaa_inflation,
         irmaa_buffer=irmaa_buffer,
         irmaa_table_source=irmaa_table_source,
+        irmaa_table_version=irmaa_table.table_version,
+        irmaa_table_reference_source=irmaa_table.source,
+        irmaa_table_last_verified=irmaa_table.last_verified,
         state_rule_source=("none" if state_rule is None else state_rule_source),
+        state_rule_table_version=None if state_rule is None else state_rule.table_version,
+        state_rule_reference_source=None if state_rule is None else state_rule.source,
+        state_rule_last_verified=None if state_rule is None else state_rule.last_verified,
     )
     return RothConversionAnalysis(
         contract_version=PLANNING_CONTRACT_VERSION,
@@ -158,7 +167,11 @@ def analyze_roth_conversion(
         assumptions=_ASSUMPTIONS
         + (
             f"Federal tax table version: {bracket_table.table_version}.",
+            f"Federal tax table source: {bracket_table.source}; last verified "
+            f"{bracket_table.last_verified or 'caller-provided'}.",
             f"IRMAA table version: {irmaa_table.table_version}.",
+            f"IRMAA table source: {irmaa_table.source}; last verified "
+            f"{irmaa_table.last_verified or 'caller-provided'}.",
         ),
         disclaimer=MC_DISCLAIMER,
     )

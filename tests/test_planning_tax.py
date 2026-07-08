@@ -156,6 +156,10 @@ def test_state_tax_exposes_federal_and_state_split() -> None:
     assert r["stateCode"] == "PA"
     assert r["stateTaxModeled"] is True
     assert r["stateTax"] == pytest.approx(2_456.0)
+    assert r["taxTableSource"].startswith("IRS Rev. Proc.")
+    assert r["taxTableLastVerified"] == "2026-07-08"
+    assert r["stateTaxTableSource"].startswith("Pennsylvania Department")
+    assert r["stateTaxTableLastVerified"] == "2026-07-08"
     assert trad["stateTax"] == pytest.approx(2_456.0)
     assert trad["federalTax"] > 0.0
     assert trad["tax"] == pytest.approx(trad["federalTax"] + trad["stateTax"])

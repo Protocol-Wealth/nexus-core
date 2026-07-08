@@ -342,7 +342,7 @@ def _body_opt_int(body: dict[str, Any], key: str, *, default: int) -> int:
         return default
     if isinstance(value, bool) or not isinstance(value, int):
         raise HTTPException(status_code=400, detail=f"'{key}' must be a whole number or omitted")
-    return value
+    return cast(int, value)
 
 
 def _body_opt_str(body: dict[str, Any], key: str) -> str | None:

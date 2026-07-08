@@ -298,17 +298,14 @@ monthly-close aggregates only. Future `pwplan-core` work should consume syntheti
 or de-identified outputs from these tools and must still keep real ingestion,
 household workflow, approvals, release state, and audit trails private.
 
-**Next planning build — assumptions provenance (open issue #198; decided
-2026-06-04).** Tag every
-reference assumption with its origin + freshness: add a `source` (where the figure came
-from — e.g. the IRS Rev. Proc. / CMS notice + citation) and a `last_verified` date to
-each `reference_*` table factory (`engine/planning/tables.py`), surface them in the
-result `snapshot`, and expose them so an advisor/client can validate or update a figure
-when a newer one is published. The engine already keeps the REAL numbers and supports
-caller-injected tables (`*_source = caller_provided`); this adds the provenance +
-last-analyzed metadata on the reference path. **Firm-wide standard: every assumption
-marks where it came from and when it was last analyzed** (additive — a v1.2.0 minor on
-the `snapshot` shape).
+**Assumptions provenance — done in current source (#198).** Built-in reference
+assumptions now carry origin + freshness metadata: federal tax, IRMAA, education
+vehicle, simplified state conversion/state-tax, and ACA reference factories expose
+`source` plus `last_verified`, and report-facing outputs surface matching
+`*Source` / `*LastVerified` fields next to their table-version stamps. Caller-
+injected tables stay supported and are distinguished as `caller_provided`. This
+is additive manifest metadata only; private report production, approvals, release
+state, client context, and audit trails remain outside nexus-core.
 
 **LP/indexer expansion and data quality — open issue #199.**
 

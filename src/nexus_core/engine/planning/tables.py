@@ -93,6 +93,8 @@ class BracketTable:
     niit_rate: float = 0.038
     senior_age: int = 65
     table_version: str = "caller-provided-unversioned"
+    source: str = "caller_provided"
+    last_verified: str | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -159,6 +161,12 @@ class BracketTable:
             table_version=str(
                 d.get("table_version", d.get("tableVersion", "caller-provided-unversioned"))
             ),
+            source=str(d.get("source", "caller_provided")),
+            last_verified=(
+                None
+                if d.get("last_verified", d.get("lastVerified")) is None
+                else str(d.get("last_verified", d.get("lastVerified")))
+            ),
         )
 
     def total_deduction(
@@ -209,6 +217,8 @@ class IrmaaTable:
     filing_status: FilingStatus
     tiers: list[IrmaaTier]
     table_version: str = "caller-provided-unversioned"
+    source: str = "caller_provided"
+    last_verified: str | None = None
 
     def __post_init__(self) -> None:
         if not self.tiers:
@@ -241,6 +251,12 @@ class IrmaaTable:
             table_version=str(
                 d.get("table_version", d.get("tableVersion", "caller-provided-unversioned"))
             ),
+            source=str(d.get("source", "caller_provided")),
+            last_verified=(
+                None
+                if d.get("last_verified", d.get("lastVerified")) is None
+                else str(d.get("last_verified", d.get("lastVerified")))
+            ),
         )
 
 
@@ -263,6 +279,9 @@ class StateConversionRule:
     treatment: StateTreatment
     rate: float = 0.0
     retirement_exempt_age: int = 59
+    table_version: str = "state-conversion-reference-illustrative-unversioned"
+    source: str = "caller_provided"
+    last_verified: str | None = None
 
     def __post_init__(self) -> None:
         if self.treatment not in ("flat", "exempt_retirement", "none"):
@@ -279,6 +298,15 @@ class StateConversionRule:
             treatment=str(d["treatment"]),
             rate=float(d.get("rate", 0.0)),
             retirement_exempt_age=int(d.get("retirement_exempt_age", 59)),
+            table_version=str(
+                d.get("table_version", d.get("tableVersion", "caller-provided-unversioned"))
+            ),
+            source=str(d.get("source", "caller_provided")),
+            last_verified=(
+                None
+                if d.get("last_verified", d.get("lastVerified")) is None
+                else str(d.get("last_verified", d.get("lastVerified")))
+            ),
         )
 
 
@@ -318,6 +346,8 @@ class AcaSituation:
     cap_fpl_pct: float = 4.0
     cap_contribution_pct: float = 0.085
     cliff_mode: AcaCliffMode = "hard_400fpl"
+    source: str = "caller_provided"
+    last_verified: str | None = None
 
     def __post_init__(self) -> None:
         if self.household_size < 1:
@@ -351,6 +381,12 @@ class AcaSituation:
             cap_fpl_pct=float(d.get("cap_fpl_pct", 4.0)),
             cap_contribution_pct=float(d.get("cap_contribution_pct", 0.085)),
             cliff_mode=str(d.get("cliff_mode", "hard_400fpl")),
+            source=str(d.get("source", "caller_provided")),
+            last_verified=(
+                None
+                if d.get("last_verified", d.get("lastVerified")) is None
+                else str(d.get("last_verified", d.get("lastVerified")))
+            ),
         )
 
 
@@ -376,6 +412,8 @@ class EducationVehicleRule:
     nonqualified_distribution_penalty_rate: float | None
     notes: tuple[str, ...]
     table_version: str
+    source: str
+    last_verified: str
 
 
 # --- illustrative reference factories (NOT for production use as-is) --------
@@ -384,6 +422,12 @@ class EducationVehicleRule:
 # year so missing years fail closed instead of silently reusing a stale basis.
 _REFERENCE_TAX_TABLE_VERSION_BY_YEAR: dict[int, str] = {
     2026: "federal-income-tax-reference-2026-illustrative-v1",
+}
+_REFERENCE_TAX_TABLE_SOURCE_BY_YEAR: dict[int, str] = {
+    2026: "IRS Rev. Proc. 2025-32 and IRS 2026 tax inflation-adjustments guidance; OBBBA senior deduction provisions",
+}
+_REFERENCE_TAX_TABLE_LAST_VERIFIED_BY_YEAR: dict[int, str] = {
+    2026: "2026-07-08",
 }
 _STD_DEDUCTION_BY_YEAR: dict[int, dict[FilingStatus, float]] = {
     2026: {
@@ -496,6 +540,8 @@ class ReferenceTaxTableProvider:
             niit_threshold=dict(_NIIT_THRESHOLD),
             ss_provisional_thresholds=dict(_SS_PROVISIONAL),
             table_version=_REFERENCE_TAX_TABLE_VERSION_BY_YEAR[year],
+            source=_REFERENCE_TAX_TABLE_SOURCE_BY_YEAR[year],
+            last_verified=_REFERENCE_TAX_TABLE_LAST_VERIFIED_BY_YEAR[year],
         )
 
     def irmaa_table(self, filing_status: FilingStatus, source_year: int) -> IrmaaTable:
@@ -518,6 +564,8 @@ class ReferenceTaxTableProvider:
             filing_status=filing_status,
             tiers=list(by_status[schedule_key]),
             table_version=(f"irmaa-reference-{source_year}-{schedule_key}-illustrative-v1"),
+            source=_REFERENCE_IRMAA_SOURCE_BY_YEAR[source_year],
+            last_verified=_REFERENCE_IRMAA_LAST_VERIFIED_BY_YEAR[source_year],
         )
 
 
@@ -526,6 +574,12 @@ _REFERENCE_PROVIDER = ReferenceTaxTableProvider()
 
 _REFERENCE_EDUCATION_RULES_VERSION_BY_YEAR: dict[int, str] = {
     2026: "education-vehicle-reference-2026-irs-pub970-giftfaq-v1",
+}
+_REFERENCE_EDUCATION_RULES_SOURCE_BY_YEAR: dict[int, str] = {
+    2026: "IRS Publication 970, IRS Topic 310, and IRS estate/gift-tax annual-exclusion guidance",
+}
+_REFERENCE_EDUCATION_RULES_LAST_VERIFIED_BY_YEAR: dict[int, str] = {
+    2026: "2026-07-08",
 }
 
 
@@ -545,6 +599,8 @@ def reference_education_vehicle_rules(tax_year: int = 2026) -> tuple[EducationVe
             f"available years: {available}"
         )
     version = _REFERENCE_EDUCATION_RULES_VERSION_BY_YEAR[tax_year]
+    source = _REFERENCE_EDUCATION_RULES_SOURCE_BY_YEAR[tax_year]
+    last_verified = _REFERENCE_EDUCATION_RULES_LAST_VERIFIED_BY_YEAR[tax_year]
     annual_exclusion = 19_000.0
     return (
         EducationVehicleRule(
@@ -568,6 +624,8 @@ def reference_education_vehicle_rules(tax_year: int = 2026) -> tuple[EducationVe
                 "State tax deductions/credits and recapture rules are not modeled.",
             ),
             table_version=version,
+            source=source,
+            last_verified=last_verified,
         ),
         EducationVehicleRule(
             tax_year=tax_year,
@@ -590,6 +648,8 @@ def reference_education_vehicle_rules(tax_year: int = 2026) -> tuple[EducationVe
                 "Beneficiary age and special-needs rules are not modeled by this table.",
             ),
             table_version=version,
+            source=source,
+            last_verified=last_verified,
         ),
         EducationVehicleRule(
             tax_year=tax_year,
@@ -611,6 +671,8 @@ def reference_education_vehicle_rules(tax_year: int = 2026) -> tuple[EducationVe
                 "Use only as a planning comparison; not an account recommendation.",
             ),
             table_version=version,
+            source=source,
+            last_verified=last_verified,
         ),
     )
 
@@ -651,6 +713,12 @@ _REFERENCE_IRMAA_TIERS_BY_YEAR: dict[int, dict[FilingStatus, list[IrmaaTier]]] =
         "married_joint": _IRMAA_MFJ,
         "married_separate": _IRMAA_MFS,
     },
+}
+_REFERENCE_IRMAA_SOURCE_BY_YEAR: dict[int, str] = {
+    2025: "CMS 2025 Medicare Parts B/D income-related monthly adjustment amount guidance",
+}
+_REFERENCE_IRMAA_LAST_VERIFIED_BY_YEAR: dict[int, str] = {
+    2025: "2026-07-08",
 }
 
 
@@ -698,11 +766,32 @@ def reference_state_rule(state_code: str) -> StateConversionRule | None:
     code = state_code.upper()
     if code in _REFERENCE_RETIREMENT_EXEMPT_STATES:
         rate, age = _REFERENCE_RETIREMENT_EXEMPT_STATES[code]
-        return StateConversionRule(code, "exempt_retirement", rate=rate, retirement_exempt_age=age)
+        return StateConversionRule(
+            code,
+            "exempt_retirement",
+            rate=rate,
+            retirement_exempt_age=age,
+            table_version=f"state-conversion-reference-2026-{code.lower()}-v1",
+            source="Public state-tax retirement-income guidance; simplified conversion-rule mapping",
+            last_verified="2026-07-08",
+        )
     if code in _NO_INCOME_TAX_STATES:
-        return StateConversionRule(code, "none")
+        return StateConversionRule(
+            code,
+            "none",
+            table_version="state-conversion-reference-2026-no-income-tax-v1",
+            source="Public state income-tax guidance; simplified conversion-rule mapping",
+            last_verified="2026-07-08",
+        )
     if code in _REFERENCE_STATE_RATES:
-        return StateConversionRule(code, "flat", rate=_REFERENCE_STATE_RATES[code])
+        return StateConversionRule(
+            code,
+            "flat",
+            rate=_REFERENCE_STATE_RATES[code],
+            table_version=f"state-conversion-reference-2026-{code.lower()}-flat-v1",
+            source="Public state-tax rate guidance; simplified conversion-rule mapping",
+            last_verified="2026-07-08",
+        )
     return None
 
 
@@ -733,6 +822,8 @@ def reference_aca_situation(
         fpl_base=fpl_base,
         fpl_per_person=fpl_per,
         cliff_mode=cliff_mode,
+        source="HHS 2024 poverty guidelines and ACA applicable-percentage illustration",
+        last_verified="2026-07-08",
     )
 
 

@@ -62,6 +62,9 @@ def test_beneficiary_carveout_classification_by_type_and_age() -> None:
 def test_strategies_deplete_account_and_rank_by_after_tax_value() -> None:
     body = _run()
     assert body["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
+    assert body["taxTableSource"].startswith("IRS Rev. Proc.")
+    assert body["taxTableLastVerified"] == "2026-07-08"
+    assert body["assumptions"]["taxTableSource"] == body["taxTableSource"]
     assert body["beneficiaryClassification"]["eligibleDesignatedBeneficiary"] is False  # type: ignore[index]
     rankings = body["strategyRankings"]
     assert isinstance(rankings, list)

@@ -1698,7 +1698,7 @@ def _parse_report_metadata(body: dict[str, Any], scope: str) -> dict[str, Any]:
             return None
         if isinstance(value, bool) or not isinstance(value, int):
             raise PlanningInputError(f"metadata.{key} must be an integer or null")
-        return value
+        return cast(int, value)
 
     return {
         "assumptionVersion": optional_str("assumptionVersion", required=True),
@@ -1857,6 +1857,8 @@ def education_vehicle_rules_tool(body: dict[str, Any]) -> dict[str, Any]:
     return {
         "taxYear": tax_year,
         "tableVersion": rules[0].table_version if rules else "empty",
+        "source": rules[0].source if rules else "empty",
+        "lastVerified": rules[0].last_verified if rules else None,
         "rules": [
             {
                 "taxYear": rule.tax_year,
@@ -1874,6 +1876,8 @@ def education_vehicle_rules_tool(body: dict[str, Any]) -> dict[str, Any]:
                 ),
                 "notes": list(rule.notes),
                 "tableVersion": rule.table_version,
+                "source": rule.source,
+                "lastVerified": rule.last_verified,
             }
             for rule in rules
         ],
@@ -1887,7 +1891,7 @@ def _resolve_seed(body: dict[str, Any]) -> int:
         return secrets.randbelow(_MAX_SEED)
     if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= _MAX_SEED:
         raise PlanningInputError(f"seed must be an integer in [0, {_MAX_SEED}] or null")
-    return seed
+    return cast(int, seed)
 
 
 def _validate_asset_classes(body: dict[str, Any], *, require_lambda: bool) -> list[dict[str, Any]]:
@@ -1974,7 +1978,7 @@ def _as_optional_age(entry: dict[str, Any], key: str, default: int) -> int:
     value = entry.get(key, default)
     if isinstance(value, bool) or not isinstance(value, int) or not 0 < value <= 120:
         raise PlanningInputError(f"spendSchedule {key} must be an integer age in [1, 120]")
-    return value
+    return cast(int, value)
 
 
 def _parse_spend_schedule(body: dict[str, Any]) -> list[_SpendScheduleEntry]:
@@ -2095,7 +2099,7 @@ def _goal_priority(raw: dict[str, Any], index: int) -> int:
     if priority is not None:
         if isinstance(priority, bool) or not isinstance(priority, int) or not 1 <= priority <= 100:
             raise PlanningInputError(f"goals[{index}].priority must be an integer in [1, 100]")
-        return priority
+        return cast(int, priority)
     tier = raw.get("tier", raw.get("importance", "want"))
     if not isinstance(tier, str) or tier not in _GOAL_TIER_PRIORITIES:
         raise PlanningInputError(
@@ -2941,6 +2945,8 @@ def irmaa_headroom_tool(body: dict[str, Any]) -> dict[str, Any]:
         raise PlanningInputError(str(exc)) from exc
     payload = asdict(result)
     payload["irmaaTableVersion"] = table.table_version
+    payload["irmaaTableSource"] = table.source
+    payload["irmaaTableLastVerified"] = table.last_verified
     return payload
 
 
@@ -3026,10 +3032,17 @@ def sequence_conversions_tool(body: dict[str, Any]) -> dict[str, Any]:
     payload["bracketTableYear"] = bt.year
     payload["bracketTableSource"] = bt_src
     payload["bracketTableVersion"] = bt.table_version
+    payload["bracketTableReferenceSource"] = bt.source
+    payload["bracketTableLastVerified"] = bt.last_verified
     payload["irmaaTiersSourceYear"] = it.source_year
     payload["irmaaTableSource"] = it_src
     payload["irmaaTableVersion"] = it.table_version
+    payload["irmaaTableReferenceSource"] = it.source
+    payload["irmaaTableLastVerified"] = it.last_verified
     payload["stateRuleSource"] = "none" if sr is None else sr_src
+    payload["stateRuleTableVersion"] = None if sr is None else sr.table_version
+    payload["stateRuleReferenceSource"] = None if sr is None else sr.source
+    payload["stateRuleLastVerified"] = None if sr is None else sr.last_verified
     return payload
 
 

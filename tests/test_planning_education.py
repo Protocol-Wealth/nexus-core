@@ -146,6 +146,8 @@ def test_reference_education_vehicle_rules_2026() -> None:
 
     assert set(by_vehicle) == {"529", "coverdell_esa", "ugma_utma"}
     assert by_vehicle["529"].annual_gift_exclusion == 19_000.0
+    assert by_vehicle["529"].source.startswith("IRS Publication 970")
+    assert by_vehicle["529"].last_verified == "2026-07-08"
     assert by_vehicle["529"].five_year_superfunding_single == 95_000.0
     assert by_vehicle["coverdell_esa"].contribution_limit == 2_000.0
     assert by_vehicle["coverdell_esa"].magi_phaseout_single == (95_000.0, 110_000.0)
@@ -184,11 +186,14 @@ def test_education_vehicle_rules_tool_happy_path() -> None:
     assert status == 200
     assert body["taxYear"] == 2026
     assert body["tableVersion"].startswith("education-vehicle-reference-2026")
+    assert body["source"].startswith("IRS Publication 970")
+    assert body["lastVerified"] == "2026-07-08"
     assert [rule["vehicle"] for rule in body["rules"]] == [
         "529",
         "coverdell_esa",
         "ugma_utma",
     ]
+    assert body["rules"][0]["source"] == body["source"]
 
 
 def test_education_result_schemas_expose_wire_shapes() -> None:
@@ -200,8 +205,10 @@ def test_education_result_schemas_expose_wire_shapes() -> None:
     student_props = funding_schema["properties"]["students"]["items"]["properties"]
     assert "subjectRef" in student_props
     assert rules_schema["title"] == "EducationVehicleRulesResult"
+    assert "source" in rules_schema["properties"]
     rule_props = rules_schema["properties"]["rules"]["items"]["properties"]
     assert "fiveYearSuperfundingSingle" in rule_props
+    assert "lastVerified" in rule_props
 
 
 def test_education_gateway_rejects_identity_keys() -> None:

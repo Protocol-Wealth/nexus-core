@@ -60,15 +60,27 @@ def bracket_headroom(
     if target_rate is not None and not 0.0 <= target_rate < 1.0:
         raise ValueError("target_rate must be in [0, 1)")
 
+    # Capture provenance of each input BEFORE `brackets` is reassigned below.
+    brackets_from_caller = brackets is not None
+    std_deduction_from_caller = std_deduction is not None
     table_version = "caller-provided-unversioned"
+    table_source = "caller_provided"
+    table_last_verified: str | None = None
     if brackets is None or std_deduction is None:
         table = reference_bracket_table(year)
-        table_version = table.table_version
         if brackets is None:
             brackets = ordinary_brackets(filing_status, year=year)
         deduction = (
             standard_deduction(filing_status, year=year) if std_deduction is None else std_deduction
         )
+        # Attribute the reference provenance ONLY when the ENTIRE effective
+        # table came from the reference. A partial caller override (one of
+        # brackets / std_deduction supplied) makes the table caller-modified,
+        # so it must not claim the IRS reference source/version/freshness.
+        if not brackets_from_caller and not std_deduction_from_caller:
+            table_version = table.table_version
+            table_source = table.source
+            table_last_verified = table.last_verified
     else:
         deduction = std_deduction
     taxable = max(0.0, taxable_income - deduction)
@@ -94,6 +106,8 @@ def bracket_headroom(
         "nextRate": next_rate,
         "taxTableYear": year,
         "taxTableVersion": table_version,
+        "taxTableSource": table_source,
+        "taxTableLastVerified": table_last_verified,
     }
 
     if target_rate is not None:

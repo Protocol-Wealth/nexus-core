@@ -264,11 +264,20 @@ class SnapshotMetadata:
     contract_version: str
     bracket_table_year: int
     bracket_table_source: str
+    bracket_table_version: str
+    bracket_table_reference_source: str
+    bracket_table_last_verified: str | None
     irmaa_tiers_source_year: int
     irmaa_inflation_assumption: float
     irmaa_buffer: float
     irmaa_table_source: str
+    irmaa_table_version: str
+    irmaa_table_reference_source: str
+    irmaa_table_last_verified: str | None
     state_rule_source: str
+    state_rule_table_version: str | None = None
+    state_rule_reference_source: str | None = None
+    state_rule_last_verified: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

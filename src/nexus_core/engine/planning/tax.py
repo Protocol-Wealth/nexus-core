@@ -17,7 +17,7 @@ current IRS tables for real use. Pure + deterministic; no I/O.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from .state_tax import (
     IncomeSource,
@@ -239,7 +239,7 @@ def tax_aware_withdrawal(
     """
     if filing_status not in _FILING_STATUSES:
         raise ValueError(f"filingStatus must be one of {', '.join(_FILING_STATUSES)}")
-    status: FilingStatus = filing_status
+    status = cast(FilingStatus, filing_status)
     if gross_need < 0:
         raise ValueError("grossNeed must be non-negative")
     try:
@@ -312,6 +312,8 @@ def tax_aware_withdrawal(
                 "stateTaxModeled": False,
                 "stateTax": 0.0,
                 "stateTaxTableVersion": None,
+                "stateTaxTableSource": None,
+                "stateTaxTableLastVerified": None,
                 "stateTaxNotes": [
                     f"No reference state-tax rule registered for {state_code}; state tax is not modeled."
                 ],
@@ -339,6 +341,8 @@ def tax_aware_withdrawal(
                 "stateTaxModeled": True,
                 "stateTax": round(state_total, 2),
                 "stateTaxTableVersion": state_rule.table_version,
+                "stateTaxTableSource": state_rule.source,
+                "stateTaxTableLastVerified": state_rule.last_verified,
                 "stateTaxNotes": list(state_tax_notes(state_rule, tuple(state_estimates.values()))),
             }
     rows = [
@@ -370,6 +374,8 @@ def tax_aware_withdrawal(
         "rmdStartAgePolicyVersion": RMD_START_AGE_POLICY_VERSION,
         "taxTableYear": tax_table.year,
         "taxTableVersion": tax_table.table_version,
+        "taxTableSource": tax_table.source,
+        "taxTableLastVerified": tax_table.last_verified,
         "rmdSatisfied": withdrawn["traditional"] + 1e-6 >= rmd,
     }
     if state_meta is not None:

@@ -85,7 +85,7 @@ def roth_conversion_analysis_schema() -> dict[str, Any]:
     """Draft-2020-12 JSON-Schema for :class:`RothConversionAnalysis`."""
     schema = _dataclass_to_schema(RothConversionAnalysis)
     schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
-    schema["$id"] = "https://nexusmcp.site/schemas/roth-conversion-analysis-1.1.0.json"
+    schema["$id"] = "https://nexusmcp.site/schemas/roth-conversion-analysis-1.2.0.json"
     schema["title"] = "RothConversionAnalysis"
     schema["description"] = (
         "PII-free output of analyze_roth_conversion / sequence_conversions. "
@@ -248,6 +248,8 @@ def education_vehicle_rules_result_schema() -> dict[str, Any]:
             "nonqualifiedDistributionPenaltyRate",
             "notes",
             "tableVersion",
+            "source",
+            "lastVerified",
         ],
         "properties": {
             "taxYear": {"type": "integer"},
@@ -273,19 +275,23 @@ def education_vehicle_rules_result_schema() -> dict[str, Any]:
             "nonqualifiedDistributionPenaltyRate": _NULLABLE_MONEY,
             "notes": _STRING_ARRAY,
             "tableVersion": {"type": "string"},
+            "source": {"type": "string"},
+            "lastVerified": {"type": "string"},
         },
     }
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://nexusmcp.site/schemas/education-vehicle-rules-result-0.1.0.json",
+        "$id": "https://nexusmcp.site/schemas/education-vehicle-rules-result-0.1.1.json",
         "title": "EducationVehicleRulesResult",
         "description": "PII-free output of the education_vehicle_rules planning tool.",
         "type": "object",
         "additionalProperties": False,
-        "required": ["taxYear", "tableVersion", "rules"],
+        "required": ["taxYear", "tableVersion", "source", "lastVerified", "rules"],
         "properties": {
             "taxYear": {"type": "integer"},
             "tableVersion": {"type": "string"},
+            "source": {"type": "string"},
+            "lastVerified": {"type": "string"},
             "rules": {"type": "array", "items": rule},
         },
     }
@@ -345,6 +351,8 @@ def income_layering_result_schema() -> dict[str, Any]:
             "federalTax": _MONEY,
             "stateTax": _MONEY,
             "stateTaxTableVersion": {"type": ["string", "null"]},
+            "stateTaxTableSource": {"type": ["string", "null"]},
+            "stateTaxTableLastVerified": {"type": ["string", "null"]},
             "stateTaxNotes": _STRING_ARRAY,
             "filingStatus": {"type": "string"},
             "survivorActive": {"type": "boolean"},
@@ -405,6 +413,8 @@ def income_layering_result_schema() -> dict[str, Any]:
             "filingStatus",
             "taxTableYear",
             "taxTableVersion",
+            "taxTableSource",
+            "taxTableLastVerified",
             "spendingInflationRate",
             "wageGrowthRate",
             "expectedReturn",
@@ -418,6 +428,8 @@ def income_layering_result_schema() -> dict[str, Any]:
             "filingStatus": {"type": "string"},
             "taxTableYear": {"type": "integer"},
             "taxTableVersion": {"type": "string"},
+            "taxTableSource": {"type": "string"},
+            "taxTableLastVerified": {"type": ["string", "null"]},
             "spendingInflationRate": _MONEY,
             "wageGrowthRate": _MONEY,
             "expectedReturn": _MONEY,
@@ -445,7 +457,7 @@ def income_layering_result_schema() -> dict[str, Any]:
     }
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://nexusmcp.site/schemas/income-layering-result-0.1.2.json",
+        "$id": "https://nexusmcp.site/schemas/income-layering-result-0.1.3.json",
         "title": "IncomeLayeringResult",
         "description": "PII-free output of the income_layering planning tool.",
         "type": "object",
@@ -952,6 +964,8 @@ def inherited_ira_analysis_result_schema() -> dict[str, Any]:
             "targetRate",
             "distributionTiming",
             "taxScope",
+            "taxTableSource",
+            "taxTableLastVerified",
             "annualRmdScope",
             "sourceBasis",
         ],
@@ -961,13 +975,15 @@ def inherited_ira_analysis_result_schema() -> dict[str, Any]:
             "targetRate": _RATE,
             "distributionTiming": {"type": "string"},
             "taxScope": {"type": "string"},
+            "taxTableSource": {"type": "string"},
+            "taxTableLastVerified": {"type": ["string", "null"]},
             "annualRmdScope": {"type": "string"},
             "sourceBasis": {"type": "string"},
         },
     }
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://nexusmcp.site/schemas/inherited-ira-analysis-result-0.1.0.json",
+        "$id": "https://nexusmcp.site/schemas/inherited-ira-analysis-result-0.1.1.json",
         "title": "InheritedIraAnalysisResult",
         "description": "PII-free output of the inherited_ira_analysis planning tool.",
         "type": "object",
@@ -976,6 +992,8 @@ def inherited_ira_analysis_result_schema() -> dict[str, Any]:
             "contractVersion",
             "taxYear",
             "taxTableVersion",
+            "taxTableSource",
+            "taxTableLastVerified",
             "yearsRemaining",
             "beneficiaryClassification",
             "carveOuts",
@@ -988,6 +1006,8 @@ def inherited_ira_analysis_result_schema() -> dict[str, Any]:
             "contractVersion": {"type": "string"},
             "taxYear": {"type": "integer"},
             "taxTableVersion": {"type": "string"},
+            "taxTableSource": {"type": "string"},
+            "taxTableLastVerified": {"type": ["string", "null"]},
             "yearsRemaining": {"type": "integer"},
             "beneficiaryClassification": classification,
             "carveOuts": {"type": "array", "items": carveout},
