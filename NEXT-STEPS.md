@@ -202,8 +202,9 @@ so pace the calls.
 ### Planning engine correctness queue
 
 The first correctness items have landed locally: Student-t covariance scaling,
-single-kernel RMD start-age policy, shared tax/IRMAA table providers, Monte
-Carlo report diagnostics, S1 education funding, S8 multi-account waterfall /
+single-kernel RMD start-age policy, shared tax/IRMAA table providers, reference
+assumption provenance (#198), Monte Carlo report diagnostics, S1 education
+funding, S8 multi-account waterfall /
 Monte Carlo goal scheduling, S2 income layering, S3 historical blend, S7
 state/local tax coverage, S9 household/survivor modeling, S6 Wealth Roadmap
 report assembly, S5 risk-profile scoring, and S4 performance analysis. Continue

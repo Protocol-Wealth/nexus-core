@@ -11,6 +11,11 @@ from typing import Any
 import pytest
 
 from nexus_core.app.planning.contract import find_identity_keys
+from nexus_core.app.planning.tools import (
+    analyze_roth_conversion_tool,
+    irmaa_headroom_tool,
+    sequence_conversions_tool,
+)
 from nexus_core.engine.planning import (
     analyze_roth_conversion,
     reference_bracket_table,
@@ -78,13 +83,45 @@ def test_irmaa_binds_for_a_60s_mfj_retiree() -> None:
         "Federal tax table version: federal-income-tax-reference-2026-illustrative-v1."
         in res.assumptions
     )
+    assert res.snapshot.bracket_table_reference_source.startswith("IRS Rev. Proc.")
+    assert res.snapshot.bracket_table_last_verified == "2026-07-08"
     assert (
         "IRMAA table version: irmaa-reference-2025-married_joint-illustrative-v1."
         in res.assumptions
     )
+    assert res.snapshot.irmaa_table_reference_source.startswith("CMS 2025 Medicare")
+    assert res.snapshot.irmaa_table_last_verified == "2026-07-08"
     assert y.irmaa_ceiling is not None
     assert y.recommended_amount == pytest.approx(y.irmaa_ceiling, abs=2.0)
     assert y.bracket_ceiling is None  # fill_to_irmaa with no target_rate → bracket non-binding
+
+
+def test_roth_irmaa_tool_wrappers_echo_assumption_provenance() -> None:
+    analysis = analyze_roth_conversion_tool({"contract": _BASE})
+    snapshot = analysis["snapshot"]
+    assert snapshot["bracket_table_reference_source"].startswith("IRS Rev. Proc.")
+    assert snapshot["bracket_table_last_verified"] == "2026-07-08"
+    assert snapshot["irmaa_table_reference_source"].startswith("CMS 2025 Medicare")
+    assert snapshot["irmaa_table_last_verified"] == "2026-07-08"
+
+    sequence = sequence_conversions_tool({"contract": _BASE})
+    assert sequence["bracketTableReferenceSource"].startswith("IRS Rev. Proc.")
+    assert sequence["bracketTableLastVerified"] == "2026-07-08"
+    assert sequence["irmaaTableReferenceSource"].startswith("CMS 2025 Medicare")
+    assert sequence["irmaaTableLastVerified"] == "2026-07-08"
+
+    irmaa = irmaa_headroom_tool(
+        {
+            "filing_status": "mfj",
+            "target_premium_year": 2028,
+            "magi_ex_conversion": 150_000,
+            "per_person": 2,
+            "inflation": 0.03,
+            "buffer": 5_000,
+        }
+    )
+    assert irmaa["irmaaTableSource"].startswith("CMS 2025 Medicare")
+    assert irmaa["irmaaTableLastVerified"] == "2026-07-08"
 
 
 def test_binding_ceiling_is_the_min_of_bracket_and_irmaa() -> None:

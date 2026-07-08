@@ -17,8 +17,16 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   bearer key opened the then-current 27-tool planning contract; hosted native `/mcp` keeps
   transparent OAuth active and exposes only the demo MCP tools
   `option_price`, `collar_book`, `health`, and `describe`.
-- **Last local update:** 2026-07-08 — current branch adds S12 healthcare / LTC
-  stress support for `project_cash_flow` and `monte_carlo_decumulation`.
+- **Last local update:** 2026-07-08 — current branch completes planning
+  assumption provenance (#198). Built-in federal tax, IRMAA, education vehicle,
+  simplified state conversion/state-tax, ACA reference, cash-flow,
+  income-layering, inherited-IRA, and Roth/IRMAA outputs now expose source and
+  `lastVerified` / `last_verified` metadata beside existing table-version stamps;
+  caller-injected tables remain tagged as `caller_provided`. This is additive
+  report-manifest metadata only: no client context, suitability workflow,
+  approvals, release state, or audit trail enters the public engine. `main` also
+  adds S12 healthcare / LTC stress support for `project_cash_flow` and
+  `monte_carlo_decumulation`.
   `ltcShock` uses only de-identified numeric assumptions — onset age,
   current-dollar annual cost, duration, and healthcare-cost inflation. Cash flow
   rows expose base expenses and LTC shock expense when supplied; Monte Carlo

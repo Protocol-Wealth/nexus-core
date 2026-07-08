@@ -1857,6 +1857,8 @@ def education_vehicle_rules_tool(body: dict[str, Any]) -> dict[str, Any]:
     return {
         "taxYear": tax_year,
         "tableVersion": rules[0].table_version if rules else "empty",
+        "source": rules[0].source if rules else "empty",
+        "lastVerified": rules[0].last_verified if rules else None,
         "rules": [
             {
                 "taxYear": rule.tax_year,
@@ -1874,6 +1876,8 @@ def education_vehicle_rules_tool(body: dict[str, Any]) -> dict[str, Any]:
                 ),
                 "notes": list(rule.notes),
                 "tableVersion": rule.table_version,
+                "source": rule.source,
+                "lastVerified": rule.last_verified,
             }
             for rule in rules
         ],
@@ -2941,6 +2945,8 @@ def irmaa_headroom_tool(body: dict[str, Any]) -> dict[str, Any]:
         raise PlanningInputError(str(exc)) from exc
     payload = asdict(result)
     payload["irmaaTableVersion"] = table.table_version
+    payload["irmaaTableSource"] = table.source
+    payload["irmaaTableLastVerified"] = table.last_verified
     return payload
 
 
@@ -3026,10 +3032,17 @@ def sequence_conversions_tool(body: dict[str, Any]) -> dict[str, Any]:
     payload["bracketTableYear"] = bt.year
     payload["bracketTableSource"] = bt_src
     payload["bracketTableVersion"] = bt.table_version
+    payload["bracketTableReferenceSource"] = bt.source
+    payload["bracketTableLastVerified"] = bt.last_verified
     payload["irmaaTiersSourceYear"] = it.source_year
     payload["irmaaTableSource"] = it_src
     payload["irmaaTableVersion"] = it.table_version
+    payload["irmaaTableReferenceSource"] = it.source
+    payload["irmaaTableLastVerified"] = it.last_verified
     payload["stateRuleSource"] = "none" if sr is None else sr_src
+    payload["stateRuleTableVersion"] = None if sr is None else sr.table_version
+    payload["stateRuleReferenceSource"] = None if sr is None else sr.source
+    payload["stateRuleLastVerified"] = None if sr is None else sr.last_verified
     return payload
 
 

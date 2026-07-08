@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Planning assumption provenance (#198)
+
+#### Added
+
+- Added source and last-verified metadata to built-in reference assumptions for
+  federal tax, IRMAA, education vehicle rules, simplified state conversion /
+  state-tax rules, and ACA reference situations. Caller-provided tables continue
+  to parse as `caller_provided` when metadata is absent.
+- Surfaced the provenance metadata in report-facing planning outputs:
+  tax-aware withdrawals, bracket headroom, Roth conversion, Roth/IRMAA snapshots
+  and sequence summaries, IRMAA headroom, education vehicle rules, cash-flow
+  projections, income layering, and inherited IRA analysis. Existing
+  `*TableVersion` fields remain unchanged; the new fields are additive.
+
+#### Changed
+
+- Bumped the versioned output-schema `$id`s whose shape gained provenance
+  fields, so a consumer pinning by schema version sees the change:
+  `roth-conversion-analysis` 1.1.0 → 1.2.0, `education-vehicle-rules-result`
+  0.1.0 → 0.1.1, `income-layering-result` 0.1.2 → 0.1.3, and
+  `inherited-ira-analysis-result` 0.1.0 → 0.1.1. `CONTRACT_VERSION` is
+  unchanged (the response contract is additive); a consumer doing strict
+  `additionalProperties: false` validation against a pinned copy of a prior
+  schema should update to the new version.
+- `tax_bracket_headroom` now attributes the built-in IRS reference
+  source/version/last-verified only when the ENTIRE effective table comes from
+  the reference. A partial caller override (custom brackets OR custom standard
+  deduction, via the direct Python API) now reports `caller_provided`
+  provenance instead of falsely claiming the IRS reference. The planning
+  gateway path is unchanged (it never passes partial overrides).
+
 ### Healthcare / LTC stress S12
 
 #### Added

@@ -43,6 +43,8 @@ def test_bracket_table_round_trips_through_wire_form() -> None:
     assert math.isinf(parsed.brackets_for("single")[-1][0])  # top bracket preserved as inf
     assert parsed.standard_deduction == bt.standard_deduction
     assert parsed.table_version == bt.table_version
+    assert parsed.source == bt.source
+    assert parsed.last_verified == bt.last_verified
     assert parsed.niit_threshold == bt.niit_threshold
     assert parsed.ss_provisional_thresholds == bt.ss_provisional_thresholds
 
@@ -53,6 +55,8 @@ def test_irmaa_table_round_trips_through_wire_form() -> None:
     assert parsed.source_year == 2025
     assert parsed.filing_status == "married_joint"
     assert parsed.table_version == it.table_version
+    assert parsed.source == it.source
+    assert parsed.last_verified == it.last_verified
     assert [t.magi_floor for t in parsed.tiers] == [t.magi_floor for t in it.tiers]
 
 
@@ -84,6 +88,8 @@ def test_reference_state_rule_covers_s7_retirement_exclusion_states() -> None:
     il = reference_state_rule("IL")
     ia = reference_state_rule("IA")
     assert pa is not None and pa.treatment == "exempt_retirement"
+    assert pa.source != "caller_provided"
+    assert pa.last_verified == "2026-07-08"
     assert il is not None and il.treatment == "exempt_retirement"
     assert ia is not None and ia.treatment == "exempt_retirement"
     assert ia.retirement_exempt_age == 55

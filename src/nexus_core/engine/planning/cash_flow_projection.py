@@ -543,6 +543,8 @@ def project_cash_flow(
         "filingStatus": filing_status,
         "taxTableYear": tax_table.year,
         "taxTableVersion": tax_table.table_version,
+        "taxTableSource": tax_table.source,
+        "taxTableLastVerified": tax_table.last_verified,
         "incomeGrowthRate": round(income_growth_rate, 6),
         "expenseInflationRate": round(expense_inflation_rate, 6),
         "expectedReturn": round(expected_return, 6),

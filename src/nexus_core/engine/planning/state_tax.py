@@ -107,6 +107,8 @@ class StateTaxRule:
     flags: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
     table_version: str = "state-tax-reference-illustrative-unversioned"
+    source: str = "caller_provided"
+    last_verified: str | None = None
 
     def __post_init__(self) -> None:
         if len(self.state_code) != 2 or not self.state_code.isalpha():
@@ -136,6 +138,8 @@ class StateTaxEstimate:
     exclusion: float
     note: str
     table_version: str
+    table_source: str
+    table_last_verified: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -284,6 +288,8 @@ def estimate_state_income_tax(
         exclusion=_round_money(exclusion),
         note=_state_note(rule, source),
         table_version=rule.table_version,
+        table_source=rule.source,
+        table_last_verified=rule.last_verified,
     )
 
 
@@ -392,6 +398,8 @@ def estimate_state_income_tax_components(
             exclusion=_round_money(excluded),
             note=_state_note(rule, source),
             table_version=rule.table_version,
+            table_source=rule.source,
+            table_last_verified=rule.last_verified,
         )
     return estimates
 
@@ -458,6 +466,8 @@ def _no_income_rule(
         flags=flags,
         notes=notes,
         table_version="state-tax-reference-2026-no-income-tax-v1",
+        source="Public state income-tax guidance for no-income-tax states",
+        last_verified="2026-07-08",
     )
 
 
@@ -493,6 +503,8 @@ _REFERENCE_STATE_TAX_RULES_2026: dict[str, StateTaxRule] = {
         ss_taxed=False,
         retirement_exclusion=StateRetirementExclusion(kind="full", age_min=59.5),
         table_version="state-tax-reference-2026-pa-revenue-v1",
+        source="Pennsylvania Department of Revenue retirement-income guidance",
+        last_verified="2026-07-08",
         notes=("PA retirement-plan distributions are generally excluded at/after retirement age.",),
     ),
     "IL": StateTaxRule(
@@ -503,6 +515,8 @@ _REFERENCE_STATE_TAX_RULES_2026: dict[str, StateTaxRule] = {
         ss_taxed=False,
         retirement_exclusion=StateRetirementExclusion(kind="full"),
         table_version="state-tax-reference-2026-il-revenue-v1",
+        source="Illinois Department of Revenue retirement-income guidance",
+        last_verified="2026-07-08",
     ),
     "MS": StateTaxRule(
         tax_year=2026,
@@ -512,6 +526,8 @@ _REFERENCE_STATE_TAX_RULES_2026: dict[str, StateTaxRule] = {
         ss_taxed=False,
         retirement_exclusion=StateRetirementExclusion(kind="full", age_min=59.5),
         table_version="state-tax-reference-2026-ms-dor-v1",
+        source="Mississippi Department of Revenue retirement-income guidance",
+        last_verified="2026-07-08",
     ),
     "IA": StateTaxRule(
         tax_year=2026,
@@ -521,6 +537,8 @@ _REFERENCE_STATE_TAX_RULES_2026: dict[str, StateTaxRule] = {
         ss_taxed=False,
         retirement_exclusion=StateRetirementExclusion(kind="full", age_min=55),
         table_version="state-tax-reference-2026-ia-dor-v1",
+        source="Iowa Department of Revenue retirement-income guidance",
+        last_verified="2026-07-08",
     ),
     "CO": StateTaxRule(
         tax_year=2026,
@@ -530,6 +548,8 @@ _REFERENCE_STATE_TAX_RULES_2026: dict[str, StateTaxRule] = {
         ss_taxed=False,
         retirement_exclusion=StateRetirementExclusion(kind="capped", age_min=55, amount=20_000.0),
         table_version="state-tax-reference-2026-co-retirees-v1",
+        source="Colorado retirement-income subtraction guidance",
+        last_verified="2026-07-08",
         notes=(
             "VERIFY-2026: Colorado 65+ cap/full-subtraction updates require final-form review.",
         ),
@@ -547,6 +567,8 @@ _REFERENCE_STATE_TAX_RULES_2026: dict[str, StateTaxRule] = {
             government_pension_full_exempt=True,
         ),
         table_version="state-tax-reference-2026-ny-dtf-v1",
+        source="New York Department of Taxation and Finance pension exclusion guidance",
+        last_verified="2026-07-08",
     ),
     "VA": StateTaxRule(
         tax_year=2026,
@@ -565,6 +587,8 @@ _REFERENCE_STATE_TAX_RULES_2026: dict[str, StateTaxRule] = {
             phaseout_rate=1.0,
         ),
         table_version="state-tax-reference-2026-va-age-deduction-v1",
+        source="Virginia age-deduction and retirement-income guidance",
+        last_verified="2026-07-08",
     ),
     "NJ": StateTaxRule(
         tax_year=2026,
@@ -578,6 +602,8 @@ _REFERENCE_STATE_TAX_RULES_2026: dict[str, StateTaxRule] = {
             bands=_NJ_BANDS,
         ),
         table_version="state-tax-reference-2026-nj-retirement-exclusion-v1",
+        source="New Jersey pension and retirement-income exclusion guidance",
+        last_verified="2026-07-08",
     ),
     "MD": StateTaxRule(
         tax_year=2026,
@@ -588,6 +614,8 @@ _REFERENCE_STATE_TAX_RULES_2026: dict[str, StateTaxRule] = {
         retirement_exclusion=StateRetirementExclusion(kind="capped", age_min=65, amount=40_600.0),
         local_income_tax_hook=True,
         table_version="state-tax-reference-2026-md-pension-exclusion-v1",
+        source="Maryland pension-exclusion guidance",
+        last_verified="2026-07-08",
         notes=("VERIFY-2026: local county income-tax layer is flagged but not modeled.",),
     ),
     "DE": StateTaxRule(
@@ -600,6 +628,8 @@ _REFERENCE_STATE_TAX_RULES_2026: dict[str, StateTaxRule] = {
             kind="capped", age_min=60, amount=12_500.0, under_age_amount=2_000.0
         ),
         table_version="state-tax-reference-2026-de-revenue-faq-v1",
+        source="Delaware retirement-income exclusion guidance",
+        last_verified="2026-07-08",
     ),
 }
 

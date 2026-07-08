@@ -22,6 +22,25 @@ def test_single_in_22pct_bracket() -> None:
     assert out["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
 
 
+def test_reference_provenance_only_when_whole_table_is_reference() -> None:
+    # Both inputs omitted -> the whole table is the IRS reference.
+    full_ref = bracket_headroom(taxable_income=100_000.0, filing_status="single")
+    assert full_ref["taxTableSource"].startswith("IRS Rev. Proc.")
+    assert full_ref["taxTableLastVerified"] == "2026-07-08"
+    assert full_ref["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
+
+    # A partial caller override (custom brackets, reference std deduction) makes
+    # the effective table caller-modified — it must NOT claim the IRS source.
+    partial = bracket_headroom(
+        taxable_income=100_000.0,
+        filing_status="single",
+        brackets=[(50_000.0, 0.10), (float("inf"), 0.35)],
+    )
+    assert partial["taxTableSource"] == "caller_provided"
+    assert partial["taxTableLastVerified"] is None
+    assert partial["taxTableVersion"] == "caller-provided-unversioned"
+
+
 def test_fill_to_target_rate() -> None:
     # Filling up to the 24% bracket ceiling (197,300 taxable).
     out = bracket_headroom(taxable_income=100_000.0, filing_status="single", target_rate=0.24)

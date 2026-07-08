@@ -370,6 +370,8 @@ def test_income_layering_gateway_happy_path_and_disclaimer() -> None:
     assert body["contractVersion"] == "0.1.0"
     assert body["years"][0]["year"] == 2026
     assert body["assumptions"]["withdrawalOrder"] == ["rmd", "taxable", "traditional", "roth"]
+    assert body["assumptions"]["taxTableSource"].startswith("IRS Rev. Proc.")
+    assert body["assumptions"]["taxTableLastVerified"] == "2026-07-08"
     assert "not predictions" in body["disclaimer"]
 
 
@@ -514,7 +516,7 @@ def test_income_layering_schema_exposes_wire_shape() -> None:
     schema = income_layering_result_schema()
 
     assert schema["title"] == "IncomeLayeringResult"
-    assert schema["$id"].endswith("income-layering-result-0.1.2.json")
+    assert schema["$id"].endswith("income-layering-result-0.1.3.json")
     assert "years" in schema["properties"]
     assert "rollups" in schema["properties"]
     layer_props = schema["properties"]["years"]["items"]["properties"]["layers"]["items"][
@@ -522,6 +524,8 @@ def test_income_layering_schema_exposes_wire_shape() -> None:
     ]
     assert "source" in layer_props
     assert "stateTax" in schema["properties"]["years"]["items"]["properties"]
+    assert "stateTaxTableSource" in schema["properties"]["years"]["items"]["properties"]
+    assert "taxTableSource" in schema["properties"]["assumptions"]["properties"]
     assert "residencyChange" in schema["properties"]["assumptions"]["properties"]
     assert "survivorActive" in schema["properties"]["years"]["items"]["properties"]
     assert "spouseSocialSecurityClaimAge" in schema["properties"]["assumptions"]["properties"]

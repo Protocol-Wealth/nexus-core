@@ -324,9 +324,9 @@ def _state_tax_by_source(
     bracket_fill_gross: float,
     taxable_gross: float,
     roth_gross: float,
-) -> tuple[dict[str, float], tuple[str, ...], str | None]:
+) -> tuple[dict[str, float], tuple[str, ...], str | None, str | None, str | None]:
     if state_rule is None:
-        return {}, (), None
+        return {}, (), None, None, None
     taxable_gain = taxable_gross * TAXABLE_WITHDRAWAL_GAIN_FRACTION
     components: list[tuple[str, IncomeSource, float]] = [
         ("earned_income", "earned_income", earned),
@@ -360,6 +360,8 @@ def _state_tax_by_source(
         {source: estimate.tax for source, estimate in estimates.items()},
         state_tax_notes(state_rule, tuple(estimates.values())),
         state_rule.table_version,
+        state_rule.source,
+        state_rule.last_verified,
     )
 
 
@@ -431,7 +433,7 @@ def _combined_tax_picture(
         filing_status=filing_status,
         tax_year=tax_year,
     )
-    state_tax_by_source, _, _ = _state_tax_by_source(
+    state_tax_by_source, _, _, _, _ = _state_tax_by_source(
         state_rule=state_rule,
         age=age,
         filing_status=filing_status,
@@ -821,7 +823,13 @@ def income_layering(
             projection_year=state_projection_year,
             tax_year=tax_year,
         )
-        state_tax_by_source, state_notes, state_table_version = _state_tax_by_source(
+        (
+            state_tax_by_source,
+            state_notes,
+            state_table_version,
+            state_table_source,
+            state_table_last_verified,
+        ) = _state_tax_by_source(
             state_rule=state_rule,
             age=age,
             filing_status=year_filing_status,
@@ -940,6 +948,8 @@ def income_layering(
             row["federalTax"] = round(year_federal_tax, 2)
             row["stateTax"] = round(year_state_tax, 2)
             row["stateTaxTableVersion"] = state_table_version
+            row["stateTaxTableSource"] = state_table_source
+            row["stateTaxTableLastVerified"] = state_table_last_verified
             row["stateTaxNotes"] = (
                 list(state_notes)
                 if state_rule is not None
@@ -998,6 +1008,8 @@ def income_layering(
             "filingStatus": filing_status,
             "taxTableYear": tax_table.year,
             "taxTableVersion": tax_table.table_version,
+            "taxTableSource": tax_table.source,
+            "taxTableLastVerified": tax_table.last_verified,
             "spendingInflationRate": round(spending_inflation_rate, 6),
             "wageGrowthRate": round(wage_growth_rate, 6),
             "expectedReturn": round(expected_return, 6),

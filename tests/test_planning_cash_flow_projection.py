@@ -348,6 +348,8 @@ def test_assumptions_echoed() -> None:
     assert a["filingStatus"] == "married_joint"
     assert a["taxTableYear"] == 2026
     assert a["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
+    assert a["taxTableSource"].startswith("IRS Rev. Proc.")
+    assert a["taxTableLastVerified"] == "2026-07-08"
     assert a["incomeGrowthRate"] == pytest.approx(0.04)
     assert a["expectedReturn"] == pytest.approx(0.06)
     assert a["retirementIncomeGrowthRate"] == pytest.approx(a["expenseInflationRate"])
