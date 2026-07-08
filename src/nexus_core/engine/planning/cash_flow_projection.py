@@ -43,6 +43,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from .healthcare import LongTermCareShock, ltc_shock_cost_by_age, ltc_shock_summary
 from .tables import reference_bracket_table
 from .tax import FilingStatus, ordinary_tax
 
@@ -243,6 +244,7 @@ def project_cash_flow(
     account_returns: dict[str, float] | None = None,
     early_withdrawal_penalty_age: float = _DEFAULT_EARLY_WITHDRAWAL_PENALTY_AGE,
     early_withdrawal_penalty_rate: float = _DEFAULT_EARLY_WITHDRAWAL_PENALTY_RATE,
+    ltc_shock: LongTermCareShock | None = None,
 ) -> dict[str, Any]:
     """Year-by-year cash-flow + net-worth projection with a lifetime tax rollup.
 
@@ -282,6 +284,9 @@ def project_cash_flow(
             traditional-account withdrawals before ``early_withdrawal_penalty_age``.
             Roth draws are not treated as ordinary income in this simplified
             public-safe waterfall.
+        ltc_shock: Optional long-term-care stress event. Annual cost is in
+            current-year dollars and is inflated by the shock's healthcare-cost
+            inflation rate into each active shock year.
 
     Returns:
         ``years`` (per-year rows), ``aggregate`` (lifetime totals, peak/ending
@@ -366,6 +371,7 @@ def project_cash_flow(
     lifetime_expenses = 0.0
     lifetime_taxes = 0.0
     lifetime_penalties = 0.0
+    lifetime_ltc_shock_cost = 0.0
     lifetime_savings = 0.0
     lifetime_withdrawals = 0.0
     peak_net_worth = portfolio - liabilities
@@ -379,7 +385,11 @@ def project_cash_flow(
         earned_income = 0.0 if retired else current_income * (1.0 + income_growth_rate) ** k
         retire_income = retirement_income * (1.0 + expense_inflation_rate) ** k if retired else 0.0
         base_ordinary = earned_income + retire_income
-        expenses = current_expenses * (1.0 + expense_inflation_rate) ** k
+        base_expenses = current_expenses * (1.0 + expense_inflation_rate) ** k
+        ltc_shock_expense = ltc_shock_cost_by_age(
+            ltc_shock, age=age, current_age=current_age
+        )
+        expenses = base_expenses + ltc_shock_expense
 
         if multi_account:
             assert balances is not None
@@ -464,6 +474,7 @@ def project_cash_flow(
 
         lifetime_income += base_ordinary
         lifetime_expenses += expenses
+        lifetime_ltc_shock_cost += ltc_shock_expense
         lifetime_taxes += tax
 
         row: dict[str, Any] = {
@@ -480,6 +491,9 @@ def project_cash_flow(
             "liabilities": round(liabilities, 2),
             "netWorth": round(net_worth, 2),
         }
+        if ltc_shock is not None:
+            row["baseExpenses"] = round(base_expenses, 2)
+            row["ltcShockExpense"] = round(ltc_shock_expense, 2)
         if multi_account:
             assert balances is not None
             row["accountBalances"] = _round_account_map(balances)
@@ -509,6 +523,8 @@ def project_cash_flow(
         "firstDeficitAge": first_deficit_age,
         "fundedThroughTerminal": depletion_age is None,
     }
+    if ltc_shock is not None:
+        aggregate["lifetimeLtcShockCost"] = round(lifetime_ltc_shock_cost, 2)
     if multi_account:
         assert balances is not None
         assert starting_account_balances is not None
@@ -543,6 +559,10 @@ def project_cash_flow(
         assumptions["earlyWithdrawalPenaltyAccounts"] = sorted(_EARLY_WITHDRAWAL_PENALTY_ACCOUNTS)
         assumptions["earlyWithdrawalPenaltyAge"] = early_withdrawal_penalty_age
         assumptions["earlyWithdrawalPenaltyRate"] = early_withdrawal_penalty_rate
+    if ltc_shock is not None:
+        assumptions["ltcShock"] = ltc_shock_summary(
+            ltc_shock, current_age=current_age, years=num_years
+        )
 
     return {
         "years": rows,

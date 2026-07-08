@@ -38,6 +38,8 @@ _PLANNING_TOOL_DESCRIPTIONS = {
     "monte_carlo_decumulation": (
         "Monte Carlo retirement decumulation simulation across return models "
         "(incl. live-regime-aware), with optional spendSchedule shocks, optional "
+        "first-class `ltcShock` healthcare-cost stress and same-seed with/without "
+        "shock impact (not combined with `guardrails` in S12 v1), optional "
         "de-identified goals funded path-by-path in priority order, "
         "optional Guyton-Klinger dynamic-withdrawal guardrails (pass `guardrails`), "
         "and report diagnostics including Wilson success intervals, depletion "
@@ -83,7 +85,8 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "`terminalAge`, `currentIncome`, `currentExpenses`, and either "
         "`currentPortfolio` or S8 `accountBalances` + optional `filingStatus`, "
         "`incomeGrowthRate`, `expenseInflationRate`, "
-        "`expectedReturn`, `retirementIncome`, `currentLiabilities`, `baseYear`. "
+        "`healthcareInflationRate`, optional `ltcShock`, `expectedReturn`, "
+        "`retirementIncome`, `currentLiabilities`, `baseYear`. "
         "For S8 waterfall mode, optionally pass `accountBalances` split across "
         "taxable/traditional/roth, optional `accountReturns`, and optional early "
         "withdrawal penalty settings; existing single-bucket callers are unchanged. "

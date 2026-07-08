@@ -34,6 +34,7 @@ from ...engine.planning import (
     GuardrailParams,
     IncomeStream,
     InfeasiblePlanError,
+    LongTermCareShock,
     MwrCashFlow,
     SocialSecurityIncome,
     SolveResult,
@@ -54,6 +55,9 @@ from ...engine.planning import (
     income_layering,
     inherited_ira_analysis,
     irmaa_headroom,
+    ltc_shock_schedule,
+    ltc_shock_summary,
+    make_ltc_shock,
     monte_carlo_decumulation,
     performance_analysis,
     portfolio_xray,
@@ -117,6 +121,7 @@ _RETURN_MODELS = (
     "emf_regime",
 )
 _SPEND_SCHEDULE_MODES = frozenset({"delta", "override", "one_time"})
+_LTC_SHOCK_ALLOWED = {"onsetAge", "annualCost", "durationYears", "costInflation"}
 _GOAL_TIER_PRIORITIES = {"need": 10, "want": 50, "wish": 90}
 _OPAQUE_REF_ALLOWED_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-"
@@ -715,6 +720,13 @@ def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
         current_portfolio = sum(account_balances.values())
     else:
         current_portfolio = _as_number(body, "currentPortfolio")
+    expense_inflation_rate = _optional_number(body, "expenseInflationRate", 0.025)
+    healthcare_inflation_rate = _optional_number(
+        body, "healthcareInflationRate", expense_inflation_rate
+    )
+    ltc_shock = _parse_ltc_shock(
+        body, default_cost_inflation=healthcare_inflation_rate
+    )
     try:
         return project_cash_flow(
             current_age=_as_int(body, "currentAge"),
@@ -725,7 +737,7 @@ def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
             current_portfolio=current_portfolio,
             filing_status=cast(Any, filing_status),
             income_growth_rate=_optional_number(body, "incomeGrowthRate", 0.03),
-            expense_inflation_rate=_optional_number(body, "expenseInflationRate", 0.025),
+            expense_inflation_rate=expense_inflation_rate,
             expected_return=_optional_number(body, "expectedReturn", 0.05),
             retirement_income=_optional_number(body, "retirementIncome", 0.0),
             current_liabilities=_optional_number(body, "currentLiabilities", 0.0),
@@ -737,6 +749,7 @@ def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
             early_withdrawal_penalty_rate=_optional_number(
                 body, "earlyWithdrawalPenaltyRate", 0.10
             ),
+            ltc_shock=ltc_shock,
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
@@ -2034,6 +2047,49 @@ def _apply_spend_schedule(
     return spend
 
 
+def _parse_ltc_shock(
+    body: dict[str, Any],
+    *,
+    default_cost_inflation: float,
+) -> LongTermCareShock | None:
+    raw = body.get("ltcShock")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise PlanningInputError("ltcShock must be an object or omitted")
+    extra = set(raw) - _LTC_SHOCK_ALLOWED
+    if extra:
+        raise PlanningInputError(
+            f"ltcShock only accepts {', '.join(sorted(_LTC_SHOCK_ALLOWED))}; got {sorted(extra)}"
+        )
+    onset_age = raw.get("onsetAge")
+    duration_years = raw.get("durationYears")
+    annual_cost = raw.get("annualCost")
+    if (
+        isinstance(onset_age, bool)
+        or not isinstance(onset_age, int)
+        or isinstance(duration_years, bool)
+        or not isinstance(duration_years, int)
+        or isinstance(annual_cost, bool)
+        or not isinstance(annual_cost, (int, float))
+    ):
+        raise PlanningInputError(
+            "ltcShock needs integer onsetAge, numeric annualCost, and integer durationYears"
+        )
+    cost_inflation = raw.get("costInflation", default_cost_inflation)
+    if isinstance(cost_inflation, bool) or not isinstance(cost_inflation, (int, float)):
+        raise PlanningInputError("ltcShock.costInflation must be a number or omitted")
+    try:
+        return make_ltc_shock(
+            onset_age=onset_age,
+            annual_cost=float(annual_cost),
+            duration_years=duration_years,
+            cost_inflation=float(cost_inflation),
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
 def _goal_priority(raw: dict[str, Any], index: int) -> int:
     priority = raw.get("priority")
     if priority is not None:
@@ -2159,6 +2215,7 @@ def _net_spend_schedule(
     annual_spend: float,
     spend_cola: float,
     body: dict[str, Any],
+    ltc_shock: LongTermCareShock | None = None,
     annual_contribution: float = 0.0,
     contribution_cola: float = 0.0,
 ) -> list[float]:
@@ -2196,17 +2253,22 @@ def _net_spend_schedule(
 
     spend_entries = _parse_spend_schedule(body)
     schedule: list[float] = []
+    ltc_costs = ltc_shock_schedule(ltc_shock, current_age=current_age, years=years)
     for year in range(years):
         age = current_age + year
+        ltc_cost = ltc_costs[year]
         if age < retirement_age:
             if annual_contribution:
                 # Accumulation with saving: a negative net draw = a portfolio inflow.
-                schedule.append(-annual_contribution * (1.0 + contribution_cola) ** year)
+                schedule.append(
+                    -annual_contribution * (1.0 + contribution_cola) ** year + ltc_cost
+                )
             else:
-                schedule.append(0.0)  # accumulation: portfolio grows untouched
+                schedule.append(ltc_cost)  # accumulation: shock costs still stress assets
             continue
         spend = annual_spend * (1.0 + spend_cola) ** year
         spend = _apply_spend_schedule(base_spend=spend, age=age, entries=spend_entries)
+        spend += ltc_cost
         income_total = sum(
             amount * (1.0 + cola) ** (age - start) for amount, start, cola in parsed if age >= start
         )
@@ -2314,8 +2376,11 @@ class _MonteCarloContext:
     retirement_age: int
     annual_spend: float
     spend_cola: float
+    healthcare_inflation_rate: float
+    ltc_shock: LongTermCareShock | None
     initial_balance: float
     net_spend: list[float]
+    net_spend_without_ltc_shock: list[float]
     guardrails: GuardrailParams | None
     goal_funding_schedule: list[dict[str, Any]]
     body: dict[str, Any]
@@ -2375,6 +2440,12 @@ def _prepare_monte_carlo(
     spend_cola = body.get("spendColaRate", 0.0)
     if isinstance(spend_cola, bool) or not isinstance(spend_cola, (int, float)):
         raise PlanningInputError("spendColaRate must be a number")
+    healthcare_inflation_rate = _optional_number(
+        body, "healthcareInflationRate", float(spend_cola)
+    )
+    ltc_shock = _parse_ltc_shock(
+        body, default_cost_inflation=healthcare_inflation_rate
+    )
     net_spend = _net_spend_schedule(
         current_age=current_age,
         retirement_age=retirement_age,
@@ -2382,11 +2453,26 @@ def _prepare_monte_carlo(
         annual_spend=annual_spend,
         spend_cola=float(spend_cola),
         body=body,
+        ltc_shock=ltc_shock,
+    )
+    net_spend_without_ltc_shock = _net_spend_schedule(
+        current_age=current_age,
+        retirement_age=retirement_age,
+        years=years,
+        annual_spend=annual_spend,
+        spend_cola=float(spend_cola),
+        body=body,
+        ltc_shock=None,
     )
     goal_funding_schedule = _parse_monte_carlo_goal_schedule(
         body, current_age=current_age, years=years
     )
     guardrails = _parse_guardrails(body, spend_cola=float(spend_cola))
+    if guardrails is not None and ltc_shock is not None:
+        raise PlanningInputError(
+            "ltcShock and guardrails are not combined in S12 v1; run the LTC stress "
+            "and Guyton-Klinger guardrail analysis as separate scenarios"
+        )
 
     paths = body.get("paths", 10000)
     if isinstance(paths, bool) or not isinstance(paths, int) or not 1 <= paths <= _MC_MAX_PATHS:
@@ -2422,8 +2508,11 @@ def _prepare_monte_carlo(
         retirement_age=retirement_age,
         annual_spend=annual_spend,
         spend_cola=float(spend_cola),
+        healthcare_inflation_rate=healthcare_inflation_rate,
+        ltc_shock=ltc_shock,
         initial_balance=initial_balance,
         net_spend=net_spend,
+        net_spend_without_ltc_shock=net_spend_without_ltc_shock,
         guardrails=guardrails,
         goal_funding_schedule=goal_funding_schedule,
         body=body,
@@ -2495,6 +2584,27 @@ def _monte_carlo_decumulation_tool(
             "basis": "path_level_priority_funding_after_base_spend_before_growth",
         }
         result["goalFundingSchedule"] = ctx.goal_funding_schedule
+    if ctx.ltc_shock is not None:
+        baseline = _run_monte_carlo(
+            ctx,
+            initial_balance=ctx.initial_balance,
+            net_spend_by_year=ctx.net_spend_without_ltc_shock,
+            guardrails=ctx.guardrails,
+        )
+        baseline_probability = float(baseline["successProbability"])
+        with_shock_probability = float(result["successProbability"])
+        result["ltcShock"] = ltc_shock_summary(
+            ctx.ltc_shock, current_age=ctx.current_age, years=ctx.years
+        )
+        result["ltcShockImpact"] = {
+            "basis": "same_seed_same_returns_with_vs_without_ltc_shock",
+            "baselineSuccessProbability": round(baseline_probability, 4),
+            "withShockSuccessProbability": round(with_shock_probability, 4),
+            "successProbabilityDelta": round(with_shock_probability - baseline_probability, 4),
+            "selfInsuredProbability": round(with_shock_probability, 4),
+            "baselineTerminalValues": baseline["terminalValues"],
+            "withShockTerminalValues": result["terminalValues"],
+        }
     return result
 
 
@@ -2578,6 +2688,7 @@ def _schedule_for(
         annual_spend=ctx.annual_spend if annual_spend is None else annual_spend,
         spend_cola=ctx.spend_cola,
         body=ctx.body,
+        ltc_shock=ctx.ltc_shock,
         annual_contribution=annual_contribution,
     )
     return net_spend
