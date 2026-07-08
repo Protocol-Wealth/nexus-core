@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 import statistics
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 RebalanceFrequency = Literal["monthly", "annual", "none"]
 
@@ -151,7 +151,7 @@ def _validate_inputs(
         normalized_returns,
         normalized_weights,
         labels,
-        cast(RebalanceFrequency, rebalance_frequency),
+        rebalance_frequency,
     )
 
 

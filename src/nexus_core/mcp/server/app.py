@@ -1552,7 +1552,7 @@ def _register_crypto_options_tools(
     def _i(value: Any) -> int:
         if isinstance(value, bool) or not isinstance(value, int):
             raise ValueError("expected a whole number")
-        return cast(int, value)
+        return value
 
     @mcp.tool(annotations=_RO_OPEN)
     def crypto_covered_call_ladder(

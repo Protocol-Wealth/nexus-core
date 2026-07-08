@@ -1698,7 +1698,7 @@ def _parse_report_metadata(body: dict[str, Any], scope: str) -> dict[str, Any]:
             return None
         if isinstance(value, bool) or not isinstance(value, int):
             raise PlanningInputError(f"metadata.{key} must be an integer or null")
-        return cast(int, value)
+        return value
 
     return {
         "assumptionVersion": optional_str("assumptionVersion", required=True),
@@ -1891,7 +1891,7 @@ def _resolve_seed(body: dict[str, Any]) -> int:
         return secrets.randbelow(_MAX_SEED)
     if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= _MAX_SEED:
         raise PlanningInputError(f"seed must be an integer in [0, {_MAX_SEED}] or null")
-    return cast(int, seed)
+    return seed
 
 
 def _validate_asset_classes(body: dict[str, Any], *, require_lambda: bool) -> list[dict[str, Any]]:
@@ -1978,7 +1978,7 @@ def _as_optional_age(entry: dict[str, Any], key: str, default: int) -> int:
     value = entry.get(key, default)
     if isinstance(value, bool) or not isinstance(value, int) or not 0 < value <= 120:
         raise PlanningInputError(f"spendSchedule {key} must be an integer age in [1, 120]")
-    return cast(int, value)
+    return value
 
 
 def _parse_spend_schedule(body: dict[str, Any]) -> list[_SpendScheduleEntry]:
@@ -2099,7 +2099,7 @@ def _goal_priority(raw: dict[str, Any], index: int) -> int:
     if priority is not None:
         if isinstance(priority, bool) or not isinstance(priority, int) or not 1 <= priority <= 100:
             raise PlanningInputError(f"goals[{index}].priority must be an integer in [1, 100]")
-        return cast(int, priority)
+        return priority
     tier = raw.get("tier", raw.get("importance", "want"))
     if not isinstance(tier, str) or tier not in _GOAL_TIER_PRIORITIES:
         raise PlanningInputError(

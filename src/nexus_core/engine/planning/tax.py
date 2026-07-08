@@ -17,7 +17,7 @@ current IRS tables for real use. Pure + deterministic; no I/O.
 
 from __future__ import annotations
 
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from .state_tax import (
     IncomeSource,
@@ -239,7 +239,7 @@ def tax_aware_withdrawal(
     """
     if filing_status not in _FILING_STATUSES:
         raise ValueError(f"filingStatus must be one of {', '.join(_FILING_STATUSES)}")
-    status = cast(FilingStatus, filing_status)
+    status: FilingStatus = filing_status
     if gross_need < 0:
         raise ValueError("grossNeed must be non-negative")
     try:
