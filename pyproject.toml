@@ -36,7 +36,7 @@ classifiers = [
 # ─── Core dependencies (required) ───────────────────────────────────
 dependencies = [
     "fastapi>=0.138.1",
-    "uvicorn>=0.49.0",
+    "uvicorn>=0.50.2",
     "pydantic>=2.13.4",
     "httpx>=0.28.1",
     "structlog>=26.1.0",
