@@ -216,11 +216,12 @@ def test_planning_response_carries_disclaimer() -> None:
 def test_list_tools_version_handshake() -> None:
     body = _list_gateway_tools()
     assert body["contractVersion"] == CONTRACT_VERSION
-    assert len(body["tools"]) == 33
+    assert len(body["tools"]) == 34
     assert "glide_path" in body["tools"]
     assert "correlation_matrix" in body["tools"]
     assert "capital_market_assumptions" in body["tools"]
     assert "historical_blend" in body["tools"]
+    assert "inherited_ira_analysis" in body["tools"]
     assert "tax_aware_withdrawal" in body["tools"]
     assert "regime_return_generator" in body["tools"]
     assert "monte_carlo_decumulation" in body["tools"]

@@ -51,6 +51,15 @@ from .goal_solve import (
 from .goals import GOAL_KINDS, analyze_goals
 from .historical_blend import HISTORICAL_BLEND_DISCLAIMER, historical_blend
 from .income_layering import IncomeStream, SocialSecurityIncome, income_layering
+from .inherited_ira import (
+    BENEFICIARY_TYPES,
+    STRATEGIES,
+    BeneficiaryType,
+    InheritedIraStrategy,
+    classify_inherited_ira_beneficiary,
+    inherited_ira_analysis,
+    inherited_ira_beneficiary_carveouts,
+)
 from .irmaa import irmaa_headroom
 from .monte_carlo import GuardrailParams, monte_carlo_decumulation
 from .performance import (
@@ -70,6 +79,7 @@ from .result_schema import (
     education_vehicle_rules_result_schema,
     historical_blend_result_schema,
     income_layering_result_schema,
+    inherited_ira_analysis_result_schema,
     performance_analysis_result_schema,
     risk_profile_result_schema,
     roth_conversion_analysis_schema,
@@ -122,7 +132,9 @@ __all__ = [
     "GOAL_KINDS",
     "PLANNING_CONTRACT_VERSION",
     "AcaSituation",
+    "BENEFICIARY_TYPES",
     "BracketTable",
+    "BeneficiaryType",
     "Direction",
     "EducationCostResult",
     "EducationCostYear",
@@ -137,6 +149,7 @@ __all__ = [
     "HISTORICAL_BLEND_DISCLAIMER",
     "InfeasiblePlanError",
     "IncomeStream",
+    "InheritedIraStrategy",
     "IrmaaTable",
     "IrmaaTier",
     "MwrCashFlow",
@@ -152,6 +165,7 @@ __all__ = [
     "SolvePoint",
     "SolveResult",
     "SocialSecurityIncome",
+    "STRATEGIES",
     "StateConversionRule",
     "StateResidencyChange",
     "StateRetirementExclusion",
@@ -168,6 +182,7 @@ __all__ = [
     "GuardrailParams",
     "cash_reserve_analysis",
     "cashflow_planning_bridge",
+    "classify_inherited_ira_beneficiary",
     "correlation_matrix",
     "education_cost_fv",
     "education_funding",
@@ -183,6 +198,9 @@ __all__ = [
     "historical_blend",
     "historical_blend_result_schema",
     "household_social_security_benefits",
+    "inherited_ira_analysis",
+    "inherited_ira_analysis_result_schema",
+    "inherited_ira_beneficiary_carveouts",
     "irmaa_headroom",
     "income_layering",
     "income_layering_result_schema",

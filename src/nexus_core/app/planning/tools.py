@@ -52,6 +52,7 @@ from ...engine.planning import (
     fire,
     historical_blend,
     income_layering,
+    inherited_ira_analysis,
     irmaa_headroom,
     monte_carlo_decumulation,
     performance_analysis,
@@ -433,13 +434,31 @@ _FILING_STATUSES: tuple[FilingStatus, ...] = (
     "married_separate",
     "head_of_household",
 )
+_FILING_STATUS_BY_VALUE: dict[str, FilingStatus] = {status: status for status in _FILING_STATUSES}
+
+
+def _as_filing_status(body: dict[str, Any]) -> FilingStatus:
+    filing = _as_str(body, "filingStatus")
+    filing_status = _FILING_STATUS_BY_VALUE.get(filing)
+    if filing_status is None:
+        raise PlanningInputError(f"filingStatus must be one of {', '.join(_FILING_STATUSES)}")
+    return filing_status
+
+
+_INHERITED_IRA_BENEFICIARY_TYPES = (
+    "spouse",
+    "minor_child_of_decedent",
+    "disabled",
+    "chronically_ill",
+    "not_more_than_10_years_younger",
+    "other_designated_beneficiary",
+    "non_designated_beneficiary",
+)
 
 
 def roth_conversion_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``roth_conversion`` — convert-now vs. leave-pre-tax after-tax comparison."""
-    filing = _as_str(body, "filingStatus")
-    if filing not in _FILING_STATUSES:
-        raise PlanningInputError(f"filingStatus must be one of {', '.join(_FILING_STATUSES)}")
+    filing_status = _as_filing_status(body)
     taxes_from = body.get("taxesPaidFromConversion", False)
     if not isinstance(taxes_from, bool):
         raise PlanningInputError("taxesPaidFromConversion must be a boolean")
@@ -447,7 +466,7 @@ def roth_conversion_tool(body: dict[str, Any]) -> dict[str, Any]:
     try:
         return roth_conversion(
             current_taxable_income=_as_number(body, "currentTaxableIncome"),
-            filing_status=filing,
+            filing_status=filing_status,
             conversion_amount=_as_number(body, "conversionAmount"),
             growth_rate=_as_number(body, "growthRate"),
             years=_as_int(body, "years"),
@@ -485,9 +504,7 @@ def rmd_tool(body: dict[str, Any]) -> dict[str, Any]:
 
 def tax_bracket_headroom_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``tax_bracket_headroom`` — marginal bracket + room before the next rate."""
-    filing = _as_str(body, "filingStatus")
-    if filing not in _FILING_STATUSES:
-        raise PlanningInputError(f"filingStatus must be one of {', '.join(_FILING_STATUSES)}")
+    filing_status = _as_filing_status(body)
     target = body.get("targetRate")
     if target is not None and (isinstance(target, bool) or not isinstance(target, (int, float))):
         raise PlanningInputError("targetRate must be a number or omitted")
@@ -495,9 +512,64 @@ def tax_bracket_headroom_tool(body: dict[str, Any]) -> dict[str, Any]:
     try:
         return bracket_headroom(
             taxable_income=_as_number(body, "taxableIncome"),
-            filing_status=filing,
+            filing_status=filing_status,
             target_rate=float(target) if target is not None else None,
             year=2026 if year is None else year,
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def inherited_ira_analysis_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``inherited_ira_analysis`` — inherited IRA 10-year strategy comparison."""
+    allowed = {
+        "contractVersion",
+        "inheritedBalance",
+        "beneficiaryOrdinaryIncome",
+        "beneficiaryOrdinaryIncomeByYear",
+        "filingStatus",
+        "taxYear",
+        "yearsRemaining",
+        "annualReturn",
+        "taxableDistributionRatio",
+        "beneficiaryType",
+        "beneficiaryAge",
+        "decedentAge",
+        "targetRate",
+    }
+    extra = set(body) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"inherited_ira_analysis only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
+        )
+    filing_status = _as_filing_status(body)
+    beneficiary_type = str(body.get("beneficiaryType", "other_designated_beneficiary"))
+    if beneficiary_type not in _INHERITED_IRA_BENEFICIARY_TYPES:
+        raise PlanningInputError(
+            "beneficiaryType must be one of "
+            + ", ".join(_INHERITED_IRA_BENEFICIARY_TYPES)
+        )
+    income_by_year = (
+        _as_finite_num_list(body, "beneficiaryOrdinaryIncomeByYear")
+        if "beneficiaryOrdinaryIncomeByYear" in body
+        else None
+    )
+    tax_year = _optional_int(body, "taxYear")
+    years_remaining = _optional_int(body, "yearsRemaining")
+    try:
+        return inherited_ira_analysis(
+            inherited_balance=_as_number(body, "inheritedBalance"),
+            beneficiary_ordinary_income=_as_number(body, "beneficiaryOrdinaryIncome"),
+            beneficiary_ordinary_income_by_year=income_by_year,
+            filing_status=filing_status,
+            tax_year=2026 if tax_year is None else tax_year,
+            years_remaining=10 if years_remaining is None else years_remaining,
+            annual_return=_optional_number(body, "annualReturn", 0.0),
+            taxable_distribution_ratio=_optional_number(body, "taxableDistributionRatio", 1.0),
+            beneficiary_type=beneficiary_type,  # type: ignore[arg-type]
+            beneficiary_age=_optional_int(body, "beneficiaryAge"),
+            decedent_age=_optional_int(body, "decedentAge"),
+            target_rate=_optional_number(body, "targetRate", 0.24),
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
@@ -2909,6 +2981,7 @@ def build_tool_handlers(
         "sequence_of_returns_stress": sequence_of_returns_stress_tool,
         "rmd": rmd_tool,
         "tax_bracket_headroom": tax_bracket_headroom_tool,
+        "inherited_ira_analysis": inherited_ira_analysis_tool,
         "social_security_claiming": social_security_claiming_tool,
         "regime_conditioned_swr": regime_conditioned_swr_tool,
         "portfolio_xray": portfolio_xray_tool,
@@ -2936,6 +3009,7 @@ __all__ = [
     "education_funding_tool",
     "education_vehicle_rules_tool",
     "income_layering_tool",
+    "inherited_ira_analysis_tool",
     "fire_tool",
     "glide_path_tool",
     "irmaa_headroom_tool",

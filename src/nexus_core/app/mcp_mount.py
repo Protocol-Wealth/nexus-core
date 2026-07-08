@@ -175,6 +175,13 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "room before the next federal rate (or up to a target rate). JSON request "
         "object in `body`."
     ),
+    "inherited_ira_analysis": (
+        "Inherited IRA 10-year strategy comparison: lump-sum, equal annual, and "
+        "bracket-smoothed beneficiary distributions with incremental federal "
+        "ordinary-tax estimates and eligible-designated-beneficiary carve-out "
+        "notes. Strategy comparison only; not a separate annual RMD compliance "
+        "calculator. De-identified numeric inputs only. JSON request object in `body`."
+    ),
     "social_security_claiming": (
         "Social Security claiming-age: benefit at each claim age 62-70 from the "
         "PIA + breakeven ages between strategies. JSON request object in `body`."
@@ -317,7 +324,7 @@ def build_configured_server(
     the EMF ``score_asset`` (sharing the REST ``/api/score`` context builder +
     framework, so MCP and REST return identical scores), market quotes/history,
     FRED economic series, DefiLlama TVL, the options pricing/overlay + Deribit
-    crypto-option tools, and the 33 planning tools (monte_carlo_decumulation,
+    crypto-option tools, and the 34 planning tools (monte_carlo_decumulation,
     solve_goal, analyze_goals, project_cash_flow, cashflow_planning_bridge,
     cash_reserve_analysis, budget_pacing_projection, education_funding,
     education_vehicle_rules, income_layering, glide_path, tax_aware_withdrawal,
@@ -325,7 +332,7 @@ def build_configured_server(
     historical_blend,
     regime_return_generator,
     capital_market_assumptions, roth_conversion, sequence_of_returns_stress, rmd,
-    tax_bracket_headroom, social_security_claiming, regime_conditioned_swr,
+    tax_bracket_headroom, inherited_ira_analysis, social_security_claiming, regime_conditioned_swr,
     portfolio_xray, optimize_allocation, risk_profile_score, fire, risk_metrics,
     performance_analysis, rebalance, the
     composite Roth/IRMAA trio analyze_roth_conversion, sequence_conversions,
