@@ -185,7 +185,7 @@ nexus-core mcp        # MCP server over stdio</code></pre>
     <tr><td>Options</td><td>Black-Scholes price + Greeks; covered-call / cash-secured-put / collar overlays</td></tr>
     <tr><td>Crypto options</td><td>Deribit instruments + IV/Greeks (BTC, ETH, SOL, XRP, TRX, AVAX)</td></tr>
     <tr><td>DeFi</td><td>DefiLlama TVL by protocol and chain</td></tr>
-    <tr><td>Planning</td><td>34 PII-free tools: Monte Carlo, goal funding, deterministic cash flow, education, income layering, inherited IRA analysis, risk profile scoring, allocation optimization, performance math, Roth/IRMAA, report assembly</td></tr>
+    <tr><td>Planning</td><td>34 PII-free tools: Monte Carlo, goal funding, deterministic cash flow, healthcare/LTC stress, education, income layering, inherited IRA analysis, risk profile scoring, allocation optimization, performance math, Roth/IRMAA, report assembly</td></tr>
   </table>
   <p>
     Everything is read-only, public, and educational — no side effects, no
@@ -255,10 +255,10 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
   <h3>The planning tools</h3>
   <p>Invoke a tool with <code>POST /api/planning/tools/{{tool_id}}</code> and a JSON body. Legacy <code>/mcp/tools</code> aliases remain for older clients:</p>
   <ul>
-    <li><code>monte_carlo_decumulation</code> — primary retirement decumulation simulation</li>
+    <li><code>monte_carlo_decumulation</code> — primary retirement decumulation simulation, including optional same-seed LTC-shock impact</li>
     <li><code>solve_goal</code> — solve one planning variable to a target success probability</li>
     <li><code>analyze_goals</code> — goal-funding status + shared-pool priority allocation</li>
-    <li><code>project_cash_flow</code> — deterministic year-by-year cash-flow and net-worth projection</li>
+    <li><code>project_cash_flow</code> — deterministic year-by-year cash-flow and net-worth projection, including optional LTC shock expense rows</li>
     <li><code>cashflow_planning_bridge</code> — derived monthly close values into planning assumptions</li>
     <li><code>cash_reserve_analysis</code> — cash reserve coverage and funding status</li>
     <li><code>budget_pacing_projection</code> — month-end budget pace from aggregate spending</li>
@@ -299,7 +299,10 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     recurring bump/reduction over an age range, <code>override</code> replaces
     the base spend for an age range, and <code>one_time</code> adds a single
     lump expense. Optional <code>guardrails</code> enables Guyton-Klinger
-    dynamic withdrawals. Inputs are de-identified — the engine is PII-free and
+    dynamic withdrawals. Optional <code>ltcShock</code> models a healthcare-cost
+    stress and reports a same-seed with/without-shock impact; S12 v1 does not
+    combine <code>ltcShock</code> with <code>guardrails</code>, so run those as
+    separate scenarios. Inputs are de-identified — the engine is PII-free and
     works on age, never date of birth. Monte Carlo and scenario outputs are
     illustrative model results from hypothetical assumptions — not predictions
     or guarantees of any individual outcome.

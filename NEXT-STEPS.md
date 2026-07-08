@@ -115,6 +115,16 @@ performance analysis. Live endpoints were not re-smoked._
   are numeric and de-identified only; spousal rollover elections,
   trust/estate-specific rules, state tax, client delivery, and audit workflows
   remain private / future scope.
+- **Current S12 healthcare / LTC stress state:** `project_cash_flow` and
+  `monte_carlo_decumulation` accept optional `ltcShock` plus
+  `healthcareInflationRate`. The event uses onset age, current-dollar annual
+  cost, duration, and healthcare-cost inflation only. Cash-flow rows expose
+  `baseExpenses` and `ltcShockExpense`; Monte Carlo emits a same-seed
+  with/without-shock success-probability delta, self-insured probability, and
+  terminal-value comparison. S12 v1 rejects `ltcShock` + Guyton-Klinger
+  guardrails together; run those as separate scenarios. Diagnosis, claims,
+  provider names, policy data, delivery, approval, and audit workflows remain
+  private / future scope.
 - **Current S2 income-layering state:** `income_layering` composes earned income,
   Social Security, pension/annuity streams, forced RMDs, tax-aware withdrawals,
   and optional bracket-fill analysis into a stacked per-year income timeline.

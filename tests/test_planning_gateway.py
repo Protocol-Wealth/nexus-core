@@ -348,6 +348,61 @@ def test_monte_carlo_spend_schedule_late_ltc_bump_lowers_success() -> None:
     assert shocked["depletionStats"]["depletionAgePercentiles"]["p50"] >= 60
 
 
+def test_monte_carlo_ltc_shock_reports_same_seed_impact() -> None:
+    base_payload = {
+        **_MC_PAYLOAD,
+        "currentAge": 60,
+        "retirementAge": 67,
+        "horizonAge": 95,
+        "accounts": [
+            {
+                "type": "traditional",
+                "balance": 1_200_000,
+                "allocation": {"us_equity": 0.6, "us_bonds": 0.4},
+            }
+        ],
+        "annualSpend": 70_000,
+        "paths": 3_000,
+        "seed": 6789,
+        "ltcShock": {
+            "onsetAge": 84,
+            "annualCost": 120_000,
+            "durationYears": 4,
+            "costInflation": 0.04,
+        },
+    }
+    body = _monte_carlo_decumulation_tool(base_payload, _FakeMarket(), _FakeRegimeEngine())
+
+    assert body["ltcShock"]["onsetAge"] == 84
+    assert body["ltcShock"]["nominalTotalCost"] > 480_000
+    assert body["ltcShockImpact"]["basis"] == "same_seed_same_returns_with_vs_without_ltc_shock"
+    assert body["ltcShockImpact"]["withShockSuccessProbability"] == body["successProbability"]
+    assert body["ltcShockImpact"]["successProbabilityDelta"] <= 0
+    assert (
+        body["ltcShockImpact"]["baselineTerminalValues"]["p50"]
+        >= body["ltcShockImpact"]["withShockTerminalValues"]["p50"]
+    )
+
+
+def test_monte_carlo_ltc_shock_rejects_guardrails_v1_combination() -> None:
+    with pytest.raises(PlanningInputError, match="ltcShock and guardrails"):
+        _monte_carlo_decumulation_tool(
+            {
+                **_MC_PAYLOAD,
+                "paths": 400,
+                "ltcShock": {
+                    "onsetAge": 84,
+                    "annualCost": 120_000,
+                    "durationYears": 4,
+                    "costInflation": 0.04,
+                },
+                "guardrails": {"rule": "guyton_klinger"},
+            },
+            _FakeMarket(),
+            _FakeRegimeEngine(),
+        )
+
+
 def test_monte_carlo_goals_add_ordered_schedule_and_lower_success() -> None:
     base_payload = {
         **_MC_PAYLOAD,
@@ -1369,6 +1424,90 @@ def test_project_cash_flow_happy_path() -> None:
     assert body["aggregate"]["startingNetWorth"] == 600_000 - 250_000
     assert 0.0 <= body["lifetimeTax"]["effectiveRate"] <= 1.0
     assert body["assumptions"]["filingStatus"] == "married_joint"
+
+
+def test_project_cash_flow_ltc_shock_adds_explicit_expense_rows() -> None:
+    payload = {
+        "contractVersion": "0.1.0",
+        "currentAge": 78,
+        "retirementAge": 65,
+        "terminalAge": 84,
+        "currentIncome": 0,
+        "currentExpenses": 80_000,
+        "currentPortfolio": 700_000,
+        "retirementIncome": 40_000,
+        "expectedReturn": 0.03,
+        "expenseInflationRate": 0.02,
+        "healthcareInflationRate": 0.04,
+        "ltcShock": {
+            "onsetAge": 80,
+            "annualCost": 100_000,
+            "durationYears": 3,
+        },
+    }
+    response = _call_gateway_tool("project_cash_flow", payload)
+    assert isinstance(response, JSONResponse)
+    body = _response_json(response)
+
+    shock_rows = [row for row in body["years"] if row.get("ltcShockExpense", 0) > 0]
+    assert [row["age"] for row in shock_rows] == [80, 81, 82]
+    assert shock_rows[0]["baseExpenses"] < shock_rows[0]["expenses"]
+    assert body["aggregate"]["lifetimeLtcShockCost"] == body["assumptions"]["ltcShock"][
+        "nominalTotalCost"
+    ]
+    assert body["assumptions"]["ltcShock"]["costInflation"] == 0.04
+
+
+def test_project_cash_flow_ltc_shock_supports_late_age_horizon() -> None:
+    payload = {
+        "contractVersion": "0.1.0",
+        "currentAge": 120,
+        "retirementAge": 65,
+        "terminalAge": 125,
+        "currentIncome": 0,
+        "currentExpenses": 40_000,
+        "currentPortfolio": 300_000,
+        "retirementIncome": 20_000,
+        "ltcShock": {
+            "onsetAge": 121,
+            "annualCost": 50_000,
+            "durationYears": 2,
+            "costInflation": 0.03,
+        },
+    }
+
+    body = _call_gateway_tool("project_cash_flow", payload)
+    assert isinstance(body, JSONResponse)
+    payload_body = _response_json(body)
+
+    shock_rows = [row for row in payload_body["years"] if row.get("ltcShockExpense", 0) > 0]
+    assert [row["age"] for row in shock_rows] == [121, 122]
+
+
+def test_project_cash_flow_ltc_shock_rejects_private_nested_fields() -> None:
+    response = _call_gateway_tool(
+        "project_cash_flow",
+        {
+            "contractVersion": "0.1.0",
+            "currentAge": 78,
+            "retirementAge": 65,
+            "terminalAge": 84,
+            "currentIncome": 0,
+            "currentExpenses": 80_000,
+            "currentPortfolio": 700_000,
+            "retirementIncome": 40_000,
+            "ltcShock": {
+                "onsetAge": 80,
+                "annualCost": 100_000,
+                "durationYears": 3,
+                "providerName": "Example Facility",
+            },
+        },
+    )
+
+    assert isinstance(response, PlainTextResponse)
+    assert response.status_code == 400
+    assert "ltcShock only accepts" in _response_text(response)
 
 
 def test_project_cash_flow_account_balances_gateway() -> None:

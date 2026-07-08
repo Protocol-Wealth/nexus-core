@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Healthcare / LTC stress S12
+
+#### Added
+
+- Added public-safe long-term-care stress inputs to deterministic cash-flow and
+  Monte Carlo planning. `ltcShock` uses only de-identified numeric assumptions:
+  onset age, current-dollar annual cost, duration, and healthcare-cost
+  inflation.
+- `project_cash_flow` now exposes LTC shock expense rows and total nominal shock
+  cost when a shock is supplied. `monte_carlo_decumulation` now emits a
+  same-seed with/without-shock impact block with success-probability delta,
+  self-insured probability, and terminal-value comparison.
+
 ### Inherited IRA beneficiary decumulation S11
 
 #### Added

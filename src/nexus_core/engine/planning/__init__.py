@@ -49,6 +49,13 @@ from .goal_solve import (
     solve_monotone,
 )
 from .goals import GOAL_KINDS, analyze_goals
+from .healthcare import (
+    LongTermCareShock,
+    ltc_shock_cost_by_age,
+    ltc_shock_schedule,
+    ltc_shock_summary,
+    make_ltc_shock,
+)
 from .historical_blend import HISTORICAL_BLEND_DISCLAIMER, historical_blend
 from .income_layering import IncomeStream, SocialSecurityIncome, income_layering
 from .inherited_ira import (
@@ -198,12 +205,17 @@ __all__ = [
     "historical_blend",
     "historical_blend_result_schema",
     "household_social_security_benefits",
+    "LongTermCareShock",
     "inherited_ira_analysis",
     "inherited_ira_analysis_result_schema",
     "inherited_ira_beneficiary_carveouts",
     "irmaa_headroom",
     "income_layering",
     "income_layering_result_schema",
+    "ltc_shock_cost_by_age",
+    "ltc_shock_schedule",
+    "ltc_shock_summary",
+    "make_ltc_shock",
     "money_weighted_return",
     "monte_carlo_decumulation",
     "performance_analysis",

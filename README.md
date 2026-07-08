@@ -178,7 +178,7 @@ Nexus Core (FastAPI + FastMCP)
 ├── Benchmarks (engine/benchmarks.py)
 │   └── Base-100 buy-and-hold compositions
 ├── Planning (engine/planning)
-│   └── PII-free planning math: Monte Carlo, goals, cash flow, taxable-first waterfall, inherited IRA, Roth/IRMAA, versioned tax-table provider
+│   └── PII-free planning math: Monte Carlo, goals, cash flow, healthcare/LTC stress, taxable-first waterfall, inherited IRA, Roth/IRMAA, versioned tax-table provider
 ├── Data Clients (data/)
 │   ├── market/   yfinance, MBOUM, MarketStack, CoinGecko + cache + composite
 │   ├── macro/    FRED, EIA, BEA, Treasury

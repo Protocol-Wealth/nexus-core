@@ -115,6 +115,17 @@ de-identified only. Spousal rollover elections, trust/estate-specific rules,
 state tax, client delivery, and books-and-records workflow stay outside the
 public engine.
 
+Current source also adds the S12 healthcare / long-term-care stress slice.
+`project_cash_flow` and `monte_carlo_decumulation` accept optional `ltcShock`
+plus `healthcareInflationRate`. The shock is de-identified numeric input only:
+onset age, current-dollar annual cost, duration, and cost inflation. Cash-flow
+rows expose base expenses and LTC shock expenses when present; Monte Carlo emits
+a same-seed with/without-shock success-probability delta, self-insured
+probability, and terminal-value comparison. S12 v1 rejects `ltcShock` +
+Guyton-Klinger guardrails together; run those as separate scenarios. Diagnosis,
+claims, provider names, insurance-policy data, release approval, archive
+records, and client delivery stay in the private stack.
+
 The collar-book realistic-fill layer is part of current source. The engine plus
 REST/MCP parsers accept midpoint `net_credit` and optional executable pricing
 (`executable_net_credit` or `call_bid` minus `put_ask`) and return stock price,

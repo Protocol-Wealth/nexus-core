@@ -17,7 +17,16 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   bearer key opened the then-current 27-tool planning contract; hosted native `/mcp` keeps
   transparent OAuth active and exposes only the demo MCP tools
   `option_price`, `collar_book`, `health`, and `describe`.
-- **Last local update:** 2026-07-08 — current branch adds S11
+- **Last local update:** 2026-07-08 — current branch adds S12 healthcare / LTC
+  stress support for `project_cash_flow` and `monte_carlo_decumulation`.
+  `ltcShock` uses only de-identified numeric assumptions — onset age,
+  current-dollar annual cost, duration, and healthcare-cost inflation. Cash flow
+  rows expose base expenses and LTC shock expense when supplied; Monte Carlo
+  emits a same-seed with/without-shock success-probability delta,
+  self-insured probability, and terminal-value comparison. S12 v1 does not
+  combine `ltcShock` with Guyton-Klinger guardrails; run those as separate
+  scenarios. No diagnosis, provider, claim, policy, household identifier,
+  approval, release, or audit state enters the public engine. `main` also adds S11
   `inherited_ira_analysis`: a public-safe inherited traditional IRA
   beneficiary strategy comparison for lump-sum, equal-annual, and
   bracket-smoothed 10-year-rule distributions. It uses only de-identified
@@ -446,6 +455,17 @@ key is absent.
   annual RMD compliance calculator. Inputs remain numeric and de-identified
   only; spousal rollover elections, trust/estate-specific rules, state tax, and
   books-and-records workflows stay private / future scope.
+- **S12 healthcare / LTC stress state** — `project_cash_flow` and
+  `monte_carlo_decumulation` accept optional `ltcShock` plus
+  `healthcareInflationRate`. `ltcShock` is a de-identified event:
+  `{onsetAge, annualCost, durationYears, costInflation?}` where `annualCost` is
+  stated in current-year dollars and inflated into each active shock year.
+  Deterministic cash-flow rows expose `baseExpenses` and `ltcShockExpense` only
+  when a shock is supplied; Monte Carlo reports a same-seed with/without-shock
+  impact block. S12 v1 rejects `ltcShock` + Guyton-Klinger guardrails together;
+  run those as separate scenarios. Diagnosis, claims, provider names,
+  insurance-policy data, client delivery, and books-and-records workflow stay
+  private / future scope.
 - **Planning surface now 34 tools in current source** — includes `solve_goal`,
   `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio,
   `education_funding`, `education_vehicle_rules`, `income_layering`,
