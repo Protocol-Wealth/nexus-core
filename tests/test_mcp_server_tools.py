@@ -188,6 +188,7 @@ _PLANNING_TOOL_IDS = {
     "sequence_of_returns_stress",
     "rmd",
     "tax_bracket_headroom",
+    "inherited_ira_analysis",
     "social_security_claiming",
     "regime_conditioned_swr",
     "portfolio_xray",

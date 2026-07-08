@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Inherited IRA beneficiary decumulation S11
+
+#### Added
+
+- Added the public-safe `inherited_ira_analysis` planning tool. It compares
+  lump-sum, equal-annual, and bracket-smoothed inherited traditional IRA
+  distribution strategies under a 10-year frame, stacks taxable inherited
+  distributions on beneficiary ordinary income using the injected federal
+  ordinary-tax table, ranks strategies by net after-tax receipts, and returns an
+  eligible-designated-beneficiary carve-out table.
+- Added a JSON result schema, planning-tool registry wiring, MCP guide /
+  `llms.txt` inventory updates, and focused unit/handler coverage. Inputs are
+  numeric and de-identified only: no beneficiary names, account identifiers,
+  raw transactions, notes, approvals, release state, or audit records.
+
 ### Performance analysis S4
 
 #### Added

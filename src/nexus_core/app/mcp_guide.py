@@ -185,7 +185,7 @@ nexus-core mcp        # MCP server over stdio</code></pre>
     <tr><td>Options</td><td>Black-Scholes price + Greeks; covered-call / cash-secured-put / collar overlays</td></tr>
     <tr><td>Crypto options</td><td>Deribit instruments + IV/Greeks (BTC, ETH, SOL, XRP, TRX, AVAX)</td></tr>
     <tr><td>DeFi</td><td>DefiLlama TVL by protocol and chain</td></tr>
-    <tr><td>Planning</td><td>33 PII-free tools: Monte Carlo, goal funding, deterministic cash flow, education, income layering, risk profile scoring, allocation optimization, performance math, Roth/IRMAA, report assembly</td></tr>
+    <tr><td>Planning</td><td>34 PII-free tools: Monte Carlo, goal funding, deterministic cash flow, education, income layering, inherited IRA analysis, risk profile scoring, allocation optimization, performance math, Roth/IRMAA, report assembly</td></tr>
   </table>
   <p>
     Everything is read-only, public, and educational — no side effects, no
@@ -275,6 +275,7 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     <li><code>sequence_of_returns_stress</code> — ordering effect on a fixed return set (worst/best/as-given)</li>
     <li><code>rmd</code> — required minimum distribution (IRS Uniform Lifetime Table; optional birthYear policy)</li>
     <li><code>tax_bracket_headroom</code> — marginal bracket + room before the next rate (Roth-fill)</li>
+    <li><code>inherited_ira_analysis</code> — inherited IRA 10-year strategy comparison and EDB carve-out notes; not a separate annual RMD compliance calculator</li>
     <li><code>social_security_claiming</code> — benefit by claim age 62–70 + breakeven ages</li>
     <li><code>regime_conditioned_swr</code> — base safe withdrawal rate adjusted for the live regime</li>
     <li><code>portfolio_xray</code> — regime-aware structural diagnostics (concentration, tax-location, regime sensitivity)</li>

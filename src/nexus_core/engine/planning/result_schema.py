@@ -837,10 +837,173 @@ def performance_analysis_result_schema() -> dict[str, Any]:
     }
 
 
+def inherited_ira_analysis_result_schema() -> dict[str, Any]:
+    """JSON Schema for the ``inherited_ira_analysis`` tool result."""
+
+    year_row = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "yearIndex",
+            "beginningBalance",
+            "growth",
+            "distribution",
+            "taxableDistribution",
+            "endingBalance",
+            "beneficiaryOrdinaryIncome",
+            "ordinaryIncomeWithDistribution",
+            "incrementalFederalTax",
+            "marginalOrdinaryRate",
+            "effectiveTaxRateOnDistribution",
+        ],
+        "properties": {
+            "yearIndex": {"type": "integer"},
+            "beginningBalance": _MONEY,
+            "growth": _MONEY,
+            "distribution": _MONEY,
+            "taxableDistribution": _MONEY,
+            "endingBalance": _MONEY,
+            "beneficiaryOrdinaryIncome": _MONEY,
+            "ordinaryIncomeWithDistribution": _MONEY,
+            "incrementalFederalTax": _MONEY,
+            "marginalOrdinaryRate": _RATE,
+            "effectiveTaxRateOnDistribution": {"type": ["number", "null"]},
+        },
+    }
+    totals = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "totalDistributed",
+            "totalTaxableDistributed",
+            "totalGrowth",
+            "totalIncrementalFederalTax",
+            "netAfterTaxReceived",
+            "endingBalance",
+            "peakMarginalOrdinaryRate",
+        ],
+        "properties": {
+            "totalDistributed": _MONEY,
+            "totalTaxableDistributed": _MONEY,
+            "totalGrowth": _MONEY,
+            "totalIncrementalFederalTax": _MONEY,
+            "netAfterTaxReceived": _MONEY,
+            "endingBalance": _MONEY,
+            "peakMarginalOrdinaryRate": _RATE,
+        },
+    }
+    strategy = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["strategy", "label", "years", "totals", "rank"],
+        "properties": {
+            "strategy": {"type": "string"},
+            "label": {"type": "string"},
+            "years": {"type": "array", "items": year_row},
+            "totals": totals,
+            "rank": {"type": "integer"},
+        },
+    }
+    ranking = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "rank",
+            "strategy",
+            "netAfterTaxReceived",
+            "totalIncrementalFederalTax",
+            "peakMarginalOrdinaryRate",
+        ],
+        "properties": {
+            "rank": {"type": "integer"},
+            "strategy": {"type": "string"},
+            "netAfterTaxReceived": _MONEY,
+            "totalIncrementalFederalTax": _MONEY,
+            "peakMarginalOrdinaryRate": _RATE,
+        },
+    }
+    classification = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["beneficiaryType", "label", "eligibleDesignatedBeneficiary", "notes"],
+        "properties": {
+            "beneficiaryType": {"type": "string"},
+            "label": {"type": "string"},
+            "eligibleDesignatedBeneficiary": {"type": "boolean"},
+            "notes": _STRING_ARRAY,
+        },
+    }
+    carveout = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["beneficiaryType", "eligibleDesignatedBeneficiary", "summary"],
+        "properties": {
+            "beneficiaryType": {"type": "string"},
+            "eligibleDesignatedBeneficiary": {"type": "boolean"},
+            "summary": {"type": "string"},
+        },
+    }
+    assumptions = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "annualReturn",
+            "taxableDistributionRatio",
+            "targetRate",
+            "distributionTiming",
+            "taxScope",
+            "annualRmdScope",
+            "sourceBasis",
+        ],
+        "properties": {
+            "annualReturn": _RATE,
+            "taxableDistributionRatio": _RATE,
+            "targetRate": _RATE,
+            "distributionTiming": {"type": "string"},
+            "taxScope": {"type": "string"},
+            "annualRmdScope": {"type": "string"},
+            "sourceBasis": {"type": "string"},
+        },
+    }
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://nexusmcp.site/schemas/inherited-ira-analysis-result-0.1.0.json",
+        "title": "InheritedIraAnalysisResult",
+        "description": "PII-free output of the inherited_ira_analysis planning tool.",
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "contractVersion",
+            "taxYear",
+            "taxTableVersion",
+            "yearsRemaining",
+            "beneficiaryClassification",
+            "carveOuts",
+            "strategyRankings",
+            "strategies",
+            "assumptions",
+            "disclaimer",
+        ],
+        "properties": {
+            "contractVersion": {"type": "string"},
+            "taxYear": {"type": "integer"},
+            "taxTableVersion": {"type": "string"},
+            "yearsRemaining": {"type": "integer"},
+            "beneficiaryClassification": classification,
+            "carveOuts": {"type": "array", "items": carveout},
+            "strategyRankings": {"type": "array", "items": ranking},
+            "strategies": {"type": "array", "items": strategy},
+            "assumptions": assumptions,
+            "disclaimer": {"type": "string"},
+        },
+    }
+
+
 __all__ = [
     "education_funding_result_schema",
     "education_vehicle_rules_result_schema",
     "historical_blend_result_schema",
+    "inherited_ira_analysis_result_schema",
     "income_layering_result_schema",
     "performance_analysis_result_schema",
     "risk_profile_result_schema",

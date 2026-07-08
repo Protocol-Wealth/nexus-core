@@ -103,6 +103,18 @@ only. The public engine rejects `released` and caller-provided `curated`
 workflow state. It emits structured report JSON only; branded PDF rendering,
 release approval, archive records, and client delivery stay in the private stack.
 
+Current source also adds the S11 inherited IRA / beneficiary decumulation slice.
+`inherited_ira_analysis` compares lump-sum, equal-annual, and bracket-smoothed
+inherited traditional IRA distribution strategies under a 10-year frame, stacks
+taxable inherited distributions on beneficiary ordinary income using the
+injected federal ordinary-tax table, ranks strategies by net after-tax receipts,
+and returns an eligible-designated-beneficiary carve-out table. The result also
+states that v1 is a strategy comparison, not a separate beneficiary
+life-expectancy annual RMD compliance calculator. Inputs remain numeric and
+de-identified only. Spousal rollover elections, trust/estate-specific rules,
+state tax, client delivery, and books-and-records workflow stay outside the
+public engine.
+
 The collar-book realistic-fill layer is part of current source. The engine plus
 REST/MCP parsers accept midpoint `net_credit` and optional executable pricing
 (`executable_net_credit` or `call_bid` minus `put_ask`) and return stock price,
@@ -211,7 +223,7 @@ gracefully to `None` / empty / `503` when its key is absent.
 - **`GET /api/usage`** — provider usage / quota report.
 - **`POST /mcp`** — MCP-over-HTTP transport (FastMCP, also `nexus-core mcp` over
   stdio) exposing the above as tools, plus `health` / `describe` / `get_quotes`
-  and the 33 current-source planning tools in full mode; demo mode registers
+  and the 34 current-source planning tools in full mode; demo mode registers
   only closed-world demo tools. `GET /api/planning/tools` +
   `POST /api/planning/tools/{id}` are the REST planning gateway
   (contractVersion `0.1.0`) for service/browser callers, with `/mcp/tools`

@@ -104,6 +104,17 @@ performance analysis. Live endpoints were not re-smoked._
   from de-identified numeric series only. Symbols, holdings names, account
   identifiers, raw transaction rows, tax lots, notes, approvals, and audit
   records stay outside this public repo.
+- **Current S11 inherited IRA state:** `inherited_ira_analysis` lives in
+  `engine/planning/inherited_ira.py`, is exported from
+  `nexus_core.engine.planning`, and is exposed through the planning
+  gateway/native MCP registry. It compares lump-sum, equal-annual, and
+  bracket-smoothed inherited traditional IRA distribution strategies under a
+  10-year frame, ranks strategies by net after-tax receipts, and includes EDB
+  carve-out notes. Its result states that v1 is a strategy comparison, not a
+  separate beneficiary life-expectancy annual RMD compliance calculator. Inputs
+  are numeric and de-identified only; spousal rollover elections,
+  trust/estate-specific rules, state tax, client delivery, and audit workflows
+  remain private / future scope.
 - **Current S2 income-layering state:** `income_layering` composes earned income,
   Social Security, pension/annuity streams, forced RMDs, tax-aware withdrawals,
   and optional bracket-fill analysis into a stacked per-year income timeline.

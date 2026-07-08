@@ -17,7 +17,14 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   bearer key opened the then-current 27-tool planning contract; hosted native `/mcp` keeps
   transparent OAuth active and exposes only the demo MCP tools
   `option_price`, `collar_book`, `health`, and `describe`.
-- **Last local update:** 2026-07-07 — current branch adds S4
+- **Last local update:** 2026-07-08 — current branch adds S11
+  `inherited_ira_analysis`: a public-safe inherited traditional IRA
+  beneficiary strategy comparison for lump-sum, equal-annual, and
+  bracket-smoothed 10-year-rule distributions. It uses only de-identified
+  numeric assumptions, federal ordinary-income tax stacking, and
+  eligible-designated-beneficiary carve-out notes; no beneficiary names, account
+  identifiers, transaction rows, notes, approvals, release state, or audit
+  records enter the public engine. `main` also adds S4
   `performance_analysis`: public-safe TWR, MWR/XIRR, fee-drag, and
   benchmark-relative return math over de-identified numeric series only. It
   accepts values, flows, fee rates, and return series; it does not accept
@@ -256,10 +263,10 @@ read-only with `readOnlyHint` + the educational disclaimer):
   `crypto_options_book_mtm` / `crypto_options_scenario`. Full overwriting + hedge
   suite is on BOTH the REST surface (`/api/options/crypto/{currency}/...`) and MCP.
 - **DeFi** — `defi_protocols`, `defi_protocol`, `defi_chains`
-- **Planning** (33 in current source; live deployment can lag source) — `monte_carlo_decumulation`, `solve_goal`, `analyze_goals`, `project_cash_flow`, `cashflow_planning_bridge`, `cash_reserve_analysis`, `budget_pacing_projection`, `education_funding`, `education_vehicle_rules`, `income_layering`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `historical_blend`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `risk_profile_score`, `fire`, `risk_metrics`, `performance_analysis`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`
+- **Planning** (34 in current source; live deployment can lag source) — `monte_carlo_decumulation`, `solve_goal`, `analyze_goals`, `project_cash_flow`, `cashflow_planning_bridge`, `cash_reserve_analysis`, `budget_pacing_projection`, `education_funding`, `education_vehicle_rules`, `income_layering`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `historical_blend`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `inherited_ira_analysis`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `risk_profile_score`, `fire`, `risk_metrics`, `performance_analysis`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`
 - **Meta** — `health` (per-upstream status), `describe` (catalog + symbology + contract version)
 
-All 33 current-source planning tools are served both natively through MCP and via
+All 34 current-source planning tools are served both natively through MCP and via
 the REST/JSON gateway (`POST /api/planning/tools/{id}`) for browser/server
 callers — same handlers, contractVersion `0.1.0`. Legacy `/mcp/tools/{id}`
 aliases remain. The composite Roth/IRMAA case contract is
@@ -429,11 +436,21 @@ key is absent.
   benchmark-relative return deltas from numeric series only. It stays PII-free
   and does not ingest symbols, holdings names, account identifiers, transaction
   rows, tax lots, approvals, or audit records.
-- **Planning surface now 33 tools in current source** — includes `solve_goal`,
+- **S11 inherited IRA state** — `inherited_ira_analysis` compares lump-sum,
+  equal-annual, and bracket-smoothed inherited traditional IRA distribution
+  strategies under a 10-year frame. It stacks taxable inherited distributions
+  on beneficiary ordinary income using the injected 2026 federal ordinary-tax
+  table, ranks strategies by net after-tax receipts, and returns an
+  eligible-designated-beneficiary carve-out table. The result explicitly states
+  that v1 is a strategy comparison, not a separate beneficiary life-expectancy
+  annual RMD compliance calculator. Inputs remain numeric and de-identified
+  only; spousal rollover elections, trust/estate-specific rules, state tax, and
+  books-and-records workflows stay private / future scope.
+- **Planning surface now 34 tools in current source** — includes `solve_goal`,
   `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio,
   `education_funding`, `education_vehicle_rules`, `income_layering`,
-  `historical_blend`, `optimize_allocation`, `risk_profile_score`,
-  `performance_analysis`, `build_planning_report`, and the composite
+  `historical_blend`, `inherited_ira_analysis`, `optimize_allocation`,
+  `risk_profile_score`, `performance_analysis`, `build_planning_report`, and the composite
   Roth/IRMAA trio.
 - **Uniswap V3 owned-position enumeration** — `GET /api/lp/uniswap-v3/{chain}/positions?owner=`
   lists open positions before USD valuation.
