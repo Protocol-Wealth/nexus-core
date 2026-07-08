@@ -121,6 +121,8 @@ def test_full_tool_set_registers() -> None:
         "covered_call",
         "cash_secured_put",
         "collar",
+        "equity_collar_screen",
+        "collar_book",
         "crypto_option_instruments",
         "crypto_option_ticker",
         "crypto_covered_call",
@@ -173,20 +175,28 @@ _PLANNING_TOOL_IDS = {
     "cashflow_planning_bridge",
     "cash_reserve_analysis",
     "budget_pacing_projection",
+    "education_funding",
+    "education_vehicle_rules",
+    "income_layering",
     "glide_path",
     "tax_aware_withdrawal",
     "correlation_matrix",
     "capital_market_assumptions",
+    "historical_blend",
     "regime_return_generator",
     "roth_conversion",
     "sequence_of_returns_stress",
     "rmd",
     "tax_bracket_headroom",
+    "inherited_ira_analysis",
     "social_security_claiming",
     "regime_conditioned_swr",
     "portfolio_xray",
+    "optimize_allocation",
+    "risk_profile_score",
     "fire",
     "risk_metrics",
+    "performance_analysis",
     "rebalance",
     "irmaa_headroom",
     "analyze_roth_conversion",
@@ -270,6 +280,149 @@ def test_option_price_rejects_bad_inputs_preserves_bs_limits() -> None:
         body = json.loads(_call_text(server, "option_price", {**base, "days": 30, **ok}))
         assert "error" not in body, ok
         assert body["price"] >= 0.0
+
+
+def test_equity_collar_screen_tool() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket())  # type: ignore[arg-type]
+    body = json.loads(
+        _call_text(
+            server,
+            "equity_collar_screen",
+            {
+                "positions": [
+                    {"symbol": "AAPL", "expiry_days": 45, "sigma": 0.25, "dividend_yield": 0.01}
+                ]
+            },
+        )
+    )
+    assert "error" not in body
+    assert body["count"] == 1
+    row = body["screen"][0]
+    assert row["symbol"] == "AAPL"
+    assert row["spot"] == 100.0  # live quote from the fake market
+    assert row["put_strike"] == 85.0  # 15% below spot on the $1 grid
+    assert row["put_strike"] < row["spot"] < row["call_strike"]
+    assert row["theoretical"] is True
+    assert "not investment advice" in body["disclaimer"].lower()
+
+
+def test_equity_collar_screen_tool_rejects_bad_inputs() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket())  # type: ignore[arg-type]
+    too_many = [
+        {"symbol": f"T{i}", "spot": 100, "sigma": 0.3, "expiry_days": 30} for i in range(26)
+    ]
+    bad_calls: list[dict[str, object]] = [
+        {"positions": []},
+        {"positions": too_many},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 45}], "target_call_delta": 1.5},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 45}], "put_otm_pct": 100},
+        {"positions": [{"symbol": "", "expiry_days": 45}]},
+        {"positions": [{"symbol": "AAPL"}]},  # expiry_days missing
+        {"positions": [{"symbol": "AAPL", "expiry_days": 5000}]},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 45, "spot": -1}]},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 45, "dividend_yield": 2}]},
+    ]
+    for args in bad_calls:
+        body = json.loads(_call_text(server, "equity_collar_screen", args))
+        assert "error" in body, args
+
+
+def test_collar_book_tool() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket())  # type: ignore[arg-type]
+    body = json.loads(
+        _call_text(
+            server,
+            "collar_book",
+            {
+                "positions": [
+                    {
+                        "symbol": "AAA",
+                        "spot": 100.0,
+                        "dte": 30,
+                        "net_credit": 2.0,
+                        "call_bid": 1.8,
+                        "put_ask": 0.3,
+                        "sector": "Tech",
+                        "put_strike": 85.0,
+                        "call_strike": 110.0,
+                    },
+                    {"symbol": "BBB", "spot": 50.0, "dte": 30, "net_credit": 1.0},
+                ],
+                "notional_target": 500_000.0,
+            },
+        )
+    )
+    assert "error" not in body
+    assert body["basis"] == "advisor_research_worksheet"
+    assert body["count"] == 2
+    book = body["book"]
+    holdings = {h["symbol"]: h for h in book["positions"]}
+    assert set(holdings) == {"AAA", "BBB"}
+    assert all(h["contracts"] >= 1 for h in holdings.values())
+    assert holdings["AAA"]["floor_pct"] == 15.0  # derived from the put strike
+    assert holdings["AAA"]["stock_price"] == 100.0
+    assert holdings["AAA"]["executable_net_credit"] == 1.5
+    assert holdings["AAA"]["fill_haircut"] == 0.5
+    assert book["notional_deployed"] > 0.0
+    assert book["fill_haircut"] is None  # BBB did not supply executable pricing.
+    assert "not investment advice" in body["disclaimer"].lower()
+
+
+def test_collar_book_tool_rejects_bad_inputs() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket())  # type: ignore[arg-type]
+    good = {"symbol": "AAA", "spot": 100.0, "dte": 30, "net_credit": 2.0}
+    too_many = [{**good, "symbol": f"T{i}"} for i in range(51)]
+    bad_calls: list[dict[str, object]] = [
+        {"positions": []},
+        {"positions": too_many},
+        # (a non-dict entry is rejected by FastMCP's schema validation itself)
+        {"positions": [{"spot": 100.0, "dte": 30, "net_credit": 2.0}]},  # symbol missing
+        {"positions": [{"symbol": "AAA", "dte": 30, "net_credit": 2.0}]},  # spot missing
+        {"positions": [{"symbol": "AAA", "spot": 100.0, "net_credit": 2.0}]},  # dte missing
+        {"positions": [{"symbol": "AAA", "spot": 100.0, "dte": 30}]},  # net_credit missing
+        {"positions": [{**good, "sector": 7}]},
+        {"positions": [{**good, "put_strike": "x"}]},
+        {"positions": [good], "notional_target": 5_000},
+        {"positions": [good], "notional_target": 2e9},
+        {"positions": [good], "n_positions_target": 0},
+        {"positions": [good], "n_positions_target": 51},
+        {"positions": [good], "n_positions_min": 10, "n_positions_max": 5},
+        {"positions": [good], "max_position_weight_pct": 0},
+        {"positions": [good], "max_sector_weight_pct": 101},
+    ]
+    for args in bad_calls:
+        body = json.loads(_call_text(server, "collar_book", args))
+        assert "error" in body, args
+
+
+def test_collar_book_tool_excludes_degenerates_not_errors() -> None:
+    import json
+
+    server = build_server(market=_FakeMarket())  # type: ignore[arg-type]
+    body = json.loads(
+        _call_text(
+            server,
+            "collar_book",
+            {
+                "positions": [
+                    {"symbol": "BAD", "spot": 0.0, "dte": 30, "net_credit": 1.0},
+                    {"symbol": "GOOD", "spot": 100.0, "dte": 30, "net_credit": 2.0},
+                ]
+            },
+        )
+    )
+    assert "error" not in body
+    book = body["book"]
+    assert [e["symbol"] for e in book["excluded_degenerate"]] == ["BAD"]
+    assert [h["symbol"] for h in book["positions"]] == ["GOOD"]
 
 
 def test_crypto_covered_call_tool_inverse_yield() -> None:
@@ -532,3 +685,117 @@ def test_native_research_tools_carry_disclaimer() -> None:
         result = asyncio.run(server.call_tool(tool, args))  # type: ignore[attr-defined]
         text = result.content[0].text.lower()
         assert "not investment, tax, legal, or financial advice" in text, tool
+
+
+def _mboum_options_stub(payload: dict[str, object] | None) -> object:
+    import httpx
+
+    from nexus_core.data.derivatives import MboumOptionsClient
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if payload is None:
+            return httpx.Response(500, json={})
+        return httpx.Response(200, json=payload)
+
+    return MboumOptionsClient(
+        api_key="test-mboum-key",
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+
+_MBOUM_TOOL_PAYLOAD: dict[str, object] = {
+    "meta": {"expirations": {"monthly": ["2026-08-21"], "weekly": ["2026-08-07"]}},
+    "body": {
+        "Call": [
+            {
+                "strikePrice": "87.00",
+                "bidPrice": "0.62",
+                "askPrice": "0.70",
+                "midpoint": "0.66",
+                "openInterest": "2,400",
+                "volatility": "24.50%",
+                "delta": "0.2600",
+                "expirationDate": "08/07/26",
+                "expirationType": "weekly",
+            }
+        ],
+        "Put": [
+            {
+                "strikePrice": "70.00",
+                "bidPrice": "0.28",
+                "askPrice": "0.34",
+                "midpoint": "0.31",
+                "openInterest": "7,299",
+                "volatility": "28.19%",
+                "delta": "-0.0403",
+                "expirationDate": "08/07/26",
+                "expirationType": "weekly",
+            }
+        ],
+    },
+}
+
+
+def test_equity_option_chain_tools_registered_only_with_client() -> None:
+    default_server = build_server(market=_FakeMarket())  # type: ignore[arg-type]
+    default_tools = _tool_names(default_server)
+    assert "equity_option_expirations" not in default_tools
+    assert "equity_option_chain" not in default_tools
+
+    server = build_server(
+        market=_FakeMarket(),  # type: ignore[arg-type]
+        mboum_options=_mboum_options_stub(_MBOUM_TOOL_PAYLOAD),  # type: ignore[arg-type]
+    )
+    tools = _tool_names(server)
+    assert "equity_option_expirations" in tools
+    assert "equity_option_chain" in tools
+
+
+def test_equity_option_expirations_tool() -> None:
+    import json
+
+    server = build_server(
+        market=_FakeMarket(),  # type: ignore[arg-type]
+        mboum_options=_mboum_options_stub(_MBOUM_TOOL_PAYLOAD),  # type: ignore[arg-type]
+    )
+    body = json.loads(_call_text(server, "equity_option_expirations", {"symbol": "ko"}))
+    assert "error" not in body
+    assert body["symbol"] == "KO"
+    assert body["expirations"]["weekly"] == ["2026-08-07"]
+
+    bad = json.loads(_call_text(server, "equity_option_expirations", {"symbol": "K$O"}))
+    assert "error" in bad
+
+
+def test_equity_option_chain_tool() -> None:
+    import json
+
+    server = build_server(
+        market=_FakeMarket(),  # type: ignore[arg-type]
+        mboum_options=_mboum_options_stub(_MBOUM_TOOL_PAYLOAD),  # type: ignore[arg-type]
+    )
+    body = json.loads(
+        _call_text(server, "equity_option_chain", {"symbol": "KO", "expiration": "2026-08-07"})
+    )
+    assert "error" not in body
+    assert body["count"] == {"calls": 1, "puts": 1}
+    assert body["puts"][0]["open_interest"] == 7299
+
+    bad_date = json.loads(
+        _call_text(server, "equity_option_chain", {"symbol": "KO", "expiration": "soon"})
+    )
+    assert "error" in bad_date
+
+
+def test_equity_option_chain_tools_degrade_without_key() -> None:
+    import json
+
+    from nexus_core.data.derivatives import MboumOptionsClient
+
+    server = build_server(
+        market=_FakeMarket(),  # type: ignore[arg-type]
+        mboum_options=MboumOptionsClient(api_key=None),  # type: ignore[arg-type]
+    )
+    body = json.loads(_call_text(server, "equity_option_expirations", {"symbol": "KO"}))
+    assert "error" in body
+    assert "MBOUM_API_KEY" in body["error"]

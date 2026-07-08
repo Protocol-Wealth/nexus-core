@@ -7,6 +7,286 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Healthcare / LTC stress S12
+
+#### Added
+
+- Added public-safe long-term-care stress inputs to deterministic cash-flow and
+  Monte Carlo planning. `ltcShock` uses only de-identified numeric assumptions:
+  onset age, current-dollar annual cost, duration, and healthcare-cost
+  inflation.
+- `project_cash_flow` now exposes LTC shock expense rows and total nominal shock
+  cost when a shock is supplied. `monte_carlo_decumulation` now emits a
+  same-seed with/without-shock impact block with success-probability delta,
+  self-insured probability, and terminal-value comparison.
+
+### Inherited IRA beneficiary decumulation S11
+
+#### Added
+
+- Added the public-safe `inherited_ira_analysis` planning tool. It compares
+  lump-sum, equal-annual, and bracket-smoothed inherited traditional IRA
+  distribution strategies under a 10-year frame, stacks taxable inherited
+  distributions on beneficiary ordinary income using the injected federal
+  ordinary-tax table, ranks strategies by net after-tax receipts, and returns an
+  eligible-designated-beneficiary carve-out table.
+- Added a JSON result schema, planning-tool registry wiring, MCP guide /
+  `llms.txt` inventory updates, and focused unit/handler coverage. Inputs are
+  numeric and de-identified only: no beneficiary names, account identifiers,
+  raw transactions, notes, approvals, release state, or audit records.
+
+### Performance analysis S4
+
+#### Added
+
+- Added the public-safe `performance_analysis` planning tool. It computes
+  time-weighted return, money-weighted return / XIRR, fee drag, and
+  benchmark-relative return deltas from de-identified numeric series only, with
+  the canonical planning disclaimer. Symbols, holdings names, account
+  identifiers, raw transaction rows, tax lots, notes, approvals, and audit
+  workflows remain private-stack concerns.
+
+### Risk-profile scoring S5
+
+#### Added
+
+- Added the public-safe `risk_profile_score` planning tool. It scores a fixed,
+  PII-free questionnaire into the optimizer-compatible `riskProfile` enum,
+  annual volatility band, suggested model weights, question/band metadata, and
+  the canonical planning disclaimer. Advisor override, suitability approval, and
+  audit workflows remain private-stack concerns.
+
+### Wealth Roadmap report preset S6
+
+#### Added
+
+- Added the `wealth_roadmap` preset to `build_planning_report`. The preset
+  emits the fixed "PW Wealth Roadmap" title, supports `focused` and `full`
+  scopes, injects the required scope statement and focused-scope planning
+  benefit notice, requires replay metadata, and stamps that metadata on every
+  section.
+- Added full-scope priority-action handling. Candidate actions remain
+  `curated: false` until private-stack advisor curation. Public Roadmap requests
+  reject `released` and caller-provided `curated` workflow state.
+
+### Household and survivor modeling S9
+
+#### Added
+
+- Added `household_social_security_benefits`, a PII-free deterministic helper
+  for simplified two-person Social Security own, age-reduced spousal,
+  household, and survivor monthly benefit snapshots.
+- Added optional `spouseSocialSecurity`, `survivorYear`, and
+  `survivorFilingStatus` support to `income_layering`. The tool can now model
+  a household Social Security stream before the first survivor-only modeling
+  year, survivor benefit continuity after that year, and joint-to-single
+  filing-status tax compression. The `IncomeLayeringResult` schema id is now
+  `income-layering-result-0.1.2`.
+
+### State/local tax layer S7
+
+#### Added
+
+- Added `engine/planning/state_tax.py`, a public-safe, data-driven 2026
+  illustrative state-tax table covering no-income-tax states, PA/IL/MS/IA full
+  retirement exclusions, and selected partial/senior exclusions for CO, NY, VA,
+  NJ, MD, and DE.
+- Added optional `state`, `residencyChange`, and `projectionYear` support to
+  `tax_aware_withdrawal`, returning federal/state tax splits, state table
+  versions, modeled/unmodeled flags, and explicit unknown-state notes.
+- Added optional `state` and `residencyChange` support to `income_layering`,
+  including per-year state code, federal/state tax totals, table versions, and
+  state notes while preserving the existing federal-only response when omitted.
+- Expanded the Roth composite's older `StateConversionRule` reference mapping
+  for the S7 no-income and full-retirement-exclusion states that fit that rule
+  shape.
+
+#### Fixed
+
+- Shared capped/tiered state retirement exclusions across pension, annuity, RMD,
+  and discretionary traditional-withdrawal components in a year instead of
+  applying the cap once per layer.
+
+### Historical blend S3
+
+#### Added
+
+- Added the public-safe `historical_blend` planning tool for Wealth Roadmap
+  historical-context exhibits: calendar-year returns, YTD / last-quarter
+  non-annualized windows, trailing 1/3/5/7/10-year annualized windows,
+  growth-of-dollar, and annualized mean / ±2σ / ±4σ bands.
+- Added a dedicated hypothetical index-blend disclaimer covering reinvested
+  income, excluded fees/taxes/costs, non-direct index investability, and past
+  performance language.
+
+### Income layering S2
+
+#### Added
+
+- Added the public-safe `income_layering` planning tool for deterministic
+  per-year stacked income timelines: earned income, Social Security,
+  pension/annuity streams, forced RMDs, tax-aware portfolio withdrawals, and
+  optional federal bracket-fill layering.
+- Added an `IncomeLayeringResult` JSON Schema and native-MCP/REST discovery
+  entries so consumers can render the Income Lab timeline without creating a
+  separate tax or RMD kernel.
+
+### Multi-account waterfall S8
+
+#### Added
+
+- Added optional account-type buckets to `project_cash_flow`:
+  `accountBalances` / `accountReturns` split the deterministic portfolio across
+  taxable, traditional, and Roth balances while preserving the historical
+  single-bucket response shape when omitted. Surplus saves to taxable; deficits
+  draw taxable → traditional → Roth. Traditional withdrawals drive ordinary tax
+  and the optional early-withdrawal penalty model before age 59.5; Roth draws
+  are not treated as ordinary income in multi-account mode.
+- Added optional `goals` to `monte_carlo_decumulation` and `solve_goal` as a
+  deterministic gateway-level funding schedule. Goals are sorted by priority,
+  earlier projection year, input order, and funding-year index, then funded
+  path-by-path after base spending and before growth. Results include the
+  generated schedule plus per-goal funding probabilities / funded-amount
+  percentiles for replay.
+
+### Education funding S1
+
+#### Added
+
+- Added the public-safe `education_funding` planning tool for multi-student
+  cost inflation, projected education savings, and closed-form monthly / annual
+  / lump-sum savings needs.
+- Added the `education_vehicle_rules` planning tool with a 2026 reference
+  comparison table for 529 plans, Coverdell ESAs, and UGMA/UTMA custodial
+  accounts.
+
+### Monte Carlo report diagnostics
+
+#### Added
+
+- Added report-grade diagnostics to `monte_carlo_decumulation`: a Wilson 95%
+  confidence interval around `successProbability`, a sticky first-passage
+  `depletionCurve`, failed-path `conditionalShortfall` percentiles, first-decade
+  return deciles with per-decile success rates, and a deterministic
+  `runManifest` carrying engine version, a de-identified assumptions hash, path
+  count, horizon, seeds, return model, and whether the Wilson half-width meets
+  the 1.5 percentage-point report tolerance.
+- Added `guardrailStats` when Guyton-Klinger guardrails are enabled, summarizing
+  cut/raise counts and first-cut timing without changing the existing
+  `guardrailActivity` field.
+
+### Tax table provider kernel
+
+#### Fixed
+
+- Centralized the illustrative federal tax-table and IRMAA reference lookup in a
+  version-stamped provider registry so `tax.py`, `tax_bracket_headroom`,
+  `roth_conversion`, `tax_aware_withdrawal`, `irmaa_headroom`, and the Roth
+  composite do not drift across duplicate bracket/tier kernels.
+- Made reference table lookup fail closed for unregistered tax/source years
+  instead of silently reusing the current basis.
+- Added tax/IRMAA table-version stamps to public tax-tool outputs and the Roth
+  composite assumptions / compact sequence output without changing the closed
+  Roth result schema.
+
+### RMD start-age policy kernel
+
+#### Fixed
+
+- Centralized the SECURE/SECURE 2.0 RMD start-age policy in `tax.rmd_start_age`
+  so `rmd`, `tax_aware_withdrawal`, and the Roth composite no longer carry
+  divergent age-73/age-75 logic.
+- Added optional `birthYear` support to the `rmd` and `tax_aware_withdrawal`
+  planning tool wrappers while preserving the age-only default for existing
+  callers.
+- Stamped RMD-aware outputs with `rmdStartAgePolicyVersion`
+  (`secure2.0-goodfaith-73-per-89FR58644`) and documented the 1959 cohort's
+  good-faith age-73 treatment pending final regulations.
+
+### Monte Carlo Student-t covariance scaling
+
+#### Fixed
+
+- Corrected the `student_t` return model in `monte_carlo_decumulation` so the
+  multivariate Student-t draw is scaled to the caller-supplied covariance matrix
+  instead of inflating variance by `dof / (dof - 2)`. With the current 5-degree
+  model, archived Student-t runs before this fix overstated volatility by about
+  29% versus the stated CMA covariance.
+- Added regression coverage that the Student-t branch empirically matches the
+  target covariance and pins the old unscaled shape-matrix formula as the known
+  bad variance-inflation case.
+
+### Docs/state closeout — private consumer boundary and PWOS market import
+
+#### Changed
+
+- Reconciled root docs to the current access model: hosted native `/mcp` remains
+  a public OAuth-compatible demo surface, while hosted REST/JSON calculation
+  paths are service-key gated for trusted server callers such as `pw-api`.
+- Documented that PWOS/PWPortal browser apps should not hold Nexus service keys;
+  they should call their own BFF/API routes, with `pw-api` supplying the
+  server-to-server Nexus credential.
+- Recorded the PWOS `/market-data` Seeking Alpha CSV/XLSX import as a private
+  ingestion path after PR #993 and advisor verification of a 380-row import
+  (`7c30414f`). Nexus consumes only de-identified candidate symbols and
+  caller-supplied option-chain facts after private ingestion.
+- Clarified the provider boundary: MBOUM backs equity option expirations/chains
+  plus quote/history fallback coverage; MarketStack is a market quote/history
+  fallback, not an options-chain provider.
+
+#### Fixed
+
+- Updated the source-rendered landing-page quickstart to show anonymous
+  `/health` plus service-key REST/JSON examples instead of unauthenticated
+  hosted `/api/*` calls.
+- Corrected the SHA-256 digest fixture in the access-gate test and updated the
+  landing-page quickstart test for the primary `/api/planning/tools/{tool_id}`
+  route.
+
+### REST/JSON access boundary and public MCP demo profile
+
+#### Added
+
+- Added optional `NEXUS_ACCESS_MODE=restricted` / `NEXUS_API_KEYS` middleware for
+  `/api/*`, `/api/planning/tools/*`, and legacy `/mcp/tools/*`, accepting either
+  `Authorization: Bearer <key>` or `X-Nexus-Api-Key`. Default mode remains
+  `public` so existing deployments do not break until secrets are rolled.
+- Added `NEXUS_PUBLIC_MCP_PROFILE=demo` for hosted native `/mcp` deployments that
+  should expose only closed-world demo tools (`option_price`, `collar_book`,
+  `health`, `describe`) and avoid live provider-backed tool usage.
+- Added primary planning REST aliases at `GET /api/planning/tools` and
+  `POST /api/planning/tools/{tool_id}`; existing `/mcp/tools` aliases remain for
+  compatibility.
+- Updated source-rendered landing, MCP guide, `/llms.txt`, and root docs to
+  describe the intended split: open-source demo MCP for low-risk public use and
+  authenticated REST/JSON for production service consumers such as `pw-api`.
+
+#### Changed
+
+- Documented the hosted production posture as transparent OAuth plus
+  `NEXUS_PUBLIC_MCP_PROFILE=demo` for `/mcp`, while REST/JSON and legacy
+  planning aliases remain API-key gated.
+
+### Collar book executable-fill modeling
+
+#### Added
+
+- Added conservative executable-fill fields to the multi-name collar-book engine
+  (`engine/pricing/collar_book.py`) and both caller surfaces. Each selected row
+  now reports `stock_price`, `shares`, optional `executable_net_credit`,
+  `fill_haircut`, executable income, and executable annualized yield when the
+  caller supplies either `executable_net_credit` or the executable bid/ask pair
+  (`call_bid` minus `put_ask`). The book summary reports portfolio-level
+  executable annual income/yield and the annualized fill haircut only when every
+  held name has executable pricing.
+- Updated the REST `POST /api/options/overlay/collar-book` parser and the MCP
+  `collar_book` parser to accept `executable_net_credit`, `call_bid`, and
+  `put_ask` as per-share inputs. The output remains an advisor research
+  worksheet: no orders, no execution instructions, no individualized advice.
+- Added route, MCP-parser, and engine coverage for bid-side call / ask-side put
+  executable pricing, explicit executable-credit precedence, share counts, and
+  partial-book behavior when not every held line has executable pricing.
+
 ### Cash-flow planning bridge tools
 
 #### Added
@@ -85,8 +365,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **New response fields when `guardrails` is supplied** — `withdrawalRule`,
   `spendingByYear` (p10/p50/p90 per-year realized-spend bands, so the dynamic
   cuts/raises are visible), and `guardrailActivity` (`pathsWithCut` /
-  `pathsWithRaise` + the band/cut/raise echo). Omitting `guardrails` is
-  **byte-identical** to the prior static-withdrawal behavior (no new fields).
+  `pathsWithRaise` + the band/cut/raise echo). Omitting `guardrails` leaves the
+  static-withdrawal mechanics unchanged and omits guardrail-only fields.
   `mypy --strict` + `ruff` clean; +13 tests (engine + gateway).
 
 ### Retired the FMP / FinanceToolkit path

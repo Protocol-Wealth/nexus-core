@@ -18,13 +18,13 @@ def test_single_in_22pct_bracket() -> None:
     assert out["bracketCeiling"] == 103_350.0
     assert out["roomToNextBracket"] == 18_350.0  # 103350 - 85000
     assert out["nextRate"] == 0.24
+    assert out["taxTableYear"] == 2026
+    assert out["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
 
 
 def test_fill_to_target_rate() -> None:
     # Filling up to the 24% bracket ceiling (197,300 taxable).
-    out = bracket_headroom(
-        taxable_income=100_000.0, filing_status="single", target_rate=0.24
-    )
+    out = bracket_headroom(taxable_income=100_000.0, filing_status="single", target_rate=0.24)
     assert out["targetRate"] == 0.24
     assert out["roomToTargetRate"] == 197_300.0 - 85_000.0
 
@@ -38,9 +38,7 @@ def test_top_bracket_has_no_ceiling() -> None:
 
 
 def test_target_at_top_rate_is_unbounded() -> None:
-    out = bracket_headroom(
-        taxable_income=100_000.0, filing_status="single", target_rate=0.37
-    )
+    out = bracket_headroom(taxable_income=100_000.0, filing_status="single", target_rate=0.37)
     assert out["roomToTargetRate"] is None
 
 
@@ -51,6 +49,10 @@ def test_target_at_top_rate_is_unbounded() -> None:
         (
             {"taxable_income": 100.0, "filing_status": "single", "target_rate": 1.0},
             r"\[0, 1\)",
+        ),
+        (
+            {"taxable_income": 100.0, "filing_status": "single", "year": 2027},
+            "no reference federal tax table registered",
         ),
     ],
 )

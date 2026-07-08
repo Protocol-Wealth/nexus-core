@@ -10,11 +10,16 @@ from __future__ import annotations
 
 import time
 
+import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from nexus_core.app.options import build_options_router
-from nexus_core.data.derivatives import OptionInstrument, OptionTicker
+from nexus_core.data.derivatives import (
+    MboumOptionsClient,
+    OptionInstrument,
+    OptionTicker,
+)
 from nexus_core.data.providers import PriceBar, Quote
 
 
@@ -145,6 +150,235 @@ def test_unknown_symbol_404() -> None:
         "/api/options/overlay/covered-call", params={"symbol": "UNKNOWN", "strike": 105, "days": 30}
     )
     assert r.status_code == 404
+
+
+# ── Equity collar screen (batch POST) ──
+
+_COLLAR_SCREEN = "/api/options/overlay/collar-screen"
+
+
+def test_collar_screen_spot_supplied() -> None:
+    r = _client().post(
+        _COLLAR_SCREEN,
+        json={
+            "positions": [
+                {
+                    "symbol": "MSFT",
+                    "spot": 400.0,
+                    "sigma": 0.22,
+                    "dividend_yield": 0.008,
+                    "expiry_days": 45,
+                }
+            ]
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] == 1
+    row = body["screen"][0]
+    assert row["symbol"] == "MSFT"
+    assert row["spot"] == 400.0  # supplied spot used, not the fake quote (100)
+    assert row["put_strike"] == 340.0  # 15% below 400 on the $5 grid
+    assert row["put_strike"] < 400.0 < row["call_strike"]
+    assert row["theoretical"] is True
+    assert row["net_credit"] == row["call_premium"] - row["put_premium"]
+    assert "not investment, tax, legal, or financial advice" in body["disclaimer"].lower()
+    assert "disclaimer" in row
+    assert r.headers["cache-control"] == "public, max-age=300"
+
+
+def test_collar_screen_spot_and_sigma_fetched() -> None:
+    r = _client().post(
+        _COLLAR_SCREEN,
+        json={"positions": [{"symbol": "AAPL", "expiry_days": 30}]},
+    )
+    assert r.status_code == 200
+    row = r.json()["screen"][0]
+    assert row["spot"] == 100.0  # fetched from the fake market
+    assert row["sigma"] > 0.0  # estimated from the fake history
+    assert row["put_strike"] == 85.0
+    assert row["dividend_yield"] == 0.0
+
+
+def test_collar_screen_ranked_by_income_and_counted() -> None:
+    r = _client().post(
+        _COLLAR_SCREEN,
+        json={
+            "positions": [
+                {"symbol": "LOWVOL", "spot": 100.0, "sigma": 0.15, "expiry_days": 45},
+                {"symbol": "HIVOL", "spot": 100.0, "sigma": 0.45, "expiry_days": 45},
+            ]
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] == 2
+    rows = body["screen"]
+    assert [row["symbol"] for row in rows] == ["HIVOL", "LOWVOL"]
+    assert (
+        rows[0]["total_annualized_income_pct"] >= rows[1]["total_annualized_income_pct"]
+    )
+
+
+def test_collar_screen_unknown_symbol_404_when_spot_missing() -> None:
+    r = _client().post(
+        _COLLAR_SCREEN,
+        json={"positions": [{"symbol": "UNKNOWN", "expiry_days": 30}]},
+    )
+    assert r.status_code == 404
+
+
+def test_collar_screen_too_many_positions_400() -> None:
+    positions = [
+        {"symbol": f"T{i}", "spot": 100.0, "sigma": 0.3, "expiry_days": 30} for i in range(26)
+    ]
+    r = _client().post(_COLLAR_SCREEN, json={"positions": positions})
+    assert r.status_code == 400
+
+
+def test_collar_screen_malformed_entries_400() -> None:
+    c = _client()
+    bad_bodies = [
+        {},  # positions missing
+        {"positions": []},  # empty list
+        {"positions": ["not-an-object"]},
+        {"positions": [{"symbol": "AAPL"}]},  # expiry_days missing
+        {"positions": [{"symbol": "", "expiry_days": 30}]},  # empty symbol
+        {"positions": [{"symbol": "AAPL", "expiry_days": 0}]},  # tenor < 1
+        {"positions": [{"symbol": "AAPL", "expiry_days": 2000}]},  # tenor > 1095
+        {"positions": [{"symbol": "AAPL", "expiry_days": 30, "spot": "x"}]},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 30, "spot": -1}]},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 30, "sigma": 0}]},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 30, "dividend_yield": 1.5}]},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 30}], "target_call_delta": 1.5},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 30}], "put_otm_pct": 100},
+        {"positions": [{"symbol": "AAPL", "expiry_days": 30}], "call_min_otm_pct": -1},
+    ]
+    for body in bad_bodies:
+        assert c.post(_COLLAR_SCREEN, json=body).status_code == 400, body
+
+
+# ── Collar book assembly (worksheet POST) ──
+
+_COLLAR_BOOK = "/api/options/overlay/collar-book"
+
+
+def test_collar_book_happy_path() -> None:
+    r = _client().post(
+        _COLLAR_BOOK,
+        json={
+            "positions": [
+                {
+                    "symbol": "AAA",
+                    "spot": 100.0,
+                    "dte": 30,
+                    "net_credit": 2.0,
+                    "dividend_income_window": 0.5,
+                    "sector": "Tech",
+                    "expiration": "2026-08-15",
+                    "put_strike": 85.0,
+                    "call_strike": 110.0,
+                    "call_bid": 1.8,
+                    "put_ask": 0.3,
+                },
+                {"symbol": "BBB", "spot": 50.0, "dte": 30, "net_credit": 1.0},
+            ],
+            "notional_target": 500_000.0,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["basis"] == "advisor_research_worksheet"
+    assert body["count"] == 2
+    assert "not investment, tax, legal, or financial advice" in body["disclaimer"].lower()
+    assert r.headers["cache-control"] == "public, max-age=300"
+    book = body["book"]
+    holdings = {h["symbol"]: h for h in book["positions"]}
+    assert set(holdings) == {"AAA", "BBB"}
+    # Whole contracts only; per-position cap (12% of $500K) honored.
+    for h in holdings.values():
+        assert h["contracts"] == int(h["contracts"]) and h["contracts"] >= 1
+        assert h["notional"] <= 500_000.0 * 0.12 + 1e-9
+    # Display passthrough + strike-derived floor/cap on AAA.
+    assert holdings["AAA"]["expiration"] == "2026-08-15"
+    assert holdings["AAA"]["floor_pct"] == 15.0
+    assert holdings["AAA"]["stock_price"] == 100.0
+    assert holdings["AAA"]["shares"] == 600
+    assert holdings["AAA"]["executable_net_credit"] == 1.5
+    assert holdings["AAA"]["fill_haircut"] == 0.5
+    assert holdings["AAA"]["executable_period_income"] == 1200.0
+    assert book["fill_haircut"] is None  # BBB did not supply executable pricing.
+    # BBB has no strike data, so the capital-weighted aggregates are None.
+    assert book["capital_weighted_floor_pct"] is None
+    assert book["notional_deployed"] > 0.0
+    assert book["counts"]["held"] == 2
+    assert "not investment advice" in book["disclaimer"].lower()
+
+
+def test_collar_book_params_respected_and_exclusions_reported() -> None:
+    # $950 name is price-tier infeasible in a $250K book; degenerate dte is
+    # excluded with a structured reason, not rejected.
+    r = _client().post(
+        _COLLAR_BOOK,
+        json={
+            "positions": [
+                {"symbol": "PRICY", "spot": 950.0, "dte": 30, "net_credit": 2.0},
+                {"symbol": "CHEAP", "spot": 40.0, "dte": 30, "net_credit": 1.0},
+                {"symbol": "BADDTE", "spot": 100.0, "dte": 0, "net_credit": 1.0},
+            ],
+            "notional_target": 250_000.0,
+            "n_positions_target": 10,
+            "n_positions_min": 2,
+            "n_positions_max": 10,
+        },
+    )
+    assert r.status_code == 200
+    book = r.json()["book"]
+    assert book["excluded_price_tier"] == [
+        {"symbol": "PRICY", "capital_per_contract": 95_000.0}
+    ]
+    assert book["excluded_degenerate"] == [
+        {"symbol": "BADDTE", "reason": "dte must be >= 1 (got 0)"}
+    ]
+    assert [h["symbol"] for h in book["positions"]] == ["CHEAP"]
+
+
+def test_collar_book_too_many_positions_400() -> None:
+    positions = [
+        {"symbol": f"T{i}", "spot": 100.0, "dte": 30, "net_credit": 1.0} for i in range(51)
+    ]
+    r = _client().post(_COLLAR_BOOK, json={"positions": positions})
+    assert r.status_code == 400
+
+
+def test_collar_book_malformed_400() -> None:
+    c = _client()
+    good = {"symbol": "AAA", "spot": 100.0, "dte": 30, "net_credit": 2.0}
+    bad_bodies: list[dict] = [
+        {},  # positions missing
+        {"positions": []},  # empty list
+        {"positions": ["not-an-object"]},
+        {"positions": [{"spot": 100.0, "dte": 30, "net_credit": 2.0}]},  # symbol missing
+        {"positions": [{"symbol": "", "spot": 100.0, "dte": 30, "net_credit": 2.0}]},
+        {"positions": [{"symbol": "AAA", "dte": 30, "net_credit": 2.0}]},  # spot missing
+        {"positions": [{"symbol": "AAA", "spot": "x", "dte": 30, "net_credit": 2.0}]},
+        {"positions": [{"symbol": "AAA", "spot": 100.0, "net_credit": 2.0}]},  # dte missing
+        {"positions": [{"symbol": "AAA", "spot": 100.0, "dte": 30.5, "net_credit": 2.0}]},
+        {"positions": [{"symbol": "AAA", "spot": 100.0, "dte": 30}]},  # net_credit missing
+        {"positions": [{**good, "score": "high"}]},
+        {"positions": [{**good, "sector": 7}]},
+        {"positions": [{**good, "put_strike": "x"}]},
+        {"positions": [{**good, "call_bid": "x"}]},
+        {"positions": [good], "notional_target": 5_000},  # below 10,000
+        {"positions": [good], "notional_target": 2e9},  # above 1e9
+        {"positions": [good], "n_positions_target": 0},
+        {"positions": [good], "n_positions_target": 51},
+        {"positions": [good], "n_positions_min": 10, "n_positions_max": 5},
+        {"positions": [good], "max_position_weight_pct": 0},
+        {"positions": [good], "max_sector_weight_pct": 101},
+    ]
+    for body in bad_bodies:
+        assert c.post(_COLLAR_BOOK, json=body).status_code == 400, body
 
 
 def test_crypto_currencies() -> None:
@@ -417,3 +651,134 @@ def test_crypto_book_scenario_route() -> None:
     up = next(c for c in cells if c["spot_shock_pct"] == 25.0)
     assert up["short_calls_itm"] == 1
     assert up["underlying_pnl_usd"] == 25000.0
+
+
+# ── Equity option chain routes (MBOUM-backed) ────────────────────────────────
+def _mboum_payload(with_rows: bool = True) -> dict[str, object]:
+    calls: list[dict[str, str]] = []
+    puts: list[dict[str, str]] = []
+    if with_rows:
+        calls = [
+            {
+                "strikePrice": "87.00",
+                "bidPrice": "0.62",
+                "askPrice": "0.70",
+                "midpoint": "0.66",
+                "lastPrice": "0.65",
+                "volume": "25",
+                "openInterest": "2,400",
+                "volatility": "24.50%",
+                "delta": "0.2600",
+                "expirationDate": "08/07/26",
+                "expirationType": "weekly",
+                "baseNextEarningsDate": "07/28/26",
+                "dividendExDate": "N/A",
+            }
+        ]
+        puts = [
+            {
+                "strikePrice": "70.00",
+                "bidPrice": "0.28",
+                "askPrice": "$0.34",
+                "midpoint": "0.31",
+                "lastPrice": "unch",
+                "volume": "4",
+                "openInterest": "7,299",
+                "volatility": "28.19%",
+                "delta": "-0.0403",
+                "expirationDate": "08/07/26",
+                "expirationType": "weekly",
+                "baseNextEarningsDate": "07/28/26",
+                "dividendExDate": "N/A",
+            }
+        ]
+    return {
+        "meta": {"expirations": {"monthly": ["2026-08-21", "2026-07-17"], "weekly": ["2026-08-07"]}},
+        "body": {"Call": calls, "Put": puts},
+    }
+
+
+def _mboum_options_client(
+    payload: dict[str, object] | None = None, *, status_code: int = 200
+) -> MboumOptionsClient:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_code, json=payload if payload is not None else {})
+
+    return MboumOptionsClient(
+        api_key="test-mboum-key",
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+
+def _equity_client(mboum: MboumOptionsClient) -> TestClient:
+    app = FastAPI()
+    app.include_router(
+        build_options_router(
+            market=_FakeMarket(), deribit=_FakeDeribit(), mboum_options=mboum
+        )
+    )
+    return TestClient(app)
+
+
+def test_equity_expirations_route() -> None:
+    client = _equity_client(_mboum_options_client(_mboum_payload()))
+    resp = client.get("/api/options/equity/ko/expirations")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["symbol"] == "KO"
+    assert body["expirations"]["monthly"] == ["2026-07-17", "2026-08-21"]  # sorted
+    assert body["expirations"]["weekly"] == ["2026-08-07"]
+    assert "disclaimer" in body
+    assert resp.headers["cache-control"] == "public, max-age=3600"
+
+
+def test_equity_chain_route_parses_display_strings() -> None:
+    client = _equity_client(_mboum_options_client(_mboum_payload()))
+    resp = client.get("/api/options/equity/KO/chain?expiration=2026-08-07")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["count"] == {"calls": 1, "puts": 1}
+    put = body["puts"][0]
+    assert put["strike"] == 70.0
+    assert put["ask"] == 0.34  # "$" stripped
+    assert put["last"] is None  # "unch" sentinel
+    assert put["open_interest"] == 7299  # thousands separator
+    assert abs(put["iv"] - 0.2819) < 1e-9  # percent -> fraction
+    assert put["expiration"] == "2026-08-07"  # US date -> ISO
+    assert resp.headers["cache-control"] == "public, max-age=60"
+
+
+def test_equity_chain_requires_expiration_and_valid_inputs() -> None:
+    client = _equity_client(_mboum_options_client(_mboum_payload()))
+    assert client.get("/api/options/equity/KO/chain").status_code == 422
+    assert (
+        client.get("/api/options/equity/KO/chain?expiration=soonish").status_code == 422
+    )
+    assert (
+        client.get("/api/options/equity/KO/chain?expiration=2026-13-45").status_code == 422
+    )
+    assert (
+        client.get("/api/options/equity/K$O/chain?expiration=2026-08-07").status_code == 404
+    )
+
+
+def test_equity_routes_503_without_key() -> None:
+    client = _equity_client(MboumOptionsClient(api_key=None))
+    resp = client.get("/api/options/equity/KO/expirations")
+    assert resp.status_code == 503
+    assert "MBOUM_API_KEY" in resp.json()["detail"]
+    assert (
+        client.get("/api/options/equity/KO/chain?expiration=2026-08-07").status_code == 503
+    )
+
+
+def test_equity_chain_empty_is_404_and_upstream_failure_502() -> None:
+    empty = _equity_client(_mboum_options_client(_mboum_payload(with_rows=False)))
+    assert (
+        empty.get("/api/options/equity/KO/chain?expiration=2026-08-07").status_code == 404
+    )
+    broken = _equity_client(_mboum_options_client(None, status_code=500))
+    assert (
+        broken.get("/api/options/equity/KO/chain?expiration=2026-08-07").status_code == 502
+    )
+    assert broken.get("/api/options/equity/KO/expirations").status_code == 502

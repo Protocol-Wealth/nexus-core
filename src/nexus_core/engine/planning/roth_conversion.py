@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .tables import reference_bracket_table
 from .tax import FilingStatus, ordinary_tax
 
 
@@ -48,6 +49,7 @@ def roth_conversion(
     taxes_paid_from_conversion: bool = False,
     brackets: list[tuple[float, float]] | None = None,
     std_deduction: float | None = None,
+    year: int = 2026,
 ) -> dict[str, Any]:
     """Compare converting ``conversion_amount`` to Roth now vs. leaving it pre-tax.
 
@@ -68,6 +70,8 @@ def roth_conversion(
             table, so a caller can inject a snapshot-able bracket table.
         std_deduction: Optional deduction overriding the built-in standard
             deduction (e.g. a senior-adjusted or itemized figure).
+        year: Registered federal tax-table year to use when the built-in
+            reference basis is needed.
 
     Returns:
         A dict with the incremental ``conversionTax`` and
@@ -92,35 +96,35 @@ def roth_conversion(
     if not 0.0 <= retirement_marginal_rate < 1.0:
         raise ValueError("retirement_marginal_rate must be in [0, 1)")
 
+    tax_table = reference_bracket_table(year) if brackets is None or std_deduction is None else None
     conversion_tax = ordinary_tax(
         current_taxable_income + conversion_amount,
         filing_status,
         brackets=brackets,
         std_deduction=std_deduction,
+        year=year,
     ) - ordinary_tax(
-        current_taxable_income, filing_status, brackets=brackets, std_deduction=std_deduction
+        current_taxable_income,
+        filing_status,
+        brackets=brackets,
+        std_deduction=std_deduction,
+        year=year,
     )
     effective_conversion_rate = conversion_tax / conversion_amount
 
     factor = (1.0 + growth_rate) ** years
     external_tax_paid_today = 0.0 if taxes_paid_from_conversion else conversion_tax
-    roth_seed = conversion_amount - (
-        conversion_tax if taxes_paid_from_conversion else 0.0
-    )
+    roth_seed = conversion_amount - (conversion_tax if taxes_paid_from_conversion else 0.0)
 
     converted_after_tax = roth_seed * factor
-    not_converted_after_tax = (
-        conversion_amount * factor * (1.0 - retirement_marginal_rate)
-    )
+    not_converted_after_tax = conversion_amount * factor * (1.0 - retirement_marginal_rate)
     # Opportunity cost of paying the tax from outside funds, grown at the same
     # rate (zero when the tax is withheld from the conversion). With this neutral
     # assumption the net benefit reduces to
     #   factor * conversion_amount * (retirement_marginal_rate - effective_rate)
     # in both payment modes.
     external_opportunity_cost = external_tax_paid_today * factor
-    net_benefit = (
-        converted_after_tax - not_converted_after_tax - external_opportunity_cost
-    )
+    net_benefit = converted_after_tax - not_converted_after_tax - external_opportunity_cost
 
     return {
         "conversionTax": round(conversion_tax, 2),
@@ -131,6 +135,10 @@ def roth_conversion(
         "notConvertedAfterTaxValue": round(not_converted_after_tax, 2),
         "netBenefit": round(net_benefit, 2),
         "breakevenRetirementRate": round(effective_conversion_rate, 4),
+        "taxTableYear": year,
+        "taxTableVersion": (
+            tax_table.table_version if tax_table is not None else "caller-provided-unversioned"
+        ),
     }
 
 

@@ -2,7 +2,8 @@
 
 Where Nexus Core is, what's landing now, and what's next. This is the
 deployable public surface — the read-only REST API + MCP transport that runs
-at [nexusmcp.site](https://nexusmcp.site) — not the full `nexus_core` library
+at [nexusmcp.site](https://nexusmcp.site), including its optional service-key
+REST boundary — not the full `nexus_core` library
 (optimization, risk, pricing, EDGAR, AI). For the library capabilities see the
 [README](README.md); for what the deployment exposes and excludes see
 [AUDIT.md](AUDIT.md).
@@ -10,12 +11,143 @@ at [nexusmcp.site](https://nexusmcp.site) — not the full `nexus_core` library
 Honest by design: "Done" means it runs in production today. No dates, no
 guarantees, no marketing.
 
+## Landing Now
+
+Production Nexus now runs as a split surface: hosted native `/mcp` can remain a
+public OAuth-compatible demo endpoint with only closed-world demo tools, while
+`/api/*`, `/api/planning/tools/*`, and legacy `/mcp/tools/*` are gated by
+`NEXUS_ACCESS_MODE=restricted` + `NEXUS_API_KEYS`. `pw-api` owns the
+server-to-server key path. Browser apps such as PWOS and PWPortal should call
+their own BFF/API routes and never hold Nexus service keys.
+
+Current source also corrects the Monte Carlo `student_t` return model so its
+fat-tailed draw is scaled to the caller-supplied covariance matrix. Student-t
+results generated before this fix overstated variance by `dof / (dof - 2)`;
+for the current 5-degree model that was about 1.667x variance, or about 1.29x
+volatility.
+
+Current source also centralizes the RMD start-age policy. `rmd`,
+`tax_aware_withdrawal`, and the Roth composite now use the same
+SECURE/SECURE 2.0 birth-year table, with age-only callers remaining compatible
+at the legacy age-73 default and birth-year-aware callers receiving the 1960+
+age-75 rule plus the documented 1959 good-faith age-73 treatment.
+
+Current source also centralizes illustrative federal tax and IRMAA reference
+tables behind a version-stamped provider registry. Tax-sensitive public tools
+fail closed for unregistered table years instead of silently reusing a stale
+basis, and outputs carry the table version needed for reproducible report
+manifests.
+
+Current source also adds Monte Carlo report diagnostics for Wealth Roadmap
+consumers: Wilson confidence intervals around success probability, sticky
+depletion curves, failed-path conditional shortfall, first-decade return decile
+exhibits, run manifests with de-identified assumption hashes and confidence
+quality flags, and Guyton-Klinger cut/raise timing stats. These are additive
+response fields; existing request shapes remain unchanged.
+
+Current source also starts the S1 education-funding slice: `education_funding`
+adds multi-student education cost FV and savings-need calculations, and
+`education_vehicle_rules` adds a 2026 reference comparison table for 529 plans,
+Coverdell ESAs, and UGMA/UTMA custodial accounts. Inputs stay de-identified.
+
+Current source also adds the S8 deterministic planning waterfall. `project_cash_flow`
+can remain a single-bucket projection for existing callers, or accept optional
+taxable / traditional / Roth `accountBalances` with per-bucket returns,
+taxable-first withdrawals, and a simplified early-withdrawal penalty model.
+`monte_carlo_decumulation` and `solve_goal` can accept optional de-identified
+`goals`; the gateway sorts those goals by priority, earlier projection year,
+input order, and funding-year index, then the engine funds them path-by-path
+after base spending and before growth. Results return the generated schedule and
+per-goal funding statistics for replay.
+
+Current source also adds the S2 income-layering slice. `income_layering` composes
+earned income, Social Security claiming assumptions, pension/annuity streams,
+forced RMDs, tax-aware portfolio withdrawals, and optional bracket-fill analysis
+into a per-year stacked income timeline. Inputs are de-identified numeric
+assumptions and account-type buckets only; no labels, account IDs, raw
+transactions, or client records enter the public engine.
+
+Current source also adds the S3 historical-blend slice. `historical_blend`
+builds calendar-year returns, trailing 1/3/5/7/10-year windows, YTD and
+last-quarter non-annualized windows, growth-of-dollar, and annualized mean /
+sigma-band exhibits from aligned monthly public proxy returns. The wrapper
+sources public asset-class histories; the pure engine sees only de-identified
+return series and weights.
+
+Current source also adds the S7 illustrative state/local tax layer. The
+data-driven 2026 table covers no-income-tax states, PA/IL/MS/IA full retirement
+exclusions, and selected partial/senior exclusions for CO/NY/VA/NJ/MD/DE.
+`tax_aware_withdrawal` and `income_layering` accept optional 2-letter `state`
+and deterministic `residencyChange` inputs, expose federal/state tax splits and
+table versions when modeled, and mark unknown states unmodeled rather than
+assuming zero. The public engine still accepts only de-identified numeric inputs
+and state codes, never raw addresses or private account records. The Roth
+composite's older conversion-rule table is aligned for the no-income and
+full-retirement-exclusion states that fit that simpler rule shape.
+
+Current source also adds the S9 household/survivor layer. `social_security.py`
+now has a simplified two-person Social Security helper for own, age-reduced
+spousal, household, and survivor benefit snapshots. `income_layering` can accept
+optional spouse Social Security and first-survivor-year filing-status inputs,
+then show survivor benefit continuity and joint-to-single tax compression in the
+yearly timeline. The public boundary remains de-identified: PIAs, claim ages,
+filing statuses, ages, and numeric assumptions only.
+
+Current source also adds the S6 PW Wealth Roadmap report preset.
+`build_planning_report` accepts `preset: "wealth_roadmap"` and keeps
+`preset: "custom"` as the default. The Roadmap preset fixes the display title,
+supports `focused` and `full` scopes, injects the required scope statement and
+focused-scope planning-benefit notice, requires and stamps every section with
+replay metadata, and emits full-scope priority actions as candidate observations
+only. The public engine rejects `released` and caller-provided `curated`
+workflow state. It emits structured report JSON only; branded PDF rendering,
+release approval, archive records, and client delivery stay in the private stack.
+
+Current source also adds the S11 inherited IRA / beneficiary decumulation slice.
+`inherited_ira_analysis` compares lump-sum, equal-annual, and bracket-smoothed
+inherited traditional IRA distribution strategies under a 10-year frame, stacks
+taxable inherited distributions on beneficiary ordinary income using the
+injected federal ordinary-tax table, ranks strategies by net after-tax receipts,
+and returns an eligible-designated-beneficiary carve-out table. The result also
+states that v1 is a strategy comparison, not a separate beneficiary
+life-expectancy annual RMD compliance calculator. Inputs remain numeric and
+de-identified only. Spousal rollover elections, trust/estate-specific rules,
+state tax, client delivery, and books-and-records workflow stay outside the
+public engine.
+
+Current source also adds the S12 healthcare / long-term-care stress slice.
+`project_cash_flow` and `monte_carlo_decumulation` accept optional `ltcShock`
+plus `healthcareInflationRate`. The shock is de-identified numeric input only:
+onset age, current-dollar annual cost, duration, and cost inflation. Cash-flow
+rows expose base expenses and LTC shock expenses when present; Monte Carlo emits
+a same-seed with/without-shock success-probability delta, self-insured
+probability, and terminal-value comparison. S12 v1 rejects `ltcShock` +
+Guyton-Klinger guardrails together; run those as separate scenarios. Diagnosis,
+claims, provider names, insurance-policy data, release approval, archive
+records, and client delivery stay in the private stack.
+
+The collar-book realistic-fill layer is part of current source. The engine plus
+REST/MCP parsers accept midpoint `net_credit` and optional executable pricing
+(`executable_net_credit` or `call_bid` minus `put_ask`) and return stock price,
+share count, per-position fill haircut, executable income/yield, and
+portfolio-level executable yield only when every held line has executable
+pricing. This is still an educational advisor worksheet: no live-chain
+attestation, no custodian execution record, no orders, and no individualized
+advice.
+
+The private stock-screen import path lives outside this repo. PWOS `/market-data`
+now imports Seeking Alpha CSV/XLSX research screens and persisted a 380-row
+advisor-verified import (`7c30414f`) after PR #993. Nexus should only receive
+de-identified candidate symbols, pre-screened fields, and option-chain facts
+after private ingestion in PWOS/pw-api.
+
 ## Done
 
 The current production surface. Python 3.12 · FastAPI · FastMCP · sync
-`httpx` · `asyncpg` · `mypy --strict` · `ruff`. CI-gated test suite. Public,
-read-only, no account/API key, no client data. Remote MCP may use transparent
-OAuth with no login. Every external integration degrades
+`httpx` · `asyncpg` · `mypy --strict` · `ruff`. CI-gated test suite. Read-only,
+no client data. Native MCP can run as a public demo endpoint; REST/JSON paths can
+be service-key gated. Remote MCP may use transparent OAuth with no login. Every
+external integration degrades
 gracefully to `None` / empty / `503` when its key is absent.
 
 ### Regime & scoring
@@ -102,12 +234,16 @@ gracefully to `None` / empty / `503` when its key is absent.
 - **`GET /api/usage`** — provider usage / quota report.
 - **`POST /mcp`** — MCP-over-HTTP transport (FastMCP, also `nexus-core mcp` over
   stdio) exposing the above as tools, plus `health` / `describe` / `get_quotes`
-  and the 27 current-source planning tools. `GET /mcp/tools` + `POST /mcp/tools/{id}` are the
-  REST planning gateway (contractVersion `0.1.0`) for the pwplan-core shell.
+  and the 34 current-source planning tools in full mode; demo mode registers
+  only closed-world demo tools. `GET /api/planning/tools` +
+  `POST /api/planning/tools/{id}` are the REST planning gateway
+  (contractVersion `0.1.0`) for service/browser callers, with `/mcp/tools`
+  compatibility aliases.
   The same handler set serves native MCP and REST, including
-  `solve_goal`, `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio,
-  `optimize_allocation`,
-  `build_planning_report`, and the Roth/IRMAA tools
+  `solve_goal`, `analyze_goals`, `project_cash_flow`, `income_layering`,
+  the cash-flow bridge trio,
+  `optimize_allocation`, `risk_profile_score`,
+  `performance_analysis`, `build_planning_report`, and the Roth/IRMAA tools
   `analyze_roth_conversion`, `sequence_conversions`, and `irmaa_headroom`.
 - **Persistence** — private Cloud SQL (`nexus-marketdata`, POSTGRES_16,
   private-IP-only on `pwllc-prod-vpc`, backups + deletion protection).
@@ -216,19 +352,25 @@ config surface for the `regime_overlay` delta multipliers (the `defensiveness` k
 is the per-request version today). The pwdemo.com browser + chat surface that drives
 these tools is built/iterated in the separate **pw-demo** repo, not here.
 
-Agent/analytics capability ideas — open issue #201 (from the consumer-diagnostic roadmap, not yet built):
-real *equity* options chains + IV (Tradier) and IV-rank to replace the theoretical σ
-(crypto already uses live Deribit IV); `score_portfolio` (sleeve-level aggregate of
-the 8-check); `defi_yields` / `defi_risk`; a `resolve_symbol` resolver; and structured
-provenance/versioning (`framework_version`) on score outputs for Rule 17a-4 reproducibility.
+Agent/analytics capability ideas — open issue #201 (from the consumer-diagnostic roadmap):
+equity options chain plumbing exists through MBOUM expirations/chains and the
+local collar-book worksheet now accepts executable fill inputs, but IV-rank /
+VRP / 25Δ skew, a full stock-screen-to-chain pipeline, `score_portfolio`
+(sleeve-level aggregate of the 8-check), `defi_yields` / `defi_risk`, a
+`resolve_symbol` resolver, and structured provenance/versioning
+(`framework_version`) on score outputs remain future work.
 
 **Equity-research vertical — open issue #203; full plan in [`docs/STOCK-RESEARCH-ENHANCEMENT.md`](docs/STOCK-RESEARCH-ENHANCEMENT.md).**
 Today an MCP client can run a stock idea through the regime + EMF durability lens
 (`current_regime` + `score_asset` + price), but nothing else — no fundamentals
 statements, valuation, analyst consensus, forward estimates, real equity options
 IV/skew (only crypto/Deribit has them), screener, ownership flows, or news. The
-keys for it are already held (the rich **MBOUM** surface is called only for
-quotes/history; **MarketStack** only for EOD; **SEC EDGAR** is keyless). The plan
+private PWOS import path can now stage advisor research screens, but public Nexus
+should still expose only licensed/public-safe calculations unless data-rights
+review clears a richer surface. The keys for it are already held (the rich
+**MBOUM** surface is used for quotes/history and equity option
+expirations/chains; **MarketStack** is a market quote/history fallback, not an
+options-chain provider; **SEC EDGAR** is keyless). The plan
 adds a sibling `ResearchDataProvider` protocol (modeled on `MacroDataProvider`) +
 a keyed MBOUM impl + a keyless-EDGAR impl, a set of read-only research MCP tools +
 REST routes, and a composite `stock_research_dossier` that fuses regime + score +
@@ -250,5 +392,6 @@ first. The gate-free Claude Code connection + reference agent
 ---
 
 Apache-2.0 · USPTO #64/034,229 (defensive) · OIN member. New work preserves
-the public-surface contract: no account/API-key gate on REST endpoints, no public
-write routes, no client data, no breaking changes to existing response shapes.
+the public-surface contract: read-only educational outputs, no public write
+routes, no client data, no breaking changes to existing response shapes, and
+optional service-key gating for production REST/JSON consumers.

@@ -77,9 +77,8 @@ _PAGE = """\
   <p class="lede">
     Nexus Core speaks the <a href="https://modelcontextprotocol.io" style="color:#c7d2fe">Model
     Context Protocol</a>, so any MCP-compatible AI client can call its
-    regime-aware financial analysis as tools — no account or API key. Remote
-    clients may complete transparent OAuth with no login. You can use the hosted
-    server or run your own.
+    public demo tools. Remote clients may complete transparent OAuth with no
+    login. You can use the hosted server or run your own.
   </p>
 
   <h2>Option A — Use the hosted server (no install)</h2>
@@ -186,7 +185,7 @@ nexus-core mcp        # MCP server over stdio</code></pre>
     <tr><td>Options</td><td>Black-Scholes price + Greeks; covered-call / cash-secured-put / collar overlays</td></tr>
     <tr><td>Crypto options</td><td>Deribit instruments + IV/Greeks (BTC, ETH, SOL, XRP, TRX, AVAX)</td></tr>
     <tr><td>DeFi</td><td>DefiLlama TVL by protocol and chain</td></tr>
-    <tr><td>Planning</td><td>23 PII-free tools: Monte Carlo, goal funding, deterministic cash flow, allocation optimization, Roth/IRMAA, report assembly</td></tr>
+    <tr><td>Planning</td><td>34 PII-free tools: Monte Carlo, goal funding, deterministic cash flow, healthcare/LTC stress, education, income layering, inherited IRA analysis, risk profile scoring, allocation optimization, performance math, Roth/IRMAA, report assembly</td></tr>
   </table>
   <p>
     Everything is read-only, public, and educational — no side effects, no
@@ -237,52 +236,59 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     <a href="https://github.com/Protocol-Wealth/pwplan-core" style="color:#c7d2fe">pwplan-core</a>
     is the open-source, browser-based financial-planning shell. It runs entirely
     in the browser and calls nexus-core's planning engine directly over HTTP —
-    no account, no API key, no SDK. These are plain REST endpoints (distinct from
-    the MCP transport above), served with permissive CORS so a browser can reach
-    them.
+    no SDK. These are plain REST endpoints (distinct from the MCP transport
+    above). Production callers can send a Nexus service API key through the
+    REST/JSON boundary when restricted mode is enabled.
   </p>
   <h3>The handshake</h3>
   <p>
-    Call <code>GET /mcp/tools</code> first — it returns the contract version and
+    Call <code>GET /api/planning/tools</code> first — it returns the contract version and
     the available tool ids, so the client can confirm compatibility before
     sending any work:
   </p>
-  <pre><code>GET {mcp_url}tools
+  <pre><code>GET https://nexusmcp.site/api/planning/tools
 &rarr; {{ "contractVersion": "0.1.0", "tools": [ ... ] }}</code></pre>
   <p>
     The wire contract is <code>contractVersion 0.1.0</code> — every successful
     tool response echoes it, and the client rejects a mismatch.
   </p>
   <h3>The planning tools</h3>
-  <p>Invoke a tool with <code>POST /mcp/tools/{{tool_id}}</code> and a JSON body:</p>
+  <p>Invoke a tool with <code>POST /api/planning/tools/{{tool_id}}</code> and a JSON body. Legacy <code>/mcp/tools</code> aliases remain for older clients:</p>
   <ul>
-    <li><code>monte_carlo_decumulation</code> — primary retirement decumulation simulation</li>
+    <li><code>monte_carlo_decumulation</code> — primary retirement decumulation simulation, including optional same-seed LTC-shock impact</li>
     <li><code>solve_goal</code> — solve one planning variable to a target success probability</li>
     <li><code>analyze_goals</code> — goal-funding status + shared-pool priority allocation</li>
-    <li><code>project_cash_flow</code> — deterministic year-by-year cash-flow and net-worth projection</li>
+    <li><code>project_cash_flow</code> — deterministic year-by-year cash-flow and net-worth projection, including optional LTC shock expense rows</li>
     <li><code>cashflow_planning_bridge</code> — derived monthly close values into planning assumptions</li>
     <li><code>cash_reserve_analysis</code> — cash reserve coverage and funding status</li>
     <li><code>budget_pacing_projection</code> — month-end budget pace from aggregate spending</li>
+    <li><code>education_funding</code> — education cost FV and savings-need solver</li>
+    <li><code>education_vehicle_rules</code> — reference 529 / Coverdell / UGMA-UTMA rule table</li>
+    <li><code>income_layering</code> — stacked retirement income timeline with Social Security, pensions/annuities, RMDs, tax-aware withdrawals, optional state-tax layers, and optional spouse/survivor modeling</li>
     <li><code>glide_path</code> — equity weight by age across the horizon</li>
-    <li><code>tax_aware_withdrawal</code> — RMD-first, tax-efficient withdrawal sequencing</li>
+    <li><code>tax_aware_withdrawal</code> — RMD-first, tax-efficient withdrawal sequencing with optional birthYear and state/residency policy</li>
     <li><code>correlation_matrix</code> — real-data return correlation across asset classes</li>
     <li><code>capital_market_assumptions</code> — forward return / volatility / correlation assumptions</li>
+    <li><code>historical_blend</code> — historical index-blend returns, trailing windows, growth-of-dollar, and sigma bands</li>
     <li><code>regime_return_generator</code> — live regime + transition matrix for path generation</li>
     <li><code>roth_conversion</code> — convert-now vs. leave-pre-tax after-tax comparison + breakeven rate</li>
     <li><code>sequence_of_returns_stress</code> — ordering effect on a fixed return set (worst/best/as-given)</li>
-    <li><code>rmd</code> — required minimum distribution (IRS Uniform Lifetime Table)</li>
+    <li><code>rmd</code> — required minimum distribution (IRS Uniform Lifetime Table; optional birthYear policy)</li>
     <li><code>tax_bracket_headroom</code> — marginal bracket + room before the next rate (Roth-fill)</li>
+    <li><code>inherited_ira_analysis</code> — inherited IRA 10-year strategy comparison and EDB carve-out notes; not a separate annual RMD compliance calculator</li>
     <li><code>social_security_claiming</code> — benefit by claim age 62–70 + breakeven ages</li>
     <li><code>regime_conditioned_swr</code> — base safe withdrawal rate adjusted for the live regime</li>
     <li><code>portfolio_xray</code> — regime-aware structural diagnostics (concentration, tax-location, regime sensitivity)</li>
     <li><code>optimize_allocation</code> — optimizer-driven target asset-class weights</li>
+    <li><code>risk_profile_score</code> — fixed-question risk questionnaire → optimizer-compatible riskProfile</li>
     <li><code>fire</code> — FIRE / Coast-FIRE calculator</li>
     <li><code>risk_metrics</code> — annualized return/volatility, Sharpe, Sortino, drawdown, VaR/CVaR</li>
+    <li><code>performance_analysis</code> — TWR, MWR/XIRR, fee drag, and benchmark-relative return math</li>
     <li><code>rebalance</code> — target-vs-current drift and self-financing trade list</li>
     <li><code>irmaa_headroom</code> — projected Medicare IRMAA headroom</li>
     <li><code>analyze_roth_conversion</code> — composite Roth conversion analysis under tax + IRMAA ceilings</li>
     <li><code>sequence_conversions</code> — multi-year Roth conversion sequencing</li>
-    <li><code>build_planning_report</code> — ordered, render-ready envelope from de-identified planning outputs</li>
+    <li><code>build_planning_report</code> — ordered, render-ready envelope from de-identified planning outputs; optional PW Wealth Roadmap preset</li>
   </ul>
   <div class="note">
     <code>monte_carlo_decumulation</code> takes an optional <code>retirementAge</code>:
@@ -293,7 +299,10 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
     recurring bump/reduction over an age range, <code>override</code> replaces
     the base spend for an age range, and <code>one_time</code> adds a single
     lump expense. Optional <code>guardrails</code> enables Guyton-Klinger
-    dynamic withdrawals. Inputs are de-identified — the engine is PII-free and
+    dynamic withdrawals. Optional <code>ltcShock</code> models a healthcare-cost
+    stress and reports a same-seed with/without-shock impact; S12 v1 does not
+    combine <code>ltcShock</code> with <code>guardrails</code>, so run those as
+    separate scenarios. Inputs are de-identified — the engine is PII-free and
     works on age, never date of birth. Monte Carlo and scenario outputs are
     illustrative model results from hypothetical assumptions — not predictions
     or guarantees of any individual outcome.
@@ -302,10 +311,11 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
   <p>
     <code>monte_carlo_decumulation</code> over a de-identified portfolio. The
     response echoes <code>contractVersion</code> and carries
-    <code>successProbability</code>, a <code>terminalValues</code> percentile map,
-    <code>medianBalanceByYear</code>, <code>depletionStats</code>,
-    <code>firstDecadeReturnVsOutcome</code>, and a <code>regimePathSummary</code>
-    for the regime-aware models:
+    <code>successProbability</code> with a Wilson interval, a
+    <code>terminalValues</code> percentile map, <code>medianBalanceByYear</code>,
+    <code>depletionStats</code>, sticky <code>depletionCurve</code>,
+    <code>conditionalShortfall</code>, <code>firstDecadeReturnVsOutcome</code>
+    deciles, and a <code>regimePathSummary</code> for the regime-aware models:
   </p>
   <pre><code>curl -s {mcp_url}tools/monte_carlo_decumulation \\
   -H 'content-type: application/json' \\

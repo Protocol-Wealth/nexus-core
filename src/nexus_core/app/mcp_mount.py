@@ -10,10 +10,11 @@ not installed. The application factory treats that as "serve REST only".
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable
 from typing import Any
 
-from ..data.derivatives import DeribitClient
+from ..data.derivatives import DeribitClient, MboumOptionsClient
 from ..data.onchain import DefiLlamaClient
 from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..disclaimers import MC_DISCLAIMER, TERSE
@@ -37,8 +38,13 @@ _PLANNING_TOOL_DESCRIPTIONS = {
     "monte_carlo_decumulation": (
         "Monte Carlo retirement decumulation simulation across return models "
         "(incl. live-regime-aware), with optional spendSchedule shocks, optional "
-        "Guyton-Klinger dynamic-withdrawal guardrails (pass `guardrails`), and "
-        "depletion-age diagnostics. Pass the planning request as a JSON object in `body`."
+        "first-class `ltcShock` healthcare-cost stress and same-seed with/without "
+        "shock impact (not combined with `guardrails` in S12 v1), optional "
+        "de-identified goals funded path-by-path in priority order, "
+        "optional Guyton-Klinger dynamic-withdrawal guardrails (pass `guardrails`), "
+        "and report diagnostics including Wilson success intervals, depletion "
+        "curves, shortfall, and first-decade deciles. Pass the planning request as "
+        "a JSON object in `body`."
     ),
     "solve_goal": (
         "Multi-variable goal solver: back into the value of ONE plan variable that "
@@ -46,7 +52,8 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "Carlo decumulation engine. Pass `solveFor` (one of annual_spend, "
         "annual_contribution, savings_rate, retirement_age, initial_savings), "
         "`targetSuccess` (0-1), optional `bounds` {min,max}, and the rest of a full "
-        "monte_carlo_decumulation body (savings_rate also needs `annualIncome`). "
+        "monte_carlo_decumulation body (savings_rate also needs `annualIncome`; "
+        "optional de-identified `goals` are honored in every solver iteration). "
         "Returns the solved value, whether it's feasible (with `bestAchievable` when "
         "the target is above the in-bounds ceiling — never errors), the confirmed "
         "success at a full-paths run, and a monotone success curve. Pinned seed + "
@@ -75,9 +82,14 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "lifetime income / expense / tax totals, the effective tax rate, peak net "
         "worth, and the age the portfolio is exhausted, if ever. The deterministic "
         "companion to the Monte-Carlo fan chart. Pass `currentAge`, `retirementAge`, "
-        "`terminalAge`, `currentIncome`, `currentExpenses`, `currentPortfolio` + "
-        "optional `filingStatus`, `incomeGrowthRate`, `expenseInflationRate`, "
-        "`expectedReturn`, `retirementIncome`, `currentLiabilities`, `baseYear`. "
+        "`terminalAge`, `currentIncome`, `currentExpenses`, and either "
+        "`currentPortfolio` or S8 `accountBalances` + optional `filingStatus`, "
+        "`incomeGrowthRate`, `expenseInflationRate`, "
+        "`healthcareInflationRate`, optional `ltcShock`, `expectedReturn`, "
+        "`retirementIncome`, `currentLiabilities`, `baseYear`. "
+        "For S8 waterfall mode, optionally pass `accountBalances` split across "
+        "taxable/traditional/roth, optional `accountReturns`, and optional early "
+        "withdrawal penalty settings; existing single-bucket callers are unchanged. "
         "Identity-free (numbers + filing status only). Illustration only, not "
         "advice. JSON request object in `body`."
     ),
@@ -101,9 +113,32 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "spend. Returns projected month-end spend, variance, pacing status, "
         "warning level, and assumptions. JSON request object in `body`."
     ),
+    "education_funding": (
+        "Education funding: inflate annual education costs, project current "
+        "savings plus monthly contributions, and solve monthly/annual/lump-sum "
+        "needs for one or more de-identified students. JSON request object in "
+        "`body`."
+    ),
+    "education_vehicle_rules": (
+        "Education vehicle rules: reference 529 / Coverdell ESA / UGMA-UTMA "
+        "comparison table for a tax year, including gift-exclusion and "
+        "Coverdell phaseout fields. JSON request object in `body`."
+    ),
+    "income_layering": (
+        "Income layering: deterministic per-year stacked income timeline filling "
+        "a spending target with earned income, Social Security, pension/annuity "
+        "streams, forced RMDs, and tax-aware portfolio withdrawals. Optional "
+        "bracket-fill shows additional traditional withdrawals up to a target "
+        "federal marginal rate; optional state/residency fields add illustrative "
+        "state-tax layers; optional spouse/survivor fields model household Social "
+        "Security and filing-status transitions. De-identified numeric inputs only. "
+        "JSON request object in `body`."
+    ),
     "glide_path": "Equity-weight glide path by age across the horizon. JSON request object in `body`.",
     "tax_aware_withdrawal": (
-        "RMD-first, tax-efficient withdrawal sequencing. JSON request object in `body`."
+        "RMD-first, tax-efficient withdrawal sequencing with optional birthYear "
+        "RMD start-age policy and optional state/residency tax layer. JSON request "
+        "object in `body`."
     ),
     "correlation_matrix": (
         "Real-data return correlation across asset classes (Ledoit-Wolf shrinkage). "
@@ -112,6 +147,12 @@ _PLANNING_TOOL_DESCRIPTIONS = {
     "capital_market_assumptions": (
         "Forward return/volatility/correlation assumptions per asset class. "
         "JSON request object in `body`."
+    ),
+    "historical_blend": (
+        "Historical index-blend exhibit: calendar-year returns, trailing "
+        "annualized windows, growth-of-dollar series, and annualized mean / "
+        "sigma bands from public asset-class proxy histories. JSON request "
+        "object in `body`."
     ),
     "regime_return_generator": (
         "Live macro regime + transition matrix + path cache key for regime-aware "
@@ -129,13 +170,20 @@ _PLANNING_TOOL_DESCRIPTIONS = {
     ),
     "rmd": (
         "Required Minimum Distribution: IRS Uniform Lifetime Table RMD for a "
-        "traditional account given age + prior-year-end balance. JSON request "
-        "object in `body`."
+        "traditional account given age + prior-year-end balance, with optional "
+        "birthYear start-age policy. JSON request object in `body`."
     ),
     "tax_bracket_headroom": (
         "Tax-bracket headroom / Roth-fill: marginal bracket + ordinary-income "
         "room before the next federal rate (or up to a target rate). JSON request "
         "object in `body`."
+    ),
+    "inherited_ira_analysis": (
+        "Inherited IRA 10-year strategy comparison: lump-sum, equal annual, and "
+        "bracket-smoothed beneficiary distributions with incremental federal "
+        "ordinary-tax estimates and eligible-designated-beneficiary carve-out "
+        "notes. Strategy comparison only; not a separate annual RMD compliance "
+        "calculator. De-identified numeric inputs only. JSON request object in `body`."
     ),
     "social_security_claiming": (
         "Social Security claiming-age: benefit at each claim age 62-70 from the "
@@ -161,13 +209,22 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "macro regime. Optional `assetClassIds`, `weightBounds`, `riskFreeRate`. "
         "Illustration only, not advice. JSON request object in `body`."
     ),
+    "risk_profile_score": (
+        "Score a fixed, PII-free risk questionnaire into the optimizer-compatible "
+        "`riskProfile` enum, annual volatility band, and suggested asset-class "
+        "weights. Illustration only, not advice. Advisor override/audit workflow "
+        "stays private. JSON request object in `body`."
+    ),
     "build_planning_report": (
         "Assemble the de-identified outputs of the other planning tools into one "
         "ordered, render-ready report envelope: canonical section order, "
         "auto-derived findings for recognized section kinds, consolidated "
         "assumptions, and the comprehensive disclaimer. Pass `sections` (each "
         "`{kind, title?, data?, findings?, assumptions?}`) + optional `title` / "
-        "`includeRegime`. PII-free; not an IPS. JSON request object in `body`."
+        "`includeRegime`; pass `preset: 'wealth_roadmap'` plus `scope` for the "
+        "PW Wealth Roadmap preset with required scope disclosures, replay "
+        "metadata, and priority-action release guard. PII-free; not an IPS. "
+        "JSON request object in `body`."
     ),
     "fire": (
         "FIRE / Coast-FIRE: the FIRE number (spend ÷ safe withdrawal rate), the "
@@ -178,6 +235,12 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "Return-series risk metrics: annualized return/volatility, Sharpe, Sortino, "
         "max drawdown, and historical VaR/CVaR for a supplied periodic return "
         "series. JSON request object in `body`."
+    ),
+    "performance_analysis": (
+        "Composite public-safe performance math: time-weighted return, "
+        "money-weighted return/XIRR, fee drag, and benchmark-relative return "
+        "deltas from de-identified numeric series. Illustration only, not advice. "
+        "JSON request object in `body`."
     ),
     "rebalance": (
         "Rebalance-to-target: per-asset drift from target weights and the "
@@ -258,24 +321,29 @@ def build_configured_server(
     market: MarketDataProvider,
     macro: MacroDataProvider,
 ) -> Any:
-    """Build the fully-wired nexus-core MCP server (shared by HTTP + stdio).
+    """Build the configured nexus-core MCP server (shared by HTTP + stdio).
 
-    Wires the full educational tool set — regime (current_regime, regime_signals),
+    By default wires the full educational tool set — regime (current_regime, regime_signals),
     the EMF ``score_asset`` (sharing the REST ``/api/score`` context builder +
     framework, so MCP and REST return identical scores), market quotes/history,
     FRED economic series, DefiLlama TVL, the options pricing/overlay + Deribit
-    crypto-option tools, and the 27 planning tools (monte_carlo_decumulation,
+    crypto-option tools, and the 34 planning tools (monte_carlo_decumulation,
     solve_goal, analyze_goals, project_cash_flow, cashflow_planning_bridge,
-    cash_reserve_analysis, budget_pacing_projection, glide_path, tax_aware_withdrawal,
+    cash_reserve_analysis, budget_pacing_projection, education_funding,
+    education_vehicle_rules, income_layering, glide_path, tax_aware_withdrawal,
     correlation_matrix,
+    historical_blend,
     regime_return_generator,
     capital_market_assumptions, roth_conversion, sequence_of_returns_stress, rmd,
-    tax_bracket_headroom, social_security_claiming, regime_conditioned_swr,
-    portfolio_xray, optimize_allocation, fire, risk_metrics, rebalance, the
+    tax_bracket_headroom, inherited_ira_analysis, social_security_claiming, regime_conditioned_swr,
+    portfolio_xray, optimize_allocation, risk_profile_score, fire, risk_metrics,
+    performance_analysis, rebalance, the
     composite Roth/IRMAA trio analyze_roth_conversion, sequence_conversions,
     irmaa_headroom, plus build_planning_report) — the same handlers the REST
     planning gateway serves, so the MCP transport and ``POST /mcp/tools/{id}``
-    stay in lock-step.
+    stay in lock-step. When ``NEXUS_PUBLIC_MCP_PROFILE=demo``, the native MCP
+    transport registers only closed-world demo tools that do not call live
+    vendors; production REST/JSON callers should use the gated HTTP routes.
 
     Both transports build from here so the stdio server (``nexus-core mcp``,
     for Claude Desktop) and the HTTP server (``/mcp``) expose an identical set
@@ -289,6 +357,10 @@ def build_configured_server(
     Raises:
         ImportError: If ``fastmcp`` is not installed (``build_server`` guards).
     """
+    profile = os.environ.get("NEXUS_PUBLIC_MCP_PROFILE", "full").strip().lower() or "full"
+    if profile == "demo":
+        return build_server(name="nexus-core", disclaimer=TERSE, tool_profile="demo")
+
     return build_server(
         name="nexus-core",
         regime_engine=regime_engine,
@@ -299,9 +371,11 @@ def build_configured_server(
         market=market,
         macro=macro,
         deribit=DeribitClient(),
+        mboum_options=MboumOptionsClient(),
         defillama=DefiLlamaClient(),
         disclaimer=TERSE,
         extra_tools=_build_planning_mcp_tools(market, regime_engine),
+        tool_profile="full",
     )
 
 

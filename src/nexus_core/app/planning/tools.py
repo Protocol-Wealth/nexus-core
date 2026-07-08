@@ -24,14 +24,22 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import Any, cast
 
+from ... import __version__
 from ...data.providers import MarketDataProvider
 from ...disclaimers import FULL
 from ...engine.planning import (
     Direction,
+    EducationStudentCase,
     GlidePathShape,
     GuardrailParams,
+    IncomeStream,
     InfeasiblePlanError,
+    LongTermCareShock,
+    MwrCashFlow,
+    SocialSecurityIncome,
     SolveResult,
+    StateResidencyChange,
+    TwrPeriod,
     analyze_goals,
     analyze_roth_conversion,
     bracket_headroom,
@@ -40,17 +48,28 @@ from ...engine.planning import (
     cashflow_planning_bridge,
     compute_glide_path,
     correlation_matrix,
+    education_funding,
+    education_result_to_wire,
     fire,
+    historical_blend,
+    income_layering,
+    inherited_ira_analysis,
     irmaa_headroom,
+    ltc_shock_schedule,
+    ltc_shock_summary,
+    make_ltc_shock,
     monte_carlo_decumulation,
+    performance_analysis,
     portfolio_xray,
     project_cash_flow,
     rebalance,
     reference_bracket_table,
+    reference_education_vehicle_rules,
     reference_irmaa_table,
     reference_state_rule,
     regime_conditioned_swr,
     risk_metrics,
+    risk_profile_score,
     rmd,
     roth_conversion,
     sequence_conversions,
@@ -81,7 +100,7 @@ from ...engine.planning.tables import (
 from ...engine.planning.tax import FilingStatus
 from ...engine.regime import RegimeEngine
 from .contract import PlanningInfeasibleError, PlanningInputError
-from .report import assemble_report
+from .report import assemble_report, assemble_wealth_roadmap
 from .universe import ASSET_UNIVERSE, proxy_tickers, universe_ids
 
 _MAX_SEED = 2**31 - 1
@@ -102,6 +121,11 @@ _RETURN_MODELS = (
     "emf_regime",
 )
 _SPEND_SCHEDULE_MODES = frozenset({"delta", "override", "one_time"})
+_LTC_SHOCK_ALLOWED = {"onsetAge", "annualCost", "durationYears", "costInflation"}
+_GOAL_TIER_PRIORITIES = {"need": 10, "want": 50, "wish": 90}
+_OPAQUE_REF_ALLOWED_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-"
+)
 
 # ── Goal solver (solve_goal) ─────────────────────────────────────────────────
 # A fixed seed pins the success curve across search iterations (an unseeded MC
@@ -128,9 +152,11 @@ class _SpendScheduleEntry:
     amount: float
     cola_rate: float
 
+
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
 
 _DEFAULT_LOOKBACK_DAYS = 1260  # ~5 trading years
+_HISTORICAL_BLEND_LOOKBACK_DAYS = 3650  # ~10 trading years
 _MIN_LOOKBACK_DAYS = 30
 _MAX_LOOKBACK_DAYS = 3650
 _TRADING_DAYS = 252.0
@@ -149,6 +175,15 @@ def _as_int(body: dict[str, Any], key: str) -> int:
     return int(value)
 
 
+def _optional_int(body: dict[str, Any], key: str) -> int | None:
+    if key not in body or body[key] is None:
+        return None
+    value = body[key]
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value != int(value):
+        raise PlanningInputError(f"field '{key}' must be a whole number; got {value!r}")
+    return int(value)
+
+
 def _as_number(body: dict[str, Any], key: str) -> float:
     value = _require(body, key)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -156,11 +191,60 @@ def _as_number(body: dict[str, Any], key: str) -> float:
     return float(value)
 
 
+def _finite_number(value: object, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise PlanningInputError(f"{field} must be a number")
+    number = float(value)
+    if not math.isfinite(number):
+        raise PlanningInputError(f"{field} must be finite")
+    return number
+
+
 def _as_str(body: dict[str, Any], key: str) -> str:
     value = _require(body, key)
     if not isinstance(value, str):
         raise PlanningInputError(f"field '{key}' must be a string; got {value!r}")
     return value
+
+
+def _optional_state_code(body: dict[str, Any], key: str) -> str | None:
+    value = body.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or len(value) != 2 or not value.isalpha():
+        raise PlanningInputError(f"{key} must be a 2-letter state code or omitted")
+    return value.upper()
+
+
+def _optional_residency_change(body: dict[str, Any]) -> StateResidencyChange | None:
+    value = body.get("residencyChange")
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise PlanningInputError("residencyChange must be an object or omitted")
+    allowed = {"year", "from", "to"}
+    extra = set(value) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"residencyChange only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
+        )
+    for key in allowed:
+        if key not in value:
+            raise PlanningInputError(f"residencyChange missing required field '{key}'")
+    if (
+        isinstance(value["year"], bool)
+        or not isinstance(value["year"], (int, float))
+        or value["year"] != int(value["year"])
+    ):
+        raise PlanningInputError("residencyChange.year must be a whole number")
+    for key in ("from", "to"):
+        if not isinstance(value[key], str) or len(value[key]) != 2 or not value[key].isalpha():
+            raise PlanningInputError(f"residencyChange.{key} must be a 2-letter state code")
+    return StateResidencyChange(
+        year=int(value["year"]),
+        from_state=value["from"].upper(),
+        to_state=value["to"].upper(),
+    )
 
 
 def _as_str_list(body: dict[str, Any], key: str) -> list[str]:
@@ -179,6 +263,13 @@ def _as_num_list(body: dict[str, Any], key: str) -> list[float]:
     ):
         raise PlanningInputError(f"field '{key}' must be a non-empty list of numbers")
     return [float(x) for x in value]
+
+
+def _as_finite_num_list(body: dict[str, Any], key: str) -> list[float]:
+    value = _require(body, key)
+    if not isinstance(value, list) or not value:
+        raise PlanningInputError(f"field '{key}' must be a non-empty list of numbers")
+    return [_finite_number(item, f"{key}[{index}]") for index, item in enumerate(value)]
 
 
 def _fetch_aligned_returns(
@@ -229,6 +320,73 @@ def _fetch_aligned_returns(
     return returns_by_id, dates[-1][:10]
 
 
+def _fetch_aligned_monthly_returns(
+    market: MarketDataProvider,
+    tickers_by_id: dict[str, str],
+    *,
+    lookback: int,
+    as_of: str | None = None,
+) -> tuple[dict[str, list[float]], list[str], str]:
+    """Fetch daily closes, align common month-ends, and build simple monthly returns."""
+
+    month_closes_by_id: dict[str, dict[str, tuple[str, float]]] = {}
+    for asset_id, ticker in tickers_by_id.items():
+        bars = sorted(
+            market.get_price_history(ticker, days=lookback, interval="1d"),
+            key=lambda b: b.timestamp,
+        )
+        month_closes: dict[str, tuple[str, float]] = {}
+        for bar in bars:
+            date = bar.timestamp[:10]
+            if len(date) < 10 or date[4] != "-" or date[7] != "-":
+                continue
+            if as_of is not None and date > as_of:
+                continue
+            if not bar.close or bar.close <= 0:
+                continue
+            month_closes[date[:7]] = (date, float(bar.close))
+        if len(month_closes) < 4:
+            raise PlanningInfeasibleError(
+                f"insufficient monthly price history for '{asset_id}' ({ticker})"
+            )
+        month_closes_by_id[asset_id] = month_closes
+
+    common_months = set.intersection(*(set(c) for c in month_closes_by_id.values()))
+    if len(common_months) < 4:
+        raise PlanningInfeasibleError(
+            "not enough overlapping monthly history across the requested asset classes"
+        )
+    months = sorted(common_months)
+
+    returns_by_id: dict[str, list[float]] = {}
+    for asset_id, closes in month_closes_by_id.items():
+        series = [closes[month][1] for month in months]
+        returns_by_id[asset_id] = [series[k] / series[k - 1] - 1.0 for k in range(1, len(series))]
+
+    final_month = months[-1]
+    resolved_as_of = min(closes[final_month][0] for closes in month_closes_by_id.values())
+    return returns_by_id, months[1:], resolved_as_of
+
+
+def _validate_iso_date(value: str, field: str) -> str:
+    """Validate a YYYY-MM-DD date string for lexical date comparisons."""
+
+    if (
+        len(value) != 10
+        or value[4] != "-"
+        or value[7] != "-"
+        or not value[:4].isdigit()
+        or not value[5:7].isdigit()
+        or not value[8:10].isdigit()
+    ):
+        raise PlanningInputError(f"{field} must be a YYYY-MM-DD date string")
+    month = int(value[5:7])
+    day = int(value[8:10])
+    if not 1 <= month <= 12 or not 1 <= day <= 31:
+        raise PlanningInputError(f"{field} must be a valid YYYY-MM-DD date string")
+    return value
+
+
 def glide_path_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``glide_path`` — equity weight by age across the planning horizon."""
     start = _as_number(body, "startEquityWeight")
@@ -264,6 +422,10 @@ def tax_aware_withdrawal_tool(body: dict[str, Any]) -> dict[str, Any]:
             gross_need=_as_number(body, "grossNeed"),
             age=_as_int(body, "age"),
             other_taxable_income=float(other),
+            birth_year=_optional_int(body, "birthYear"),
+            state=_optional_state_code(body, "state"),
+            residency_change=_optional_residency_change(body),
+            projection_year=_optional_int(body, "projectionYear"),
         )
     except InfeasiblePlanError as exc:
         raise PlanningInfeasibleError(str(exc)) from exc
@@ -277,25 +439,45 @@ _FILING_STATUSES: tuple[FilingStatus, ...] = (
     "married_separate",
     "head_of_household",
 )
+_FILING_STATUS_BY_VALUE: dict[str, FilingStatus] = {status: status for status in _FILING_STATUSES}
+
+
+def _as_filing_status(body: dict[str, Any]) -> FilingStatus:
+    filing = _as_str(body, "filingStatus")
+    filing_status = _FILING_STATUS_BY_VALUE.get(filing)
+    if filing_status is None:
+        raise PlanningInputError(f"filingStatus must be one of {', '.join(_FILING_STATUSES)}")
+    return filing_status
+
+
+_INHERITED_IRA_BENEFICIARY_TYPES = (
+    "spouse",
+    "minor_child_of_decedent",
+    "disabled",
+    "chronically_ill",
+    "not_more_than_10_years_younger",
+    "other_designated_beneficiary",
+    "non_designated_beneficiary",
+)
 
 
 def roth_conversion_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``roth_conversion`` — convert-now vs. leave-pre-tax after-tax comparison."""
-    filing = _as_str(body, "filingStatus")
-    if filing not in _FILING_STATUSES:
-        raise PlanningInputError(f"filingStatus must be one of {', '.join(_FILING_STATUSES)}")
+    filing_status = _as_filing_status(body)
     taxes_from = body.get("taxesPaidFromConversion", False)
     if not isinstance(taxes_from, bool):
         raise PlanningInputError("taxesPaidFromConversion must be a boolean")
+    year = _optional_int(body, "year")
     try:
         return roth_conversion(
             current_taxable_income=_as_number(body, "currentTaxableIncome"),
-            filing_status=filing,
+            filing_status=filing_status,
             conversion_amount=_as_number(body, "conversionAmount"),
             growth_rate=_as_number(body, "growthRate"),
             years=_as_int(body, "years"),
             retirement_marginal_rate=_as_number(body, "retirementMarginalRate"),
             taxes_paid_from_conversion=taxes_from,
+            year=2026 if year is None else year,
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
@@ -316,24 +498,83 @@ def sequence_of_returns_stress_tool(body: dict[str, Any]) -> dict[str, Any]:
 def rmd_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``rmd`` — required minimum distribution for a traditional account."""
     try:
-        return rmd(age=_as_int(body, "age"), balance=_as_number(body, "balance"))
+        return rmd(
+            age=_as_int(body, "age"),
+            balance=_as_number(body, "balance"),
+            birth_year=_optional_int(body, "birthYear"),
+        )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
 
 
 def tax_bracket_headroom_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``tax_bracket_headroom`` — marginal bracket + room before the next rate."""
-    filing = _as_str(body, "filingStatus")
-    if filing not in _FILING_STATUSES:
-        raise PlanningInputError(f"filingStatus must be one of {', '.join(_FILING_STATUSES)}")
+    filing_status = _as_filing_status(body)
     target = body.get("targetRate")
     if target is not None and (isinstance(target, bool) or not isinstance(target, (int, float))):
         raise PlanningInputError("targetRate must be a number or omitted")
+    year = _optional_int(body, "year")
     try:
         return bracket_headroom(
             taxable_income=_as_number(body, "taxableIncome"),
-            filing_status=filing,
+            filing_status=filing_status,
             target_rate=float(target) if target is not None else None,
+            year=2026 if year is None else year,
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def inherited_ira_analysis_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``inherited_ira_analysis`` — inherited IRA 10-year strategy comparison."""
+    allowed = {
+        "contractVersion",
+        "inheritedBalance",
+        "beneficiaryOrdinaryIncome",
+        "beneficiaryOrdinaryIncomeByYear",
+        "filingStatus",
+        "taxYear",
+        "yearsRemaining",
+        "annualReturn",
+        "taxableDistributionRatio",
+        "beneficiaryType",
+        "beneficiaryAge",
+        "decedentAge",
+        "targetRate",
+    }
+    extra = set(body) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"inherited_ira_analysis only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
+        )
+    filing_status = _as_filing_status(body)
+    beneficiary_type = str(body.get("beneficiaryType", "other_designated_beneficiary"))
+    if beneficiary_type not in _INHERITED_IRA_BENEFICIARY_TYPES:
+        raise PlanningInputError(
+            "beneficiaryType must be one of "
+            + ", ".join(_INHERITED_IRA_BENEFICIARY_TYPES)
+        )
+    income_by_year = (
+        _as_finite_num_list(body, "beneficiaryOrdinaryIncomeByYear")
+        if "beneficiaryOrdinaryIncomeByYear" in body
+        else None
+    )
+    tax_year = _optional_int(body, "taxYear")
+    years_remaining = _optional_int(body, "yearsRemaining")
+    try:
+        return inherited_ira_analysis(
+            inherited_balance=_as_number(body, "inheritedBalance"),
+            beneficiary_ordinary_income=_as_number(body, "beneficiaryOrdinaryIncome"),
+            beneficiary_ordinary_income_by_year=income_by_year,
+            filing_status=filing_status,
+            tax_year=2026 if tax_year is None else tax_year,
+            years_remaining=10 if years_remaining is None else years_remaining,
+            annual_return=_optional_number(body, "annualReturn", 0.0),
+            taxable_distribution_ratio=_optional_number(body, "taxableDistributionRatio", 1.0),
+            beneficiary_type=beneficiary_type,  # type: ignore[arg-type]
+            beneficiary_age=_optional_int(body, "beneficiaryAge"),
+            decedent_age=_optional_int(body, "decedentAge"),
+            target_rate=_optional_number(body, "targetRate", 0.24),
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
@@ -446,6 +687,22 @@ def _optional_number(body: dict[str, Any], key: str, default: float) -> float:
     return float(value)
 
 
+def _optional_number_map(body: dict[str, Any], key: str) -> dict[str, float] | None:
+    value = body.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise PlanningInputError(f"{key} must be an object or omitted")
+    out: dict[str, float] = {}
+    for item_key, item_value in value.items():
+        if not isinstance(item_key, str):
+            raise PlanningInputError(f"{key} keys must be strings")
+        if isinstance(item_value, bool) or not isinstance(item_value, (int, float)):
+            raise PlanningInputError(f"{key} values must be numbers")
+        out[item_key] = float(item_value)
+    return out
+
+
 def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``project_cash_flow`` — year-by-year cash flow + net worth + lifetime tax."""
     filing_status = body.get("filingStatus", "married_joint")
@@ -454,6 +711,22 @@ def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
     base_year = body.get("baseYear")
     if base_year is not None and (isinstance(base_year, bool) or not isinstance(base_year, int)):
         raise PlanningInputError("baseYear must be an integer or omitted")
+    tax_year = _optional_int(body, "taxYear")
+    account_balances = _optional_number_map(body, "accountBalances")
+    account_returns = _optional_number_map(body, "accountReturns")
+    if "currentPortfolio" in body:
+        current_portfolio = _as_number(body, "currentPortfolio")
+    elif account_balances is not None:
+        current_portfolio = sum(account_balances.values())
+    else:
+        current_portfolio = _as_number(body, "currentPortfolio")
+    expense_inflation_rate = _optional_number(body, "expenseInflationRate", 0.025)
+    healthcare_inflation_rate = _optional_number(
+        body, "healthcareInflationRate", expense_inflation_rate
+    )
+    ltc_shock = _parse_ltc_shock(
+        body, default_cost_inflation=healthcare_inflation_rate
+    )
     try:
         return project_cash_flow(
             current_age=_as_int(body, "currentAge"),
@@ -461,15 +734,162 @@ def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
             terminal_age=_as_int(body, "terminalAge"),
             current_income=_as_number(body, "currentIncome"),
             current_expenses=_as_number(body, "currentExpenses"),
-            current_portfolio=_as_number(body, "currentPortfolio"),
+            current_portfolio=current_portfolio,
             filing_status=cast(Any, filing_status),
             income_growth_rate=_optional_number(body, "incomeGrowthRate", 0.03),
-            expense_inflation_rate=_optional_number(body, "expenseInflationRate", 0.025),
+            expense_inflation_rate=expense_inflation_rate,
             expected_return=_optional_number(body, "expectedReturn", 0.05),
             retirement_income=_optional_number(body, "retirementIncome", 0.0),
             current_liabilities=_optional_number(body, "currentLiabilities", 0.0),
             base_year=base_year,
+            tax_year=2026 if tax_year is None else tax_year,
+            account_balances=account_balances,
+            account_returns=account_returns,
+            early_withdrawal_penalty_age=_optional_number(body, "earlyWithdrawalPenaltyAge", 59.5),
+            early_withdrawal_penalty_rate=_optional_number(
+                body, "earlyWithdrawalPenaltyRate", 0.10
+            ),
+            ltc_shock=ltc_shock,
         )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def _parse_social_security_income(
+    body: dict[str, Any], key: str = "socialSecurity"
+) -> SocialSecurityIncome | None:
+    value = body.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise PlanningInputError(f"{key} must be an object or omitted")
+    allowed = {"piaMonthly", "claimAge", "fraAge", "colaRate"}
+    extra = set(value) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"{key} only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
+        )
+    try:
+        fra_age = _optional_int(value, "fraAge")
+        return SocialSecurityIncome(
+            pia_monthly=_as_number(value, "piaMonthly"),
+            claim_age=_as_int(value, "claimAge"),
+            fra_age=67 if fra_age is None else fra_age,
+            cola_rate=_optional_number(value, "colaRate", 0.0),
+        )
+    except PlanningInputError:
+        raise
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def _parse_income_streams(body: dict[str, Any]) -> tuple[IncomeStream, ...]:
+    value = body.get("incomeStreams", [])
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise PlanningInputError("incomeStreams must be a list or omitted")
+    allowed = {"kind", "annualAmount", "startAge", "endAge", "colaRate"}
+    streams: list[IncomeStream] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise PlanningInputError(f"incomeStreams[{index}] must be an object")
+        extra = set(item) - allowed
+        if extra:
+            raise PlanningInputError(
+                f"incomeStreams[{index}] only accepts {', '.join(sorted(allowed))}; "
+                f"got {sorted(extra)}"
+            )
+        kind = _as_str(item, "kind")
+        if kind not in {"pension", "annuity"}:
+            raise PlanningInputError(f"incomeStreams[{index}].kind must be pension or annuity")
+        streams.append(
+            IncomeStream(
+                kind=cast(Any, kind),
+                annual_amount=_as_number(item, "annualAmount"),
+                start_age=_as_int(item, "startAge"),
+                end_age=_optional_int(item, "endAge"),
+                cola_rate=_optional_number(item, "colaRate", 0.0),
+            )
+        )
+    return tuple(streams)
+
+
+def income_layering_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``income_layering`` — year-by-year stacked retirement income timeline."""
+    allowed = {
+        "contractVersion",
+        "currentAge",
+        "terminalAge",
+        "spendingTarget",
+        "retirementAge",
+        "earnedIncome",
+        "wageGrowthRate",
+        "spendingInflationRate",
+        "filingStatus",
+        "taxYear",
+        "baseYear",
+        "socialSecurity",
+        "incomeStreams",
+        "accountBalances",
+        "accountReturns",
+        "expectedReturn",
+        "bracketFillTargetRate",
+        "birthYear",
+        "state",
+        "residencyChange",
+        "spouseSocialSecurity",
+        "survivorYear",
+        "survivorFilingStatus",
+    }
+    extra = set(body) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"income_layering only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
+        )
+    filing_status = body.get("filingStatus", "married_joint")
+    if not isinstance(filing_status, str):
+        raise PlanningInputError("filingStatus must be a string or omitted")
+    base_year = body.get("baseYear")
+    if base_year is not None and (isinstance(base_year, bool) or not isinstance(base_year, int)):
+        raise PlanningInputError("baseYear must be an integer or omitted")
+    tax_year = _optional_int(body, "taxYear")
+    retirement_age = _optional_int(body, "retirementAge")
+    bracket_fill = body.get("bracketFillTargetRate")
+    if bracket_fill is not None and (
+        isinstance(bracket_fill, bool) or not isinstance(bracket_fill, (int, float))
+    ):
+        raise PlanningInputError("bracketFillTargetRate must be a number or omitted")
+    survivor_filing = body.get("survivorFilingStatus", "single")
+    if not isinstance(survivor_filing, str):
+        raise PlanningInputError("survivorFilingStatus must be a string or omitted")
+    try:
+        return income_layering(
+            current_age=_as_int(body, "currentAge"),
+            terminal_age=_as_int(body, "terminalAge"),
+            spending_target=_as_number(body, "spendingTarget"),
+            retirement_age=retirement_age,
+            earned_income=_optional_number(body, "earnedIncome", 0.0),
+            wage_growth_rate=_optional_number(body, "wageGrowthRate", 0.03),
+            spending_inflation_rate=_optional_number(body, "spendingInflationRate", 0.025),
+            filing_status=cast(Any, filing_status),
+            tax_year=2026 if tax_year is None else tax_year,
+            base_year=base_year,
+            social_security=_parse_social_security_income(body),
+            spouse_social_security=_parse_social_security_income(body, "spouseSocialSecurity"),
+            income_streams=_parse_income_streams(body),
+            account_balances=_optional_number_map(body, "accountBalances"),
+            account_returns=_optional_number_map(body, "accountReturns"),
+            expected_return=_optional_number(body, "expectedReturn", 0.05),
+            bracket_fill_target_rate=float(bracket_fill) if bracket_fill is not None else None,
+            birth_year=_optional_int(body, "birthYear"),
+            state=_optional_state_code(body, "state"),
+            residency_change=_optional_residency_change(body),
+            survivor_year=_optional_int(body, "survivorYear"),
+            survivor_filing_status=cast(Any, survivor_filing),
+        )
+    except InfeasiblePlanError as exc:
+        raise PlanningInfeasibleError(str(exc)) from exc
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
 
@@ -499,7 +919,9 @@ def cashflow_planning_bridge_tool(body: dict[str, Any]) -> dict[str, Any]:
 def cash_reserve_analysis_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``cash_reserve_analysis`` — reserve coverage against essential spending."""
     secondary = body.get("secondaryTargetMonths")
-    if secondary is not None and (isinstance(secondary, bool) or not isinstance(secondary, (int, float))):
+    if secondary is not None and (
+        isinstance(secondary, bool) or not isinstance(secondary, (int, float))
+    ):
         raise PlanningInputError("secondaryTargetMonths must be a number or omitted")
     try:
         return cash_reserve_analysis(
@@ -541,6 +963,151 @@ def risk_metrics_tool(body: dict[str, Any]) -> dict[str, Any]:
             returns=_as_num_list(body, "returns"),
             risk_free_rate=float(rf),
             periods_per_year=ppy,
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def risk_profile_score_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``risk_profile_score`` — fixed-question risk profile scoring."""
+
+    allowed = {"contractVersion", "answers"}
+    extra = set(body) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"risk_profile_score only accepts {sorted(allowed)}; got {sorted(extra)}"
+        )
+    raw_answers = _require(body, "answers")
+    if not isinstance(raw_answers, dict):
+        raise PlanningInputError("answers must be an object of question id to answer id")
+    answers: dict[str, str] = {}
+    for key, value in raw_answers.items():
+        if not isinstance(key, str):
+            raise PlanningInputError("answers keys must be strings")
+        if not isinstance(value, str):
+            raise PlanningInputError(f"answers.{key} must be a string answer id")
+        answers[key] = value
+    try:
+        return risk_profile_score(answers)
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def _parse_twr_periods(body: dict[str, Any]) -> list[TwrPeriod] | None:
+    raw = body.get("twrPeriods")
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not raw:
+        raise PlanningInputError("twrPeriods must be a non-empty array when supplied")
+    allowed = {"startValue", "endValue", "netExternalFlow"}
+    periods: list[TwrPeriod] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise PlanningInputError(f"twrPeriods[{index}] must be an object")
+        extra = set(item) - allowed
+        if extra:
+            raise PlanningInputError(
+                f"twrPeriods[{index}] only accepts {sorted(allowed)}; got {sorted(extra)}"
+            )
+        start = _finite_number(item.get("startValue"), f"twrPeriods[{index}].startValue")
+        end = _finite_number(item.get("endValue"), f"twrPeriods[{index}].endValue")
+        flow = _finite_number(
+            item.get("netExternalFlow", 0.0), f"twrPeriods[{index}].netExternalFlow"
+        )
+        periods.append(
+            TwrPeriod(
+                start_value=start,
+                end_value=end,
+                net_external_flow=flow,
+            )
+        )
+    return periods
+
+
+def _parse_mwr_flows(body: dict[str, Any]) -> list[MwrCashFlow] | None:
+    raw = body.get("mwrFlows")
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not raw:
+        raise PlanningInputError("mwrFlows must be a non-empty array when supplied")
+    allowed = {"tYears", "amount"}
+    flows: list[MwrCashFlow] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise PlanningInputError(f"mwrFlows[{index}] must be an object")
+        extra = set(item) - allowed
+        if extra:
+            raise PlanningInputError(
+                f"mwrFlows[{index}] only accepts {sorted(allowed)}; got {sorted(extra)}"
+            )
+        t_years = _finite_number(item.get("tYears"), f"mwrFlows[{index}].tYears")
+        amount = _finite_number(item.get("amount"), f"mwrFlows[{index}].amount")
+        flows.append(MwrCashFlow(t_years=t_years, amount=amount))
+    return flows
+
+
+def performance_analysis_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``performance_analysis`` — TWR/MWR/fee-drag/benchmark return math."""
+
+    allowed = {
+        "contractVersion",
+        "twrPeriods",
+        "flowTiming",
+        "periodsPerYear",
+        "mwrFlows",
+        "terminalValue",
+        "terminalTimeYears",
+        "grossReturns",
+        "feeRates",
+        "portfolioReturns",
+        "benchmarkReturns",
+    }
+    extra = set(body) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"performance_analysis only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
+        )
+    flow_timing = body.get("flowTiming", "start")
+    if not isinstance(flow_timing, str):
+        raise PlanningInputError("flowTiming must be start, end, or omitted")
+    periods_per_year = body.get("periodsPerYear", 1)
+    if (
+        isinstance(periods_per_year, bool)
+        or not isinstance(periods_per_year, int)
+        or periods_per_year < 1
+    ):
+        raise PlanningInputError("periodsPerYear must be a positive integer or omitted")
+    terminal_value = (
+        _finite_number(body["terminalValue"], "terminalValue") if "terminalValue" in body else None
+    )
+    terminal_time = (
+        _finite_number(body["terminalTimeYears"], "terminalTimeYears")
+        if "terminalTimeYears" in body
+        else None
+    )
+
+    try:
+        return performance_analysis(
+            twr_periods=_parse_twr_periods(body),
+            flow_timing=cast(Any, flow_timing),
+            periods_per_year=periods_per_year,
+            mwr_flows=_parse_mwr_flows(body),
+            terminal_value=terminal_value,
+            terminal_time_years=terminal_time,
+            gross_returns=(
+                _as_finite_num_list(body, "grossReturns") if "grossReturns" in body else None
+            ),
+            fee_rates=_as_finite_num_list(body, "feeRates") if "feeRates" in body else None,
+            portfolio_returns=(
+                _as_finite_num_list(body, "portfolioReturns")
+                if "portfolioReturns" in body
+                else None
+            ),
+            benchmark_returns=(
+                _as_finite_num_list(body, "benchmarkReturns")
+                if "benchmarkReturns" in body
+                else None
+            ),
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
@@ -719,6 +1286,103 @@ def _capital_market_assumptions_tool(
     return {"assetClasses": asset_classes, "correlations": correlations, "asOf": resolved_as_of}
 
 
+def _historical_blend_tool(body: dict[str, Any], market: MarketDataProvider) -> dict[str, Any]:
+    """``historical_blend`` — monthly historical index-blend exhibit."""
+
+    allowed = {
+        "contractVersion",
+        "assetClassIds",
+        "weights",
+        "lookbackDays",
+        "asOf",
+        "rebalanceFrequency",
+        "initialValue",
+    }
+    extra = set(body) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"historical_blend only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
+        )
+
+    raw_weights = _require(body, "weights")
+    if not isinstance(raw_weights, dict) or not raw_weights:
+        raise PlanningInputError("weights must be a non-empty object keyed by asset class id")
+
+    raw_ids = body.get("assetClassIds")
+    if raw_ids is None or raw_ids == []:
+        ids = list(raw_weights)
+    elif isinstance(raw_ids, list) and all(isinstance(x, str) for x in raw_ids):
+        ids = raw_ids
+    else:
+        raise PlanningInputError("assetClassIds must be a list of strings (or omitted)")
+    if len(set(ids)) != len(ids):
+        raise PlanningInputError("assetClassIds must be unique")
+    if len(ids) > _MAX_ASSET_CLASSES:
+        raise PlanningInputError(f"at most {_MAX_ASSET_CLASSES} asset classes are supported")
+
+    unknown = [i for i in ids if i not in ASSET_UNIVERSE]
+    if unknown:
+        raise PlanningInputError(
+            f"unknown asset class id(s): {', '.join(unknown)}. "
+            f"Known asset classes: {', '.join(universe_ids())}."
+        )
+    if set(raw_weights) != set(ids):
+        raise PlanningInputError("weights must contain exactly the selected assetClassIds")
+
+    weights: dict[str, float] = {}
+    for asset_id in ids:
+        value = raw_weights[asset_id]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise PlanningInputError("weights values must be numbers")
+        weights[asset_id] = float(value)
+
+    lookback = body.get("lookbackDays", _HISTORICAL_BLEND_LOOKBACK_DAYS)
+    if (
+        isinstance(lookback, bool)
+        or not isinstance(lookback, int)
+        or not _MIN_LOOKBACK_DAYS <= lookback <= _MAX_LOOKBACK_DAYS
+    ):
+        raise PlanningInputError(
+            f"lookbackDays must be an integer in [{_MIN_LOOKBACK_DAYS}, {_MAX_LOOKBACK_DAYS}]"
+        )
+    as_of = body.get("asOf")
+    if as_of is not None and not isinstance(as_of, str):
+        raise PlanningInputError("asOf must be an ISO date string (or omitted)")
+    if isinstance(as_of, str):
+        as_of = _validate_iso_date(as_of, "asOf")
+    rebalance_frequency = body.get("rebalanceFrequency", "monthly")
+    if not isinstance(rebalance_frequency, str):
+        raise PlanningInputError("rebalanceFrequency must be monthly, annual, none, or omitted")
+    initial_value = body.get("initialValue", 1.0)
+    if isinstance(initial_value, bool) or not isinstance(initial_value, (int, float)):
+        raise PlanningInputError("initialValue must be a number or omitted")
+
+    tickers = {i: ASSET_UNIVERSE[i].ticker for i in ids}
+    returns_by_id, months, resolved_as_of = _fetch_aligned_monthly_returns(
+        market, tickers, lookback=lookback, as_of=as_of
+    )
+    try:
+        payload = historical_blend(
+            monthly_returns_by_id=returns_by_id,
+            weights=weights,
+            month_labels=months,
+            rebalance_frequency=rebalance_frequency,
+            initial_value=float(initial_value),
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+    payload["asOf"] = resolved_as_of
+    payload["assetClasses"] = [
+        {
+            "id": asset_id,
+            "label": ASSET_UNIVERSE[asset_id].label,
+            "weight": round(weights[asset_id], 6),
+        }
+        for asset_id in ids
+    ]
+    return payload
+
+
 #: ``riskProfile`` → mean-variance risk-aversion (lambda) for max_quadratic_utility.
 #: Higher lambda penalizes variance more (conservative, bond-tilted); lower
 #: tolerates it (aggressive, return-tilted). Monotonic across the efficient frontier.
@@ -807,9 +1471,7 @@ def _resolve_allocation_objective(
         if risk_profile is not None:
             raise PlanningInputError("pass either objective or riskProfile, not both")
         if not isinstance(objective, str) or objective not in _ALLOCATION_OBJECTIVES:
-            raise PlanningInputError(
-                f"objective must be one of {sorted(_ALLOCATION_OBJECTIVES)}"
-            )
+            raise PlanningInputError(f"objective must be one of {sorted(_ALLOCATION_OBJECTIVES)}")
         if objective == "max_quadratic_utility":
             ra = body.get("riskAversion", 3.0)
             if isinstance(ra, bool) or not isinstance(ra, (int, float)) or ra <= 0:
@@ -1001,6 +1663,51 @@ def _optimize_allocation_tool(
 
 
 _MAX_REPORT_SECTIONS = 40
+_REPORT_PRESETS = frozenset(("custom", "wealth_roadmap"))
+_REPORT_SCOPES = frozenset(("focused", "full"))
+
+
+def _parse_report_metadata(body: dict[str, Any], scope: str) -> dict[str, Any]:
+    raw = body.get("metadata", {})
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise PlanningInputError("metadata must be an object or omitted")
+    allowed = {"assumptionVersion", "cmaVersion", "taxYear", "seed", "engineReference"}
+    extra = set(raw) - allowed
+    if extra:
+        raise PlanningInputError(
+            f"metadata only accepts {', '.join(sorted(allowed))}; got {sorted(extra)}"
+        )
+
+    def optional_str(key: str, default: str | None = None, *, required: bool = False) -> str | None:
+        value = raw.get(key, default)
+        if value is None:
+            if required:
+                raise PlanningInputError(f"metadata.{key} is required for wealth_roadmap")
+            return None
+        if not isinstance(value, str) or not value:
+            raise PlanningInputError(f"metadata.{key} must be a non-empty string or null")
+        return value
+
+    def optional_int(key: str, *, required: bool = False) -> int | None:
+        value = raw.get(key)
+        if value is None:
+            if required:
+                raise PlanningInputError(f"metadata.{key} is required for wealth_roadmap")
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise PlanningInputError(f"metadata.{key} must be an integer or null")
+        return value
+
+    return {
+        "assumptionVersion": optional_str("assumptionVersion", required=True),
+        "cmaVersion": optional_str("cmaVersion", required=True),
+        "taxYear": optional_int("taxYear", required=True),
+        "seed": optional_int("seed", required=True),
+        "engineReference": optional_str("engineReference", f"nexus-core:{__version__}"),
+        "scope": scope,
+    }
 
 
 def _parse_report_section(raw: Any, index: int) -> dict[str, Any]:
@@ -1046,6 +1753,10 @@ def _build_planning_report_tool(
     assumptions, and the comprehensive disclaimer. PII-free — it composes numeric
     tool outputs, never identity. Not a substitute for an advisor's IPS.
     """
+    preset = body.get("preset", "custom")
+    if not isinstance(preset, str) or preset not in _REPORT_PRESETS:
+        raise PlanningInputError(f"preset must be one of {sorted(_REPORT_PRESETS)}")
+
     raw_sections = _require(body, "sections")
     if not isinstance(raw_sections, list) or not raw_sections:
         raise PlanningInputError("sections must be a non-empty list")
@@ -1065,8 +1776,108 @@ def _build_planning_report_tool(
         raw_regime = regime_engine.classify().regime
         regime = str(getattr(raw_regime, "value", raw_regime))
 
-    report = assemble_report(sections, title=title, regime=regime)
+    if preset == "wealth_roadmap":
+        scope = body.get("scope", "focused")
+        if not isinstance(scope, str) or scope not in _REPORT_SCOPES:
+            raise PlanningInputError(f"scope must be one of {sorted(_REPORT_SCOPES)}")
+        if "released" in body:
+            raise PlanningInputError("released is private workflow state and is not accepted")
+        metadata = _parse_report_metadata(body, scope)
+        try:
+            report = assemble_wealth_roadmap(
+                sections,
+                scope=scope,
+                metadata=metadata,
+                regime=regime,
+            )
+        except ValueError as exc:
+            raise PlanningInputError(str(exc)) from exc
+    else:
+        report = assemble_report(sections, title=title, regime=regime)
     return {"report": report, "disclaimer": FULL}
+
+
+_MAX_EDUCATION_STUDENTS = 12
+_MAX_EDUCATION_FUNDING_YEARS = 8
+
+
+def _parse_education_student(raw: Any, index: int) -> EducationStudentCase:
+    if not isinstance(raw, dict):
+        raise PlanningInputError(f"students[{index}] must be an object")
+    subject_ref = raw.get("subjectRef", raw.get("subject_ref", f"student-{index + 1}"))
+    if not isinstance(subject_ref, str):
+        raise PlanningInputError(f"students[{index}].subjectRef must be a string")
+    years_until_start = _as_int(raw, "yearsUntilStart")
+    funding_years = _as_int(raw, "fundingYears")
+    if not 0 <= years_until_start <= 80:
+        raise PlanningInputError("yearsUntilStart must be an integer in [0, 80]")
+    if not 1 <= funding_years <= _MAX_EDUCATION_FUNDING_YEARS:
+        raise PlanningInputError(
+            f"fundingYears must be an integer in [1, {_MAX_EDUCATION_FUNDING_YEARS}]"
+        )
+    return EducationStudentCase(
+        subject_ref=subject_ref,
+        annual_cost=_as_number(raw, "annualCost"),
+        years_until_start=years_until_start,
+        funding_years=funding_years,
+        current_savings=_opt_num(raw, "currentSavings", 0.0),
+        monthly_contribution=_opt_num(raw, "monthlyContribution", 0.0),
+    )
+
+
+def education_funding_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``education_funding`` — cost FV + education savings-need solver."""
+
+    raw_students = _require(body, "students")
+    if not isinstance(raw_students, list) or not raw_students:
+        raise PlanningInputError("students must be a non-empty list")
+    if len(raw_students) > _MAX_EDUCATION_STUDENTS:
+        raise PlanningInputError(f"students must have at most {_MAX_EDUCATION_STUDENTS} entries")
+    try:
+        result = education_funding(
+            students=[_parse_education_student(raw, i) for i, raw in enumerate(raw_students)],
+            tuition_inflation=_as_number(body, "tuitionInflation"),
+            after_tax_return=_as_number(body, "afterTaxReturn"),
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+    return education_result_to_wire(result)
+
+
+def education_vehicle_rules_tool(body: dict[str, Any]) -> dict[str, Any]:
+    """``education_vehicle_rules`` — reference 529/Coverdell/UGMA-UTMA table."""
+
+    tax_year = body.get("taxYear", 2026)
+    if isinstance(tax_year, bool) or not isinstance(tax_year, int):
+        raise PlanningInputError("taxYear must be an integer")
+    try:
+        rules = reference_education_vehicle_rules(tax_year)
+    except TableError as exc:
+        raise PlanningInputError(str(exc)) from exc
+    return {
+        "taxYear": tax_year,
+        "tableVersion": rules[0].table_version if rules else "empty",
+        "rules": [
+            {
+                "taxYear": rule.tax_year,
+                "vehicle": rule.vehicle,
+                "label": rule.label,
+                "contributionLimit": rule.contribution_limit,
+                "annualGiftExclusion": rule.annual_gift_exclusion,
+                "fiveYearSuperfundingSingle": rule.five_year_superfunding_single,
+                "fiveYearSuperfundingMarriedJoint": (rule.five_year_superfunding_married_joint),
+                "magiPhaseoutSingle": rule.magi_phaseout_single,
+                "magiPhaseoutMarriedJoint": rule.magi_phaseout_married_joint,
+                "qualifiedDistributionTreatment": rule.qualified_distribution_treatment,
+                "nonqualifiedDistributionPenaltyRate": (
+                    rule.nonqualified_distribution_penalty_rate
+                ),
+                "notes": list(rule.notes),
+                "tableVersion": rule.table_version,
+            }
+            for rule in rules
+        ],
+    }
 
 
 def _resolve_seed(body: dict[str, Any]) -> int:
@@ -1085,9 +1896,7 @@ def _validate_asset_classes(body: dict[str, Any], *, require_lambda: bool) -> li
     if not isinstance(raw, list) or not raw:
         raise PlanningInputError("assetClasses must be a non-empty list")
     if len(raw) > _MAX_ASSET_CLASSES:
-        raise PlanningInputError(
-            f"assetClasses must have at most {_MAX_ASSET_CLASSES} entries"
-        )
+        raise PlanningInputError(f"assetClasses must have at most {_MAX_ASSET_CLASSES} entries")
     for asset in raw:
         if not isinstance(asset, dict) or not isinstance(asset.get("id"), str):
             raise PlanningInputError("each assetClass must be an object with a string id")
@@ -1191,9 +2000,7 @@ def _parse_spend_schedule(body: dict[str, Any]) -> list[_SpendScheduleEntry]:
             raise PlanningInputError("each spendSchedule entry must be an object")
         mode = entry.get("mode", "delta")
         if not isinstance(mode, str) or mode not in _SPEND_SCHEDULE_MODES:
-            raise PlanningInputError(
-                "spendSchedule mode must be one of delta, override, one_time"
-            )
+            raise PlanningInputError("spendSchedule mode must be one of delta, override, one_time")
         start_age = _as_optional_age(entry, "startAge", 0)
         end_age = _as_optional_age(entry, "endAge", start_age)
         if end_age < start_age:
@@ -1240,6 +2047,166 @@ def _apply_spend_schedule(
     return spend
 
 
+def _parse_ltc_shock(
+    body: dict[str, Any],
+    *,
+    default_cost_inflation: float,
+) -> LongTermCareShock | None:
+    raw = body.get("ltcShock")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise PlanningInputError("ltcShock must be an object or omitted")
+    extra = set(raw) - _LTC_SHOCK_ALLOWED
+    if extra:
+        raise PlanningInputError(
+            f"ltcShock only accepts {', '.join(sorted(_LTC_SHOCK_ALLOWED))}; got {sorted(extra)}"
+        )
+    onset_age = raw.get("onsetAge")
+    duration_years = raw.get("durationYears")
+    annual_cost = raw.get("annualCost")
+    if (
+        isinstance(onset_age, bool)
+        or not isinstance(onset_age, int)
+        or isinstance(duration_years, bool)
+        or not isinstance(duration_years, int)
+        or isinstance(annual_cost, bool)
+        or not isinstance(annual_cost, (int, float))
+    ):
+        raise PlanningInputError(
+            "ltcShock needs integer onsetAge, numeric annualCost, and integer durationYears"
+        )
+    cost_inflation = raw.get("costInflation", default_cost_inflation)
+    if isinstance(cost_inflation, bool) or not isinstance(cost_inflation, (int, float)):
+        raise PlanningInputError("ltcShock.costInflation must be a number or omitted")
+    try:
+        return make_ltc_shock(
+            onset_age=onset_age,
+            annual_cost=float(annual_cost),
+            duration_years=duration_years,
+            cost_inflation=float(cost_inflation),
+        )
+    except ValueError as exc:
+        raise PlanningInputError(str(exc)) from exc
+
+
+def _goal_priority(raw: dict[str, Any], index: int) -> int:
+    priority = raw.get("priority")
+    if priority is not None:
+        if isinstance(priority, bool) or not isinstance(priority, int) or not 1 <= priority <= 100:
+            raise PlanningInputError(f"goals[{index}].priority must be an integer in [1, 100]")
+        return priority
+    tier = raw.get("tier", raw.get("importance", "want"))
+    if not isinstance(tier, str) or tier not in _GOAL_TIER_PRIORITIES:
+        raise PlanningInputError(
+            f"goals[{index}].tier must be one of {', '.join(_GOAL_TIER_PRIORITIES)}"
+        )
+    return _GOAL_TIER_PRIORITIES[tier]
+
+
+def _is_opaque_ref(value: str) -> bool:
+    return (
+        1 <= len(value) <= 80
+        and all(ch in _OPAQUE_REF_ALLOWED_CHARS for ch in value)
+        and any(ch.isdigit() or ch in "._:-" for ch in value)
+    )
+
+
+def _parse_monte_carlo_goal_schedule(
+    body: dict[str, Any],
+    *,
+    current_age: int,
+    years: int,
+) -> list[dict[str, Any]]:
+    """Convert optional goal list into ordered one/multi-year spend additions.
+
+    Each goal is de-identified by opaque ``id``, sorted by priority -> earlier
+    year -> input order, and emitted as explicit schedule rows. The engine uses
+    these rows for path-level priority funding, and the wrapper echoes them for
+    audit/replay.
+    """
+    raw_goals = body.get("goals", [])
+    if raw_goals is None:
+        return []
+    if not isinstance(raw_goals, list):
+        raise PlanningInputError("goals must be a list or omitted")
+    if len(raw_goals) > _MAX_GOALS:
+        raise PlanningInputError(f"at most {_MAX_GOALS} goals are supported")
+
+    rows: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for index, raw in enumerate(raw_goals):
+        if not isinstance(raw, dict):
+            raise PlanningInputError(f"goals[{index}] must be an object")
+        goal_id = raw.get("id")
+        if not isinstance(goal_id, str) or not _is_opaque_ref(goal_id):
+            raise PlanningInputError(
+                f"goals[{index}].id must be an opaque token of 1-80 letters, digits, '.', '_', ':', or '-'"
+            )
+        if goal_id in seen_ids:
+            raise PlanningInputError(f"duplicate goal id '{goal_id}'")
+        seen_ids.add(goal_id)
+        target = raw.get("targetAmount")
+        if (
+            isinstance(target, bool)
+            or not isinstance(target, (int, float))
+            or not math.isfinite(float(target))
+            or target < 0
+        ):
+            raise PlanningInputError(f"goals[{index}].targetAmount must be non-negative")
+        years_to_goal = raw.get("yearsToGoal")
+        if (
+            isinstance(years_to_goal, bool)
+            or not isinstance(years_to_goal, int)
+            or not 0 <= years_to_goal < years
+        ):
+            raise PlanningInputError(
+                f"goals[{index}].yearsToGoal must be an integer inside the Monte Carlo horizon"
+            )
+        funding_years = raw.get("fundingYears", 1)
+        if (
+            isinstance(funding_years, bool)
+            or not isinstance(funding_years, int)
+            or not 1 <= funding_years <= 40
+        ):
+            raise PlanningInputError(f"goals[{index}].fundingYears must be an integer in [1, 40]")
+        if years_to_goal + funding_years > years:
+            raise PlanningInputError(f"goals[{index}] funding years extend beyond horizonAge")
+        inflation = raw.get("inflationRate", 0.0)
+        if (
+            isinstance(inflation, bool)
+            or not isinstance(inflation, (int, float))
+            or not math.isfinite(float(inflation))
+            or inflation <= -1
+        ):
+            raise PlanningInputError(f"goals[{index}].inflationRate must be a number > -1")
+        priority = _goal_priority(raw, index)
+        annual_base = float(target) / funding_years
+        for funding_index in range(funding_years):
+            projection_index = years_to_goal + funding_index
+            amount = annual_base * (1.0 + float(inflation)) ** projection_index
+            rows.append(
+                {
+                    "id": goal_id,
+                    "priority": priority,
+                    "inputOrder": index,
+                    "fundingYearIndex": funding_index,
+                    "projectionYear": projection_index + 1,
+                    "age": current_age + projection_index,
+                    "amount": round(amount, 2),
+                }
+            )
+    rows.sort(
+        key=lambda row: (
+            int(row["priority"]),
+            int(row["projectionYear"]),
+            int(row["inputOrder"]),
+            int(row["fundingYearIndex"]),
+        )
+    )
+    return rows
+
+
 def _net_spend_schedule(
     *,
     current_age: int,
@@ -1248,6 +2215,7 @@ def _net_spend_schedule(
     annual_spend: float,
     spend_cola: float,
     body: dict[str, Any],
+    ltc_shock: LongTermCareShock | None = None,
     annual_contribution: float = 0.0,
     contribution_cola: float = 0.0,
 ) -> list[float]:
@@ -1285,17 +2253,22 @@ def _net_spend_schedule(
 
     spend_entries = _parse_spend_schedule(body)
     schedule: list[float] = []
+    ltc_costs = ltc_shock_schedule(ltc_shock, current_age=current_age, years=years)
     for year in range(years):
         age = current_age + year
+        ltc_cost = ltc_costs[year]
         if age < retirement_age:
             if annual_contribution:
                 # Accumulation with saving: a negative net draw = a portfolio inflow.
-                schedule.append(-annual_contribution * (1.0 + contribution_cola) ** year)
+                schedule.append(
+                    -annual_contribution * (1.0 + contribution_cola) ** year + ltc_cost
+                )
             else:
-                schedule.append(0.0)  # accumulation: portfolio grows untouched
+                schedule.append(ltc_cost)  # accumulation: shock costs still stress assets
             continue
         spend = annual_spend * (1.0 + spend_cola) ** year
         spend = _apply_spend_schedule(base_spend=spend, age=age, entries=spend_entries)
+        spend += ltc_cost
         income_total = sum(
             amount * (1.0 + cola) ** (age - start) for amount, start, cola in parsed if age >= start
         )
@@ -1403,9 +2376,13 @@ class _MonteCarloContext:
     retirement_age: int
     annual_spend: float
     spend_cola: float
+    healthcare_inflation_rate: float
+    ltc_shock: LongTermCareShock | None
     initial_balance: float
     net_spend: list[float]
+    net_spend_without_ltc_shock: list[float]
     guardrails: GuardrailParams | None
+    goal_funding_schedule: list[dict[str, Any]]
     body: dict[str, Any]
 
 
@@ -1463,6 +2440,12 @@ def _prepare_monte_carlo(
     spend_cola = body.get("spendColaRate", 0.0)
     if isinstance(spend_cola, bool) or not isinstance(spend_cola, (int, float)):
         raise PlanningInputError("spendColaRate must be a number")
+    healthcare_inflation_rate = _optional_number(
+        body, "healthcareInflationRate", float(spend_cola)
+    )
+    ltc_shock = _parse_ltc_shock(
+        body, default_cost_inflation=healthcare_inflation_rate
+    )
     net_spend = _net_spend_schedule(
         current_age=current_age,
         retirement_age=retirement_age,
@@ -1470,8 +2453,26 @@ def _prepare_monte_carlo(
         annual_spend=annual_spend,
         spend_cola=float(spend_cola),
         body=body,
+        ltc_shock=ltc_shock,
+    )
+    net_spend_without_ltc_shock = _net_spend_schedule(
+        current_age=current_age,
+        retirement_age=retirement_age,
+        years=years,
+        annual_spend=annual_spend,
+        spend_cola=float(spend_cola),
+        body=body,
+        ltc_shock=None,
+    )
+    goal_funding_schedule = _parse_monte_carlo_goal_schedule(
+        body, current_age=current_age, years=years
     )
     guardrails = _parse_guardrails(body, spend_cola=float(spend_cola))
+    if guardrails is not None and ltc_shock is not None:
+        raise PlanningInputError(
+            "ltcShock and guardrails are not combined in S12 v1; run the LTC stress "
+            "and Guyton-Klinger guardrail analysis as separate scenarios"
+        )
 
     paths = body.get("paths", 10000)
     if isinstance(paths, bool) or not isinstance(paths, int) or not 1 <= paths <= _MC_MAX_PATHS:
@@ -1507,9 +2508,13 @@ def _prepare_monte_carlo(
         retirement_age=retirement_age,
         annual_spend=annual_spend,
         spend_cola=float(spend_cola),
+        healthcare_inflation_rate=healthcare_inflation_rate,
+        ltc_shock=ltc_shock,
         initial_balance=initial_balance,
         net_spend=net_spend,
+        net_spend_without_ltc_shock=net_spend_without_ltc_shock,
         guardrails=guardrails,
+        goal_funding_schedule=goal_funding_schedule,
         body=body,
     )
 
@@ -1544,6 +2549,7 @@ def _run_monte_carlo(
         current_regime=ctx.current_regime,
         current_age=ctx.current_age,
         guardrails=guardrails,
+        goal_funding_schedule=ctx.goal_funding_schedule,
     )
 
 
@@ -1566,12 +2572,40 @@ def _monte_carlo_decumulation_tool(
 ) -> dict[str, Any]:
     """``monte_carlo_decumulation`` — the primary decumulation simulation."""
     ctx = _prepare_monte_carlo(body, market, regime_engine)
-    return _run_monte_carlo(
+    result = _run_monte_carlo(
         ctx,
         initial_balance=ctx.initial_balance,
         net_spend_by_year=ctx.net_spend,
         guardrails=ctx.guardrails,
     )
+    if ctx.goal_funding_schedule:
+        result["goalFundingPolicy"] = {
+            "mode": "priority_then_earlier_year_then_input_order",
+            "basis": "path_level_priority_funding_after_base_spend_before_growth",
+        }
+        result["goalFundingSchedule"] = ctx.goal_funding_schedule
+    if ctx.ltc_shock is not None:
+        baseline = _run_monte_carlo(
+            ctx,
+            initial_balance=ctx.initial_balance,
+            net_spend_by_year=ctx.net_spend_without_ltc_shock,
+            guardrails=ctx.guardrails,
+        )
+        baseline_probability = float(baseline["successProbability"])
+        with_shock_probability = float(result["successProbability"])
+        result["ltcShock"] = ltc_shock_summary(
+            ctx.ltc_shock, current_age=ctx.current_age, years=ctx.years
+        )
+        result["ltcShockImpact"] = {
+            "basis": "same_seed_same_returns_with_vs_without_ltc_shock",
+            "baselineSuccessProbability": round(baseline_probability, 4),
+            "withShockSuccessProbability": round(with_shock_probability, 4),
+            "successProbabilityDelta": round(with_shock_probability - baseline_probability, 4),
+            "selfInsuredProbability": round(with_shock_probability, 4),
+            "baselineTerminalValues": baseline["terminalValues"],
+            "withShockTerminalValues": result["terminalValues"],
+        }
+    return result
 
 
 def _total_guaranteed_income(body: dict[str, Any]) -> float:
@@ -1647,15 +2681,17 @@ def _schedule_for(
     annual_contribution: float = 0.0,
 ) -> list[float]:
     """Rebuild the net-spend schedule with one field overridden (cheap; no network)."""
-    return _net_spend_schedule(
+    net_spend = _net_spend_schedule(
         current_age=ctx.current_age,
         retirement_age=ctx.retirement_age if retirement_age is None else retirement_age,
         years=ctx.years,
         annual_spend=ctx.annual_spend if annual_spend is None else annual_spend,
         spend_cola=ctx.spend_cola,
         body=ctx.body,
+        ltc_shock=ctx.ltc_shock,
         annual_contribution=annual_contribution,
     )
+    return net_spend
 
 
 def _round_solve_x(solve_for: str, x: float) -> float | int:
@@ -1684,10 +2720,15 @@ def _solve_goal_variable(
 
         result = solve_monotone(
             evaluate=lambda x: _mc_success(
-                ctx, initial_balance=ctx.initial_balance,
-                net_spend_by_year=_schedule_for(ctx, annual_spend=x), paths=solve_paths,
+                ctx,
+                initial_balance=ctx.initial_balance,
+                net_spend_by_year=_schedule_for(ctx, annual_spend=x),
+                paths=solve_paths,
             ),
-            lo=lo, hi=hi, target=target, direction=direction,
+            lo=lo,
+            hi=hi,
+            target=target,
+            direction=direction,
         )
         return result, direction, spend_inputs
 
@@ -1699,10 +2740,15 @@ def _solve_goal_variable(
 
         result = solve_monotone(
             evaluate=lambda x: _mc_success(
-                ctx, initial_balance=ctx.initial_balance,
-                net_spend_by_year=_schedule_for(ctx, annual_contribution=x), paths=solve_paths,
+                ctx,
+                initial_balance=ctx.initial_balance,
+                net_spend_by_year=_schedule_for(ctx, annual_contribution=x),
+                paths=solve_paths,
             ),
-            lo=lo, hi=hi, target=target, direction=direction,
+            lo=lo,
+            hi=hi,
+            target=target,
+            direction=direction,
         )
         return result, direction, contrib_inputs
 
@@ -1720,11 +2766,15 @@ def _solve_goal_variable(
 
         result = solve_monotone(
             evaluate=lambda x: _mc_success(
-                ctx, initial_balance=ctx.initial_balance,
+                ctx,
+                initial_balance=ctx.initial_balance,
                 net_spend_by_year=_schedule_for(ctx, annual_contribution=x * income_f),
                 paths=solve_paths,
             ),
-            lo=lo, hi=hi, target=target, direction=direction,
+            lo=lo,
+            hi=hi,
+            target=target,
+            direction=direction,
         )
         return result, direction, rate_inputs
 
@@ -1736,12 +2786,15 @@ def _solve_goal_variable(
 
         result = solve_integer_monotone(
             evaluate=lambda x: _mc_success(
-                ctx, initial_balance=ctx.initial_balance,
+                ctx,
+                initial_balance=ctx.initial_balance,
                 net_spend_by_year=_schedule_for(ctx, retirement_age=int(round(x))),
                 paths=solve_paths,
             ),
-            lo=int(round(lo)), hi=int(round(hi)),
-            target=target, direction=direction,
+            lo=int(round(lo)),
+            hi=int(round(hi)),
+            target=target,
+            direction=direction,
         )
         return result, direction, age_inputs
 
@@ -1753,9 +2806,15 @@ def _solve_goal_variable(
 
     result = solve_monotone(
         evaluate=lambda x: _mc_success(
-            ctx, initial_balance=x, net_spend_by_year=ctx.net_spend, paths=solve_paths,
+            ctx,
+            initial_balance=x,
+            net_spend_by_year=ctx.net_spend,
+            paths=solve_paths,
         ),
-        lo=lo, hi=hi, target=target, direction=direction,
+        lo=lo,
+        hi=hi,
+        target=target,
+        direction=direction,
     )
     return result, direction, balance_inputs
 
@@ -1785,9 +2844,7 @@ def _solve_goal_tool(
     ctx = _prepare_monte_carlo(mc_body, market, regime_engine)
 
     lo, hi = _parse_solve_bounds(body, solve_for, ctx)
-    result, direction, to_inputs = _solve_goal_variable(
-        ctx, solve_for, lo=lo, hi=hi, target=target
-    )
+    result, direction, to_inputs = _solve_goal_variable(ctx, solve_for, lo=lo, hi=hi, target=target)
 
     # One authoritative confirmation at the solved value, at full paths.
     confirm_balance, confirm_net = to_inputs(result.solved_value)
@@ -1820,6 +2877,13 @@ def _solve_goal_tool(
         ],
         "terminalValues": confirm["terminalValues"],
     }
+    if ctx.goal_funding_schedule:
+        response["goalFundingPolicy"] = {
+            "mode": "priority_then_earlier_year_then_input_order",
+            "basis": "path_level_priority_funding_after_base_spend_before_growth",
+        }
+        response["goalFundingSchedule"] = ctx.goal_funding_schedule
+        response["goalFunding"] = confirm.get("goalFunding")
     if solve_for in ("annual_contribution", "savings_rate"):
         # Accumulation modeled as a real in-engine inflow — an exact run, not an
         # FV approximation. Surfaced as an enum so the method is auditable.
@@ -1875,7 +2939,9 @@ def irmaa_headroom_tool(body: dict[str, Any]) -> dict[str, Any]:
         raise PlanningInputError(str(exc)) from exc
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
-    return asdict(result)
+    payload = asdict(result)
+    payload["irmaaTableVersion"] = table.table_version
+    return payload
 
 
 def _parse_contract(body: dict[str, Any]) -> PlanningContract:
@@ -1945,7 +3011,7 @@ def analyze_roth_conversion_tool(body: dict[str, Any]) -> dict[str, Any]:
 def sequence_conversions_tool(body: dict[str, Any]) -> dict[str, Any]:
     """``sequence_conversions`` — the multi-year split roll-up only."""
     contract = _parse_contract(body)
-    bt, it, sr, _bt_src, _it_src, _sr_src = _resolve_tables(body, contract)
+    bt, it, sr, bt_src, it_src, sr_src = _resolve_tables(body, contract)
     result = sequence_conversions(
         contract,
         irmaa_table=it,
@@ -1956,7 +3022,15 @@ def sequence_conversions_tool(body: dict[str, Any]) -> dict[str, Any]:
         irmaa_buffer=_opt_num(body, "irmaa_buffer", 5_000.0),
         growth_rate=_opt_num(body, "growth_rate", 0.05),
     )
-    return asdict(result)
+    payload = asdict(result)
+    payload["bracketTableYear"] = bt.year
+    payload["bracketTableSource"] = bt_src
+    payload["bracketTableVersion"] = bt.table_version
+    payload["irmaaTiersSourceYear"] = it.source_year
+    payload["irmaaTableSource"] = it_src
+    payload["irmaaTableVersion"] = it.table_version
+    payload["stateRuleSource"] = "none" if sr is None else sr_src
+    return payload
 
 
 def build_tool_handlers(
@@ -1972,6 +3046,9 @@ def build_tool_handlers(
 
     def capital_market_assumptions_tool(body: dict[str, Any]) -> dict[str, Any]:
         return _capital_market_assumptions_tool(body, market)
+
+    def historical_blend_tool(body: dict[str, Any]) -> dict[str, Any]:
+        return _historical_blend_tool(body, market)
 
     def regime_return_generator_tool(body: dict[str, Any]) -> dict[str, Any]:
         return _regime_return_generator_tool(body, regime_engine)
@@ -2002,21 +3079,28 @@ def build_tool_handlers(
         "cashflow_planning_bridge": cashflow_planning_bridge_tool,
         "cash_reserve_analysis": cash_reserve_analysis_tool,
         "budget_pacing_projection": budget_pacing_projection_tool,
+        "education_funding": education_funding_tool,
+        "education_vehicle_rules": education_vehicle_rules_tool,
+        "income_layering": income_layering_tool,
         "glide_path": glide_path_tool,
         "tax_aware_withdrawal": tax_aware_withdrawal_tool,
         "correlation_matrix": correlation_matrix_tool,
         "capital_market_assumptions": capital_market_assumptions_tool,
+        "historical_blend": historical_blend_tool,
         "regime_return_generator": regime_return_generator_tool,
         "roth_conversion": roth_conversion_tool,
         "sequence_of_returns_stress": sequence_of_returns_stress_tool,
         "rmd": rmd_tool,
         "tax_bracket_headroom": tax_bracket_headroom_tool,
+        "inherited_ira_analysis": inherited_ira_analysis_tool,
         "social_security_claiming": social_security_claiming_tool,
         "regime_conditioned_swr": regime_conditioned_swr_tool,
         "portfolio_xray": portfolio_xray_tool,
         "optimize_allocation": optimize_allocation_tool,
+        "risk_profile_score": risk_profile_score_tool,
         "fire": fire_tool,
         "risk_metrics": risk_metrics_tool,
+        "performance_analysis": performance_analysis_tool,
         "rebalance": rebalance_tool,
         "irmaa_headroom": irmaa_headroom_tool,
         "analyze_roth_conversion": analyze_roth_conversion_tool,
@@ -2033,13 +3117,19 @@ __all__ = [
     "build_tool_handlers",
     "cash_reserve_analysis_tool",
     "cashflow_planning_bridge_tool",
+    "education_funding_tool",
+    "education_vehicle_rules_tool",
+    "income_layering_tool",
+    "inherited_ira_analysis_tool",
     "fire_tool",
     "glide_path_tool",
     "irmaa_headroom_tool",
     "project_cash_flow_tool",
     "sequence_conversions_tool",
+    "performance_analysis_tool",
     "rebalance_tool",
     "risk_metrics_tool",
+    "risk_profile_score_tool",
     "rmd_tool",
     "roth_conversion_tool",
     "sequence_of_returns_stress_tool",

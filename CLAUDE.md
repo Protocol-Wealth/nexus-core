@@ -3,6 +3,43 @@
 > Repo: `Protocol-Wealth/nexus-core` · License: Apache 2.0 · Patent Pending: USPTO #64/034,229 · OIN member.
 > Open-source extraction of the [Protocol Wealth research engine](https://nexusmcp.site); nothing in this repo is client-specific or proprietary to PW.
 
+**Current state (2026-07-07 ET — private consumer boundary closeout):**
+- **Access model:** hosted Nexus is a split surface. Native `/mcp` remains a
+  public OAuth-compatible demo endpoint with `NEXUS_PUBLIC_MCP_PROFILE=demo`.
+  REST/JSON calculation paths (`/api/*`, `/api/planning/tools/*`, legacy
+  `/mcp/tools/*`) are gated by `NEXUS_ACCESS_MODE=restricted` +
+  `NEXUS_API_KEYS`; `pw-api` supplies `NEXUS_SERVICE_API_KEY` server-to-server.
+  PWOS/PWPortal browser clients must not carry Nexus credentials.
+- **Private research ingestion handoff:** PWOS `/market-data` owns CSV/XLSX
+  research-screen ingestion. PR #993 in `pw-os-v2` is merged and advisor-verified
+  with `Saved 380 research rows (7c30414f)`. Raw Seeking Alpha workbooks,
+  Schwab/custodian files, client assignments, tracking records, and chat
+  attachments stay private in PWOS/pw-api. Nexus may receive only de-identified
+  candidate symbols, screened fields, and caller-supplied option-chain facts for
+  public-safe calculation.
+
+**Current state (2026-07-06 ET / 2026-07-07 UTC — restricted REST + demo MCP deployed):**
+- **Live deployed:** commit `d3d0b2f` is on `origin/main`; Cloud Run revision
+  `nexus-core-00061-xhs` serves 100% traffic. Hosted Nexus keeps transparent
+  OAuth active for `/mcp`, runs `NEXUS_PUBLIC_MCP_PROFILE=demo`, and gates
+  `/api/*`, `/api/planning/tools/*`, and legacy `/mcp/tools/*` with
+  `NEXUS_ACCESS_MODE=restricted` + `NEXUS_API_KEYS`. Anonymous
+  `/api/planning/tools` returns 401; the pw-api service bearer key returns the
+  27-tool planning contract; OAuth MCP `tools/list` returns only
+  `option_price`, `collar_book`, `health`, and `describe`.
+- **Collar-book executable-fill update:** the multi-name collar-book worksheet
+  accepts per-share executable pricing (`executable_net_credit` or `call_bid`
+  minus `put_ask`) through the engine plus REST/MCP parsers and reports
+  `stock_price`, `shares`, per-line `fill_haircut`, executable income/yield,
+  and portfolio-level executable yield only when every held line has executable
+  pricing. This is worksheet arithmetic over caller-supplied
+  public-safe/pre-screened data; it is not a live-chain attestation, custodian
+  execution record, client-specific recommendation, or order surface.
+- **Validation run:** targeted collar-book engine, route, and MCP parser tests
+  plus strict mypy/ruff on the touched source passed; full FastAPI TestClient
+  route suites hit a local WSL/sandbox anyio threadpool hang, so CI or a
+  non-sandboxed Python environment remains the full route-harness gate.
+
 **Current state (2026-07-01 — docs/status audit):**
 - **Live deployment verified:** `https://nexusmcp.site/health` returns `{"status":"ok","service":"nexus-core","version":"0.1.0"}` and `https://nexusmcp.site/mcp/tools` returns contractVersion `0.1.0` with **23 planning tool ids**: `monte_carlo_decumulation`, `analyze_goals`, `project_cash_flow`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `fire`, `risk_metrics`, `rebalance`, `build_planning_report`, `irmaa_headroom`, `analyze_roth_conversion`, and `sequence_conversions`. GitHub has **no open PRs** and seven open issues (#197-#203) tracking public-safe planning/report extraction, planning assumptions provenance, LP/indexer expansion, crypto-options follow-ups, agent analytics, governance/tooling cleanup, and equity-research gates.
 - **Dependency status:** `requirements-serve.lock` pins `pandas==2.3.3`; keep `pyproject.toml` on `pandas>=2.2,<3.0` until `alphalens-reloaded` supports pandas 3.x. Dependabot's pandas 3.x bump conflicted with the documented `[all]`/`[backtest]` installability boundary.
@@ -15,7 +52,7 @@
 
 ## What This Is
 
-Python 3.12 package — a regime-adaptive financial-analysis + DeFi/market-data engine. It serves a **public, read-only HTTP API** (FastAPI) with an **MCP-over-HTTP transport** mounted at `/mcp`, so any MCP-compatible AI client (Claude, GPT, Gemini) can call regime-aware analysis without re-implementing financial domain logic. No account or API key is required; the hosted MCP transport may use transparent OAuth for compatible clients, with no login.
+Python 3.12 package — a regime-adaptive financial-analysis + DeFi/market-data engine. It serves a **read-only HTTP API** (FastAPI) with an **MCP-over-HTTP transport** mounted at `/mcp`, so any MCP-compatible AI client (Claude, GPT, Gemini) can call a public demo tool surface without re-implementing financial domain logic. Production consumers should use the REST/JSON endpoints through an authenticated service boundary. The hosted MCP transport may use transparent OAuth for compatible clients, with no login.
 
 Built and tested in production by Protocol Wealth LLC (SEC-registered RIA, CRD #335298). The public deployment at [nexusmcp.site](https://nexusmcp.site) runs the `nexus_core.app` surface from **this** repository, on **Google Cloud Run** (Cloudflare → Cloud Run); see [`DEPLOY.md`](DEPLOY.md). Version `0.1.0`; CI-gated test suite (`ruff` + `mypy --strict` + `pytest`, 80% coverage floor). The README's *Status* section is the source of truth on maturity — this is an alpha framework. Some subpackages are scaffold (`__init__.py` only); check the actual module contents before assuming an API exists.
 
@@ -30,7 +67,7 @@ nexus-core/
 │   │   ├── main.py           # create_app() — wires providers, engine, routers, CORS, rate limit, /mcp
 │   │   ├── routes.py         # /health, /api/regime[/signals], /api/market/*, /api/economic/*, /api/usage
 │   │   ├── scoring.py        # /api/score/{ticker} router
-│   │   ├── options.py        # /api/options/* router (overlays + Deribit crypto options)
+│   │   ├── options.py        # /api/options/* router (overlays, collar worksheets, MBOUM chains, Deribit crypto options)
 │   │   ├── wallet.py         # /api/wallet/{address} router (DeBank)
 │   │   ├── chain.py          # /api/chain/* router (Tatum multi-chain native balances)
 │   │   ├── vaults.py         # /api/vaults[/chains] router (vaults.fyi)
@@ -45,7 +82,7 @@ nexus-core/
 │   ├── engine/
 │   │   ├── regime/           # RegimeEngine: signals, signal_fetcher, classifier, hysteresis, thresholds, dampener, codes
 │   │   ├── scoring/          # 8-check EMF scoring (emf/ submodule) + tiers, attribution, enhancements, formatter
-│   │   ├── pricing/          # Black-Scholes + options overlays
+│   │   ├── pricing/          # Black-Scholes + options overlays + collar-book worksheet math
 │   │   ├── lp/               # uniswap_v3.py — pure CLMM math (tick math, exact IL, fee APR); protocol-agnostic, reused across chains
 │   │   ├── benchmarks.py     # base-100 + buy-and-hold hold-strategy compositions
 │   │   ├── optimization/     # PyPortfolioOpt + Riskfolio-Lib + Black-Litterman wrappers (extra)
@@ -132,6 +169,7 @@ nexus-core --version
 | `/api/market/quote/{symbol}`, `/api/market/history/{symbol}` | Composite market data (yfinance → MBOUM → MarketStack → CoinGecko) |
 | `/api/economic/{series_id}` | FRED series (503 when `FRED_API_KEY` unset) |
 | `/api/options/price`, `/api/options/overlay/{covered-call,cash-secured-put,collar}` | Black-Scholes educational overlays |
+| `/api/options/overlay/collar-screen`, `/api/options/overlay/collar-book`, `/api/options/equity/{symbol}/expirations`, `/api/options/equity/{symbol}/chain?expiration=` | Equity collar screen/book worksheets and MBOUM-backed listed-option expirations/chains. `collar-book` can report executable-fill haircuts from caller-supplied bid-side call / ask-side put pricing. Worksheet only: no orders, no advice |
 | `/api/options/crypto/currencies`, `/api/options/crypto/{currency}/instruments`, `/api/options/crypto/instrument/{name}` | Deribit crypto options on **BTC, ETH** (coin-settled inverse) + **SOL, XRP, TRX, AVAX** (USDC-settled linear, read via Deribit's `USDC` umbrella + prefix filter). Keyless |
 | `/api/options/crypto/{currency}/{covered-call,covered-call-chain,iv-term-structure,vol-skew,regime-overwrite,protective-put,collar}` (GET) + `/ladder`, `/roll`, `/book/mtm`, `/book/scenario` (POST) | Settlement-aware covered-call **overwriting + hedge suite** — coin-yield, chain ranking, IV term structure, **call-side vol skew** (IV + vega by strike), **regime-conditioned strike** (live EMF tilt + `defensiveness` knob), protective put/collar, calendar ladder, roll, book MTM + Greeks, spot/IV stress. Engine in `engine/pricing/{crypto_overlays,option_chain,overwrite,options_book,regime_overlay,skew}.py`. Illustration only; ISDA/CSA/execution/custody out of scope |
 | `/api/wallet/{address}` | Anonymous EVM wallet balance (DeBank) |
@@ -142,8 +180,8 @@ nexus-core --version
 | `/api/solana/price/{mint}`, `/api/solana/prices?mints=` | Solana SPL token USD prices (Jupiter v3, keyless — no API key) |
 | `/api/benchmarks`, `/api/benchmarks/series?days=`, `/api/benchmarks/history?days=` | Base-100 hold-strategy returns (BTC/ETH/SOL + ETH-USDC 50/50,60/40,70/30 + ETH-BTC 50/50; USDC held at $1; buy-and-hold). `/series` on-demand from CoinGecko; `/history` from persisted daily snapshots |
 | `/api/usage` | Provider usage/quota report (non-sensitive; no keys, no client data) |
-| `/mcp` | MCP-over-HTTP transport (FastMCP) — exempt from the rate limiter. `tools/list` includes the research tools + `health`/`describe`/`get_quotes` + the 23 planning tools, including `project_cash_flow`, `analyze_goals`, `optimize_allocation`, `build_planning_report`, and the Roth/IRMAA tools `analyze_roth_conversion` / `sequence_conversions` / `irmaa_headroom`; every tool is `readOnlyHint` + carries the disclaimer |
-| `/mcp/tools`, `POST /mcp/tools/{id}` | Planning REST gateway (pwplan-core, contractVersion `0.1.0`, PII-free) |
+| `/mcp` | MCP-over-HTTP transport (FastMCP) — exempt from the rate limiter. Full mode registers research tools + `health`/`describe`/`get_quotes`, the current-source 33 planning tools, and equity options helpers including `collar_book`; demo mode registers closed-world demo tools only. Every tool is `readOnlyHint` + carries the disclaimer |
+| `/api/planning/tools`, `POST /api/planning/tools/{id}` | Planning JSON gateway (pw-api / pwplan-core contractVersion `0.1.0`, PII-free). Legacy `/mcp/tools` aliases remain |
 | `/docs`, `/openapi.json`, `/mcp-guide`, `/llms.txt`, `/.well-known/security.txt` | OpenAPI (servers + tags), MCP setup guide, agent site map, RFC 9116 disclosure |
 
 Quote responses carry `as_of`/`source`/`market_status`; FRED carries `as_of`/`source`. All
@@ -158,7 +196,7 @@ external integrations degrade gracefully to `None`/empty/503 when their key is a
 
 ### Environment variables
 
-`FRED_API_KEY`, `MBOUM_API_KEY`, `MARKETSTACK_API_KEY`, `COINGECKO_API_KEY`, `EIA_API_KEY`, `BEA_API_KEY`, `DEBANK_API_KEY` (`/api/wallet`), `TATUM_API_KEY` (`/api/chain` + LP uncollected fees), `VAULTSFYI_API_KEY` (`/api/vaults`), `THEGRAPH_API_KEY` (`/api/lp`), `DATABASE_URL` (persistence + `/api/benchmarks/history`; 503 when unset), `MCP_OAUTH_SIGNING_KEY` (optional stateless transparent OAuth for hosted `/mcp`; omit locally to keep `/mcp` open), `NEXUS_RATE_LIMIT_PER_MIN` (default 60), `NEXUS_CORS_ORIGINS` (default `*`).
+`FRED_API_KEY`, `MBOUM_API_KEY`, `MARKETSTACK_API_KEY`, `COINGECKO_API_KEY`, `EIA_API_KEY`, `BEA_API_KEY`, `DEBANK_API_KEY` (`/api/wallet`), `TATUM_API_KEY` (`/api/chain` + LP uncollected fees), `VAULTSFYI_API_KEY` (`/api/vaults`), `THEGRAPH_API_KEY` (`/api/lp`), `DATABASE_URL` (persistence + `/api/benchmarks/history`; 503 when unset), `MCP_OAUTH_SIGNING_KEY` (optional stateless transparent OAuth for hosted `/mcp`; omit locally to keep `/mcp` open), `NEXUS_PUBLIC_MCP_PROFILE` (`full` default or `demo`), `NEXUS_ACCESS_MODE` (`public` default or `restricted`), `NEXUS_API_KEYS` (raw keys or `sha256:<hex>` digests), `NEXUS_RATE_LIMIT_PER_MIN` (default 60), `NEXUS_CORS_ORIGINS` (default `*`).
 
 ## Security Posture
 

@@ -12,6 +12,19 @@
   payoff (net premium, breakevens, max profit/loss, static / if-assigned /
   annualized returns, downside protection), using a theoretical premium from
   :mod:`black_scholes` when a market premium isn't supplied.
+- :mod:`collar_select` — batch equity collar screening: per-position strike
+  selection (put % below spot; call by target delta with a minimum-OTM floor)
+  on an approximate strike-increment grid, dividend-aware THEORETICAL
+  Black-Scholes premiums, and a ranked ``screen_collars`` helper.
+  ``CollarScreenPosition``, ``CollarScreenResult``, ``evaluate_collar_position``,
+  ``screen_collars``.
+- :mod:`collar_book` — multi-name collar BOOK assembly (advisor research
+  worksheet): a two-pass greedy allocator that sizes whole-contract positions
+  against a notional target with per-position and per-sector caps, reporting
+  explicit price-tier / sector-cap / degenerate exclusions and the book's
+  income + floor/cap geometry. No orders, no execution.
+  ``CollarBookPosition``, ``CollarBookHolding``, ``CollarBookResult``,
+  ``assemble_collar_book``.
 
 Everything here is an **educational illustration** over public market parameters
 — not investment advice, a recommendation, or a suitability determination.
@@ -21,6 +34,20 @@ adds QuantLib + FinancePy; the vanilla-option math here needs neither.
 """
 
 from .black_scholes import Greeks, OptionKind, bs_price, greeks, implied_vol
+from .collar_book import (
+    CollarBookHolding,
+    CollarBookPosition,
+    CollarBookResult,
+    DegenerateExclusion,
+    PriceTierExclusion,
+    assemble_collar_book,
+)
+from .collar_select import (
+    CollarScreenPosition,
+    CollarScreenResult,
+    evaluate_collar_position,
+    screen_collars,
+)
 from .crypto_overlays import (
     CryptoCollarIllustration,
     CryptoCoveredCallIllustration,
@@ -73,7 +100,13 @@ __all__ = [
     "BookPosition",
     "CashSecuredPutIllustration",
     "ChainQuote",
+    "CollarBookHolding",
+    "CollarBookPosition",
+    "CollarBookResult",
     "CollarIllustration",
+    "CollarScreenPosition",
+    "CollarScreenResult",
+    "DegenerateExclusion",
     "CoveredCallIllustration",
     "CoveredCallLadder",
     "CryptoCollarIllustration",
@@ -83,6 +116,7 @@ __all__ = [
     "IvTermStructure",
     "LadderLeg",
     "OptionKind",
+    "PriceTierExclusion",
     "RegimeConditionedOverwrite",
     "RollAnalysis",
     "ScenarioCell",
@@ -91,6 +125,7 @@ __all__ = [
     "SkewPoint",
     "TermStructurePoint",
     "VolSkew",
+    "assemble_collar_book",
     "book_mtm",
     "bs_price",
     "cash_secured_put_overlay",
@@ -100,6 +135,7 @@ __all__ = [
     "crypto_collar",
     "crypto_covered_call",
     "crypto_protective_put",
+    "evaluate_collar_position",
     "greeks",
     "implied_vol",
     "iv_term_structure",
@@ -108,6 +144,7 @@ __all__ = [
     "regime_conditioned_overwrite",
     "roll_analysis",
     "scenario_stress",
+    "screen_collars",
     "select_by_delta",
     "vol_skew",
 ]

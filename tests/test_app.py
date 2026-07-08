@@ -99,21 +99,28 @@ def test_mcp_guide_documents_pwplan_core_integration() -> None:
         "cashflow_planning_bridge",
         "cash_reserve_analysis",
         "budget_pacing_projection",
+        "education_funding",
+        "education_vehicle_rules",
+        "income_layering",
         "glide_path",
         "tax_aware_withdrawal",
         "correlation_matrix",
         "capital_market_assumptions",
+        "historical_blend",
         "regime_return_generator",
         "roth_conversion",
         "sequence_of_returns_stress",
         "rmd",
         "tax_bracket_headroom",
+        "inherited_ira_analysis",
         "social_security_claiming",
         "regime_conditioned_swr",
         "portfolio_xray",
         "optimize_allocation",
+        "risk_profile_score",
         "fire",
         "risk_metrics",
+        "performance_analysis",
         "rebalance",
         "irmaa_headroom",
         "analyze_roth_conversion",
@@ -163,7 +170,9 @@ def test_openapi_has_servers_and_tag_descriptions() -> None:
 def test_landing_has_curl_quickstart() -> None:
     html = render_landing(mcp_enabled=True)
     assert "Try it" in html
-    assert "curl" in html and "/mcp/tools/glide_path" in html
+    assert "curl" in html
+    assert "Authorization: Bearer $NEXUS_SERVICE_API_KEY" in html
+    assert "/api/planning/tools/glide_path" in html
 
 
 def test_mcp_guide_has_troubleshooting() -> None:
@@ -282,8 +291,7 @@ def test_cache_control_headers() -> None:
     with _rest_client() as client:
         assert client.get("/api/regime").headers.get("cache-control") == "public, max-age=900"
         assert (
-            client.get("/api/regime/signals").headers.get("cache-control")
-            == "public, max-age=900"
+            client.get("/api/regime/signals").headers.get("cache-control") == "public, max-age=900"
         )
         assert (
             client.get("/api/market/quote/SPY").headers.get("cache-control")
@@ -294,7 +302,6 @@ def test_cache_control_headers() -> None:
             == "public, max-age=3600"
         )
         assert (
-            client.get("/api/economic/DGS10").headers.get("cache-control")
-            == "public, max-age=3600"
+            client.get("/api/economic/DGS10").headers.get("cache-control") == "public, max-age=3600"
         )
         assert client.get("/health").headers.get("cache-control") == "no-store"

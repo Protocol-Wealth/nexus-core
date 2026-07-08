@@ -5,22 +5,90 @@ verification. For the architectural overview see [README.md](README.md); for
 deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
 [AUDIT.md](AUDIT.md).
 
-- **Last live verified:** 2026-07-01 — live `/health` OK; live `/mcp/tools` returned 23 tools; GitHub: 7 open issues (#197-#203), 0 open PRs.
-- **Last local update:** 2026-07-05 — local `main` now includes Slice 0 docs-only boundary alignment, Slice 1 pure cash-flow planning bridge engine functions, and Slice 2 planning gateway/MCP wrappers for the PW Cash Flow OS + PW Planning Lab + PW Retirement Income Lab direction. Current source exposes 27 planning tools; live endpoints were not re-smoked in this pass.
+- **Last docs closeout:** 2026-07-07 ET — root docs reconciled to the private
+  consumer boundary: hosted native `/mcp` remains a public demo surface, hosted
+  REST/JSON calculation paths are service-key gated, `pw-api` owns the
+  server-to-server Nexus key, and PWOS/PWPortal browser clients should not hold
+  Nexus credentials. Cross-repo PWOS market-research import PR #993 is merged
+  and advisor-verified with `Saved 380 research rows (7c30414f)`; that raw
+  CSV/XLSX ingestion remains private PWOS/pw-api data, not nexus-core data.
+- **Last live verified:** 2026-07-06 ET / 2026-07-07 UTC — live `/health` OK;
+  hosted REST/JSON planning paths require a Nexus API key; the pw-api service
+  bearer key opened the then-current 27-tool planning contract; hosted native `/mcp` keeps
+  transparent OAuth active and exposes only the demo MCP tools
+  `option_price`, `collar_book`, `health`, and `describe`.
+- **Last local update:** 2026-07-08 — current branch adds S12 healthcare / LTC
+  stress support for `project_cash_flow` and `monte_carlo_decumulation`.
+  `ltcShock` uses only de-identified numeric assumptions — onset age,
+  current-dollar annual cost, duration, and healthcare-cost inflation. Cash flow
+  rows expose base expenses and LTC shock expense when supplied; Monte Carlo
+  emits a same-seed with/without-shock success-probability delta,
+  self-insured probability, and terminal-value comparison. S12 v1 does not
+  combine `ltcShock` with Guyton-Klinger guardrails; run those as separate
+  scenarios. No diagnosis, provider, claim, policy, household identifier,
+  approval, release, or audit state enters the public engine. `main` also adds S11
+  `inherited_ira_analysis`: a public-safe inherited traditional IRA
+  beneficiary strategy comparison for lump-sum, equal-annual, and
+  bracket-smoothed 10-year-rule distributions. It uses only de-identified
+  numeric assumptions, federal ordinary-income tax stacking, and
+  eligible-designated-beneficiary carve-out notes; no beneficiary names, account
+  identifiers, transaction rows, notes, approvals, release state, or audit
+  records enter the public engine. `main` also adds S4
+  `performance_analysis`: public-safe TWR, MWR/XIRR, fee-drag, and
+  benchmark-relative return math over de-identified numeric series only. It
+  accepts values, flows, fee rates, and return series; it does not accept
+  symbols, holdings names, account labels, transaction rows, tax lots, notes,
+  approvals, or audit workflow state. `main` also adds S5
+  `risk_profile_score`: a fixed, PII-free questionnaire scorer that emits the
+  optimizer-compatible `riskProfile` enum, annual volatility band, suggested
+  weights, question/band metadata, and the canonical planning disclaimer.
+  Advisor overrides, suitability approvals, and audit workflow state remain
+  private. `main` also adds the S6 PW Wealth Roadmap preset to
+  `build_planning_report`: `preset: "wealth_roadmap"` fixes the report title,
+  supports `focused` / `full` scopes, injects the required scope statement and
+  focused-scope planning-benefit notice, requires and stamps replay metadata on
+  every section, and rejects public `released` / caller `curated` workflow state.
+  `main` also adds the S9 household /
+  survivor layer: `household_social_security_benefits` provides a simplified
+  two-person Social Security own, age-reduced spousal, and survivor snapshot,
+  and `income_layering` accepts optional spouse Social Security plus
+  survivor-year transition inputs where `survivorYear` is the first
+  survivor-only modeling / filing-status year. `main` also adds the S7
+  illustrative state-tax layer: `tax_aware_withdrawal` and `income_layering`
+  accept optional 2-letter
+  `state` plus deterministic `residencyChange` inputs, expose federal/state tax
+  splits and table versions when a reference rule is modeled, and keep unknown
+  states explicitly unmodeled instead of assuming zero. `main` also adds the S3
+  `historical_blend` planning tool: public proxy histories are
+  converted to aligned monthly returns in the wrapper, while the pure engine
+  emits calendar-year returns, trailing windows, growth-of-dollar, and annualized
+  mean/sigma bands for Wealth Roadmap historical-context exhibits. `main` also
+  adds S1 education funding, S8 deterministic/Monte Carlo goal-waterfall
+  support, S2 income layering, report-grade Monte Carlo diagnostics for Wealth
+  Roadmap consumers, the SECURE/SECURE 2.0 RMD start-age policy kernel,
+  version-stamped federal tax/IRMAA reference tables, the Student-t Monte Carlo
+  covariance-scaling correction, the 2026-07-05 Slice 0/1/2 cash-flow planning
+  bridge work, collar-book executable-fill modeling, and the restricted
+  REST/JSON access gate.
 - **Repo:** [github.com/Protocol-Wealth/nexus-core](https://github.com/Protocol-Wealth/nexus-core) — public, Apache-2.0
 - **Live:** [nexusmcp.site](https://nexusmcp.site) (Cloudflare → Cloud Run)
 - **Version:** 0.1.0
 - **Stack:** Python 3.12 · FastAPI · FastMCP · sync httpx · asyncpg · mypy `--strict` · ruff
 - **Tests:** CI-gated test suite (`pytest`)
-- **Posture:** public, read-only, no client data, no account/API key, transparent OAuth only for remote MCP handshakes, no public write endpoints
+- **Posture:** read-only, no client data, transparent OAuth only for remote MCP
+  handshakes, no public write endpoints. Hosted native `/mcp` is an
+  OAuth-compatible open-source demo endpoint; `/api/*` and the planning JSON
+  gateway are API-key gated with `NEXUS_ACCESS_MODE=restricted`.
 
 ## Hybrid planning boundary
 
 For the PW Cash Flow OS + PW Planning Lab + PW Retirement Income Lab direction,
 this repo remains the public-safe calculation engine. It may expose pure,
-deterministic functions over de-identified planning inputs and derived
-monthly-close values. It must not ingest or store Monarch CSV exports, raw import
-rows, merchant/payee text, account nicknames, household/person identifiers,
+deterministic functions over de-identified planning inputs, derived
+monthly-close values, pre-screened stock symbols, and caller-supplied option
+facts. It must not ingest or store Monarch CSV exports, Seeking Alpha CSV/XLSX
+workbooks, Schwab/custodian order or position files, raw import rows,
+merchant/payee text, account nicknames, household/person identifiers,
 advisor/client notes, document requests, approvals, release state, or compliance
 audit trails. Private PWOS / pw-api / PWPortal owns those workflows and should
 call Nexus only after de-identification and aggregation.
@@ -35,6 +103,28 @@ aggregates and do not ingest Monarch CSVs, raw transaction rows, merchant/payee
 strings, account nicknames, household records, advisor/client notes, approvals,
 release state, or audit trails.
 
+## Local collar-book executable-fill update
+
+Local source now supports a conservative execution worksheet for equity collar
+books. Callers still supply pre-screened positions; Nexus does not pull live
+chains, select trades, place orders, or make recommendations. When callers
+provide midpoint `net_credit` plus either explicit `executable_net_credit` or
+`call_bid` and `put_ask`, the collar-book output shows:
+
+- per-position `stock_price`, `shares`, midpoint period/annual income, executable
+  net credit, fill haircut, executable income, and executable annualized yield;
+- book-level executable annual income/yield and annualized fill-haircut yield
+  only when every held position has executable pricing; and
+- `None` for book-level executable fields when at least one held position lacks
+  executable pricing, avoiding a false mixed-denominator yield.
+
+This is the realistic-fill layer for the PWOS screen-to-chain / collar
+implementation workflow: bid-side call, ask-side put, still educational and
+public-safe. It is not a live-chain attestation, custodian execution record,
+client-specific recommendation, or order ticket. PWOS `/market-data` may import
+and persist research-screen rows privately, then pass de-identified candidates
+and chain-derived facts to Nexus for calculation.
+
 ## Public REST surface
 
 Every REST endpoint is anonymous GET unless noted. The `/mcp` transport accepts
@@ -42,6 +132,17 @@ POST and may require a transparent OAuth bearer token when `MCP_OAUTH_SIGNING_KE
 is configured; that flow has no user login and grants only public-scope access.
 External integrations degrade gracefully — when a provider key is absent the
 dependent endpoint returns `None` / empty / `503` rather than failing the service.
+
+Restricted mode lets production consumers keep the public native MCP transport
+as a low-risk demo while gating REST/JSON calculation paths. The hosted
+deployment currently sets `NEXUS_PUBLIC_MCP_PROFILE=demo`, so OAuth MCP clients
+see only `option_price`, `collar_book`, `health`, and `describe`. It also sets
+`NEXUS_ACCESS_MODE=restricted` plus `NEXUS_API_KEYS`, requiring
+`Authorization: Bearer <key>` or `X-Nexus-Api-Key` on `/api/*`,
+`/api/planning/tools/*`, and legacy `/mcp/tools/*`. `pw-api` supplies the
+matching `NEXUS_SERVICE_API_KEY`; browser apps should call PWOS/PWPortal BFF
+routes rather than carrying Nexus credentials. CORS origin allow-lists remain a
+browser control, not an authentication boundary.
 
 ### Meta
 
@@ -82,6 +183,10 @@ dependent endpoint returns `None` / empty / `503` rather than failing the servic
 | `GET /api/options/overlay/covered-call` | Black-Scholes overlay illustration | — |
 | `GET /api/options/overlay/cash-secured-put` | Black-Scholes overlay illustration | — |
 | `GET /api/options/overlay/collar` | Black-Scholes overlay illustration | — |
+| `POST /api/options/overlay/collar-screen` | batch equity collar screen; theoretical premiums | market-data key optional |
+| `POST /api/options/overlay/collar-book` | advisor research worksheet; optional executable-fill haircut from call bid / put ask | — |
+| `GET /api/options/equity/{symbol}/expirations` | MBOUM listed equity option expirations | `MBOUM_API_KEY` |
+| `GET /api/options/equity/{symbol}/chain?expiration=` | MBOUM normalized single-expiration option chain | `MBOUM_API_KEY` |
 | `GET /api/options/crypto/currencies` | Deribit — supported underliers + settlement model | — |
 | `GET /api/options/crypto/{currency}/instruments` | Deribit — BTC/ETH (inverse) + SOL/XRP/TRX/AVAX (USDC-linear) | — |
 | `GET /api/options/crypto/instrument/{instrument_name}` | Deribit | — |
@@ -143,8 +248,9 @@ Compositions are buy-and-hold, base-100: BTC / ETH / SOL singles; ETH-USDC 50/50
 | Endpoint | Data source | Required key |
 |----------|-------------|--------------|
 | `POST /mcp` | FastMCP-over-HTTP transport (also `nexus-core mcp` over stdio) | — |
-| `GET /mcp/tools` | planning contract handshake — `{contractVersion, tools[]}` | — |
-| `POST /mcp/tools/{tool_id}` | planning gateway — invoke a planning tool (JSON in/out, PII-free) | — |
+| `GET /api/planning/tools` | planning contract handshake — `{contractVersion, tools[]}` | optional `NEXUS_API_KEYS` in restricted mode |
+| `POST /api/planning/tools/{tool_id}` | planning gateway — invoke a planning tool (JSON in/out, PII-free) | optional `NEXUS_API_KEYS` in restricted mode |
+| `GET /mcp/tools`, `POST /mcp/tools/{tool_id}` | legacy planning gateway aliases | optional `NEXUS_API_KEYS` in restricted mode |
 
 **MCP tool surface** (in `tools/list`, identical over HTTP + stdio; every tool is
 read-only with `readOnlyHint` + the educational disclaimer):
@@ -153,7 +259,9 @@ read-only with `readOnlyHint` + the educational disclaimer):
 - **Scoring** — `score_asset` (EMF 8-check; emits `NOT APPLICABLE` + `tier_note` on insufficient coverage)
 - **Market** — `get_quote`, `get_quotes` (batch), `get_price_history` (carry `as_of` / `source` / `market_status`)
 - **Economic** — `get_economic_series` (carries `as_of` observation date + `source`)
-- **Options** — `option_price`, `covered_call`, `cash_secured_put`, `collar`
+- **Options** — `option_price`, `covered_call`, `cash_secured_put`, `collar`,
+  `equity_collar_screen`, `collar_book` (advisor worksheet with optional
+  executable-fill haircut), `equity_option_expirations`, `equity_option_chain`
 - **Crypto options** — `crypto_option_instruments`, `crypto_option_ticker`,
   `crypto_covered_call` (settlement-aware overwrite), `crypto_covered_call_chain`
   (rank OTM calls by yield), `crypto_protective_put`, `crypto_collar`,
@@ -164,12 +272,13 @@ read-only with `readOnlyHint` + the educational disclaimer):
   `crypto_options_book_mtm` / `crypto_options_scenario`. Full overwriting + hedge
   suite is on BOTH the REST surface (`/api/options/crypto/{currency}/...`) and MCP.
 - **DeFi** — `defi_protocols`, `defi_protocol`, `defi_chains`
-- **Planning** (27 in current source; last live verification returned 23 on 2026-07-01) — `monte_carlo_decumulation`, `solve_goal`, `analyze_goals`, `project_cash_flow`, `cashflow_planning_bridge`, `cash_reserve_analysis`, `budget_pacing_projection`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `fire`, `risk_metrics`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`
+- **Planning** (34 in current source; live deployment can lag source) — `monte_carlo_decumulation`, `solve_goal`, `analyze_goals`, `project_cash_flow`, `cashflow_planning_bridge`, `cash_reserve_analysis`, `budget_pacing_projection`, `education_funding`, `education_vehicle_rules`, `income_layering`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `historical_blend`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `inherited_ira_analysis`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `risk_profile_score`, `fire`, `risk_metrics`, `performance_analysis`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`
 - **Meta** — `health` (per-upstream status), `describe` (catalog + symbology + contract version)
 
-All 27 current-source planning tools are served both natively through MCP and via the REST gateway
-(`POST /mcp/tools/{id}`) for the browser-based pwplan-core shell — same handlers,
-contractVersion `0.1.0`. The composite Roth/IRMAA case contract is
+All 34 current-source planning tools are served both natively through MCP and via
+the REST/JSON gateway (`POST /api/planning/tools/{id}`) for browser/server
+callers — same handlers, contractVersion `0.1.0`. Legacy `/mcp/tools/{id}`
+aliases remain. The composite Roth/IRMAA case contract is
 `PLANNING_CONTRACT_VERSION = 1.1.0`; the gateway envelope remains `0.1.0`.
 
 ## Code layout
@@ -235,6 +344,9 @@ contractVersion `0.1.0`. The composite Roth/IRMAA case contract is
 | `THEGRAPH_API_KEY` | `/api/lp` |
 | `DATABASE_URL` | persistence + `/api/benchmarks/history` (`503` when unset) |
 | `MCP_OAUTH_SIGNING_KEY` | stateless transparent OAuth for remote `/mcp`; omit locally to keep `/mcp` open |
+| `NEXUS_PUBLIC_MCP_PROFILE` | `full` (default) or `demo`; demo limits native `/mcp` to closed-world demo tools |
+| `NEXUS_ACCESS_MODE` | `public` (default) or `restricted`; restricted mode gates `/api/*` and planning JSON gateway paths |
+| `NEXUS_API_KEYS` | comma-separated raw service keys or `sha256:<hex>` digests |
 | `NEXUS_RATE_LIMIT_PER_MIN` | per-IP request budget (default `60`) |
 | `NEXUS_CORS_ORIGINS` | CORS allow-list |
 
@@ -275,12 +387,91 @@ key is absent.
   registry as read-only public-safe tools. They consume de-identified
   monthly-close aggregates only; production ingestion and workflow remain private
   PWOS/pw-api/PWPortal responsibilities.
+- **Collar-book executable-fill modeling (2026-07-06)** — local source now
+  reports stock price, share count, bid/ask fill haircut, executable income, and
+  executable annualized yield for pre-screened collar-book candidates when the
+  caller supplies executable pricing. REST and MCP parsers accept the same
+  optional fields; the output remains a public-safe advisor research worksheet.
 - **Guyton-Klinger dynamic withdrawals** — `monte_carlo_decumulation` accepts
-  optional `guardrails` and returns `withdrawalRule`, `spendingByYear`, and
-  `guardrailActivity` only when enabled.
-- **Planning surface now 27 tools in current source** — includes `solve_goal`,
+  optional `guardrails` and returns `withdrawalRule`, `spendingByYear`,
+  `guardrailActivity`, and report-oriented `guardrailStats` only when enabled.
+- **S8 deterministic waterfall state** — `project_cash_flow` remains
+  single-bucket by default. When callers pass `accountBalances`, the engine
+  returns per-year `accountBalances`, `withdrawalsByAccount`, `ordinaryTaxes`,
+  and `earlyWithdrawalPenalty`; deficits draw taxable → traditional → Roth and
+  surplus saves to taxable. Traditional withdrawals are ordinary-taxable; Roth
+  draws are not ordinary income in multi-account mode. `monte_carlo_decumulation`
+  and `solve_goal` can also accept de-identified `goals`, echo the generated
+  `goalFundingSchedule`, and return per-goal path-level funding statistics.
+- **S7 state/local tax state** — `engine/planning/state_tax.py` provides a
+  data-driven 2026 reference table for no-income-tax states, full retirement
+  exclusion states (PA/IL/MS/IA), and selected partial/senior exclusion states
+  (CO/NY/VA/NJ/MD/DE). `tax_aware_withdrawal` and `income_layering` accept only
+  state codes, ages, filing status, and numeric income components; they return
+  optional federal/state tax splits and table versions. The Roth composite's
+  older `StateConversionRule` reference set is aligned for the S7 no-income and
+  full-retirement-exclusion states it can represent. Raw addresses, account
+  identifiers, household records, approvals, and audit state stay outside the
+  public engine.
+- **S9 household/survivor state** — `social_security.py` exports
+  `household_social_security_benefits` for simplified two-person Social Security
+  own, age-reduced spousal, and survivor benefit snapshots. `income_layering`
+  accepts optional `spouseSocialSecurity`, `survivorYear`, and
+  `survivorFilingStatus`, treats `survivorYear` as the first survivor-only
+  modeling / filing-status year, and models survivor Social Security as the
+  larger claimed benefit after that year. Inputs
+  remain ages, claim ages, PIAs, filing statuses, and numeric assumptions only;
+  names, household identifiers, permissions, approvals, and audit records stay
+  private-stack concerns.
+- **S6 Wealth Roadmap state** — `build_planning_report` now supports the
+  additive `preset: "wealth_roadmap"` request shape. The focused scope includes
+  snapshot, trajectory, one goals section, and the required scope / assumptions /
+  disclosure section. The full scope includes snapshot, trajectory, goals,
+  income, guardrails, historical blend, required scope / assumptions /
+  disclosures, and priority actions. Every Roadmap section carries the same
+  replay metadata (`assumptionVersion`, `cmaVersion`, `taxYear`, `seed`,
+  `engineReference`, `scope`). Full-scope priority actions are candidate
+  observations with `curated: false`; the public engine rejects `released` and
+  caller-provided `curated` workflow state. Rendering, approval, archiving,
+  client delivery, and books-and-records workflows remain private-stack
+  concerns.
+- **S5 risk-profile scoring state** — `risk_profile_score` scores the fixed
+  PII-free questionnaire into the optimizer-compatible `riskProfile` enum,
+  annual volatility band, suggested model weights, question/band metadata, and
+  the canonical planning disclaimer. Advisor overrides, suitability approvals,
+  and audit workflow state remain private-stack concerns.
+- **S4 performance-analysis state** — `performance_analysis` computes
+  time-weighted returns, money-weighted returns / XIRR, fee drag, and
+  benchmark-relative return deltas from numeric series only. It stays PII-free
+  and does not ingest symbols, holdings names, account identifiers, transaction
+  rows, tax lots, approvals, or audit records.
+- **S11 inherited IRA state** — `inherited_ira_analysis` compares lump-sum,
+  equal-annual, and bracket-smoothed inherited traditional IRA distribution
+  strategies under a 10-year frame. It stacks taxable inherited distributions
+  on beneficiary ordinary income using the injected 2026 federal ordinary-tax
+  table, ranks strategies by net after-tax receipts, and returns an
+  eligible-designated-beneficiary carve-out table. The result explicitly states
+  that v1 is a strategy comparison, not a separate beneficiary life-expectancy
+  annual RMD compliance calculator. Inputs remain numeric and de-identified
+  only; spousal rollover elections, trust/estate-specific rules, state tax, and
+  books-and-records workflows stay private / future scope.
+- **S12 healthcare / LTC stress state** — `project_cash_flow` and
+  `monte_carlo_decumulation` accept optional `ltcShock` plus
+  `healthcareInflationRate`. `ltcShock` is a de-identified event:
+  `{onsetAge, annualCost, durationYears, costInflation?}` where `annualCost` is
+  stated in current-year dollars and inflated into each active shock year.
+  Deterministic cash-flow rows expose `baseExpenses` and `ltcShockExpense` only
+  when a shock is supplied; Monte Carlo reports a same-seed with/without-shock
+  impact block. S12 v1 rejects `ltcShock` + Guyton-Klinger guardrails together;
+  run those as separate scenarios. Diagnosis, claims, provider names,
+  insurance-policy data, client delivery, and books-and-records workflow stay
+  private / future scope.
+- **Planning surface now 34 tools in current source** — includes `solve_goal`,
   `analyze_goals`, `project_cash_flow`, the cash-flow bridge trio,
-  `optimize_allocation`, `build_planning_report`, and the composite Roth/IRMAA trio.
+  `education_funding`, `education_vehicle_rules`, `income_layering`,
+  `historical_blend`, `inherited_ira_analysis`, `optimize_allocation`,
+  `risk_profile_score`, `performance_analysis`, `build_planning_report`, and the composite
+  Roth/IRMAA trio.
 - **Uniswap V3 owned-position enumeration** — `GET /api/lp/uniswap-v3/{chain}/positions?owner=`
   lists open positions before USD valuation.
 - **Research-data cleanup** — FMP/FinanceToolkit path removed; supported future

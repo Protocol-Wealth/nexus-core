@@ -4,8 +4,9 @@ This document describes how the public nexus-core surface — [nexusmcp.site](ht
 is built and deployed. The deployable application lives in
 [`src/nexus_core/app/`](src/nexus_core/app/); it exposes the regime engine,
 market/onchain data, options, DeFi analytics, and PII-free planning math as a
-public, read-only HTTP API plus an MCP-over-HTTP transport. Traffic flows
-Cloudflare → Cloud Run.
+read-only HTTP API plus an MCP-over-HTTP transport. The native MCP transport can
+remain a public demo surface while REST/JSON calculation endpoints are
+optionally service-key gated. Traffic flows Cloudflare → Cloud Run.
 
 Three deployable units make up the production system:
 
@@ -42,6 +43,10 @@ server hosting the FastAPI application from `nexus_core.app:create_app`:
 | `GET /api/economic/{series_id}` | FRED economic series |
 | `GET /api/options/price` | Black-Scholes option pricing + Greeks |
 | `GET /api/options/overlay/{strategy}` | Educational covered-call / cash-secured-put / collar overlays |
+| `POST /api/options/overlay/collar-screen` | Batch equity collar screen (≤25 positions; dividend-aware theoretical pricing) |
+| `POST /api/options/overlay/collar-book` | Multi-name collar book assembly (≤50 candidates; whole contracts, position/sector caps) — advisor research worksheet, no orders |
+| `GET /api/options/equity/{symbol}/expirations` | Listed equity option expirations (weekly/monthly; MBOUM-backed) |
+| `GET /api/options/equity/{symbol}/chain?expiration=` | Single-expiration equity option chain (bid/ask, OI, IV, delta) |
 | `GET /api/options/crypto/currencies` | Deribit-supported crypto option underliers |
 | `GET /api/options/crypto/{currency}/instruments` | Deribit crypto option instruments |
 | `GET /api/options/crypto/instrument/{instrument_name}` | Deribit crypto option detail |
@@ -64,13 +69,15 @@ server hosting the FastAPI application from `nexus_core.app:create_app`:
 | `GET /api/benchmarks/history?days=` | Benchmark returns from persisted daily snapshots |
 | `GET /api/usage` | Provider usage / quota report |
 | `POST /mcp` | Model Context Protocol endpoint |
-| `GET /mcp/tools`, `POST /mcp/tools/{tool_id}` | PII-free planning REST gateway (23 tools, contractVersion `0.1.0`) |
+| `GET /api/planning/tools`, `POST /api/planning/tools/{tool_id}` | PII-free planning REST gateway (27 current-source tools, contractVersion `0.1.0`) |
+| `GET /mcp/tools`, `POST /mcp/tools/{tool_id}` | Legacy planning REST gateway aliases |
 
-There is **no account or API key requirement**, **no client data**, and **no
-public write endpoint** — the daily snapshot runs as a Cloud Run Job, not an HTTP
-route. The hosted `/mcp` transport can use transparent OAuth for remote MCP
-client compatibility; it does not add user login or privileged scopes. See
-[`AUDIT.md`](AUDIT.md).
+There is **no client data** and **no public write endpoint** — the daily snapshot
+runs as a Cloud Run Job, not an HTTP route. The hosted `/mcp` transport can use
+transparent OAuth for remote MCP client compatibility; it does not add user login
+or privileged scopes. In restricted mode, `/api/*`, `/api/planning/tools/*`, and
+legacy `/mcp/tools/*` require a Nexus API key supplied by trusted service
+callers such as `pw-api`. See [`AUDIT.md`](AUDIT.md).
 
 ## Configuration
 
@@ -92,6 +99,9 @@ runs without any of them, degrading each integration gracefully to
 | `THEGRAPH_API_KEY` | Enables `/api/lp/*` Uniswap V3 analytics | yes |
 | `DATABASE_URL` | Cloud SQL persistence; powers `/api/benchmarks/history` and `/health/db` (`503` when unset) | yes |
 | `MCP_OAUTH_SIGNING_KEY` | Enables stateless transparent OAuth for remote `/mcp`; omit locally to keep `/mcp` open | yes in hosted deploy |
+| `NEXUS_PUBLIC_MCP_PROFILE` | `full` (default) or `demo`; demo registers only closed-world native MCP tools | no |
+| `NEXUS_ACCESS_MODE` | `public` (default) or `restricted`; restricted gates `/api/*` and planning JSON gateway paths | no |
+| `NEXUS_API_KEYS` | Comma-separated raw service keys or `sha256:<hex>` digests accepted in restricted mode | yes when restricted |
 | `NEXUS_RATE_LIMIT_PER_MIN` | Per-IP request budget (default `60`) | no |
 | `NEXUS_CORS_ORIGINS` | Comma-separated CORS allow-list (default `*`) | no |
 | `PORT` | Listen port (Cloud Run injects this; default `8080`) | no |
@@ -152,6 +162,12 @@ printf '%s' "YOUR_DATABASE_URL"    | gcloud secrets create nexus-marketdata-data
 printf '%s' "YOUR_RANDOM_SIGNING_KEY" | gcloud secrets create nexus-mcp-oauth-signing-key --data-file=-
 ```
 
+Restricted REST/JSON mode uses the Terraform-managed
+`pwllc-nexus-api-key-digests` secret from `pw-infrastructure`. It contains the
+accepted `sha256:<hex>` digest list for `NEXUS_API_KEYS`. Do not mount the raw
+service key on Nexus; the raw bearer key is held by `pw-api` as
+`NEXUS_SERVICE_API_KEY`.
+
 ### 2. Private database
 
 Persistence is a private Cloud SQL instance, `nexus-marketdata`
@@ -173,6 +189,7 @@ gcloud run deploy nexus-core \
   --subnet pwllc-prod-cloud-run-us-central1 \
   --vpc-egress private-ranges-only \
   --add-cloudsql-instances pwllc-prod:us-central1:nexus-marketdata \
+  --set-env-vars "NEXUS_PUBLIC_MCP_PROFILE=demo,NEXUS_ACCESS_MODE=restricted" \
   --set-secrets "FRED_API_KEY=nexus-fred-api-key:latest,\
 MBOUM_API_KEY=nexus-mboum-api-key:latest,\
 MARKETSTACK_API_KEY=nexus-marketstack-api-key:latest,\
@@ -184,7 +201,8 @@ TATUM_API_KEY=nexus-tatum-api-key:latest,\
 VAULTSFYI_API_KEY=nexus-vaultsfyi-api-key:latest,\
 THEGRAPH_API_KEY=nexus-thegraph-api-key:latest,\
 DATABASE_URL=nexus-marketdata-database-url:latest,\
-MCP_OAUTH_SIGNING_KEY=nexus-mcp-oauth-signing-key:latest"
+MCP_OAUTH_SIGNING_KEY=nexus-mcp-oauth-signing-key:latest,\
+NEXUS_API_KEYS=pwllc-nexus-api-key-digests:latest"
 ```
 
 `--min-instances 1` keeps one instance always warm — it eliminates Cloud Run cold
@@ -202,7 +220,30 @@ mapping DNS:
 ```bash
 curl https://nexus-core-XXXXXX-uc.a.run.app/health
 curl https://nexus-core-XXXXXX-uc.a.run.app/health/db
+# Hosted native `/mcp` uses transparent OAuth when `MCP_OAUTH_SIGNING_KEY` is
+# mounted. With `NEXUS_PUBLIC_MCP_PROFILE=demo`, an OAuth MCP `tools/list` should
+# return only option_price, collar_book, health, and describe.
+
+# Restricted REST/planning paths should 401 without the pw-api service key.
+curl -i https://nexus-core-XXXXXX-uc.a.run.app/api/planning/tools
+curl -H "Authorization: Bearer ${NEXUS_SERVICE_API_KEY}" \
+  https://nexus-core-XXXXXX-uc.a.run.app/api/planning/tools
 ```
+
+For an existing service where the source image is already current, the narrow
+runtime-only update is:
+
+```bash
+gcloud run services update nexus-core \
+  --region us-central1 \
+  --update-env-vars "NEXUS_PUBLIC_MCP_PROFILE=demo,NEXUS_ACCESS_MODE=restricted" \
+  --update-secrets "NEXUS_API_KEYS=pwllc-nexus-api-key-digests:latest"
+```
+
+Keep `MCP_OAUTH_SIGNING_KEY` mounted on the hosted public service unless the
+explicit goal is to make `/mcp` unauthenticated. OAuth is compatible with the
+demo profile and prevents the hosted transport from becoming a raw anonymous
+HTTP tool endpoint.
 
 ### 4. Deploy the snapshot job (Cloud Run Job)
 

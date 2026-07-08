@@ -17,10 +17,11 @@ Pure data — no I/O. Educational scenario analysis only, not tax advice.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, Literal, Protocol, cast
 
-from .tax import FilingStatus, ordinary_brackets, standard_deduction
+FilingStatus = Literal["single", "married_joint", "married_separate", "head_of_household"]
 
 _INF = float("inf")
 _FILING_STATUSES: tuple[FilingStatus, ...] = (
@@ -91,17 +92,24 @@ class BracketTable:
     ss_provisional_thresholds: dict[FilingStatus, tuple[float, float]]
     niit_rate: float = 0.038
     senior_age: int = 65
+    table_version: str = "caller-provided-unversioned"
 
     def __post_init__(self) -> None:
         for name in (
-            "ordinary_brackets", "standard_deduction", "additional_std_deduction_per_senior",
-            "senior_bonus_phaseout", "ltcg_breakpoints", "niit_threshold",
+            "ordinary_brackets",
+            "standard_deduction",
+            "additional_std_deduction_per_senior",
+            "senior_bonus_phaseout",
+            "ltcg_breakpoints",
+            "niit_threshold",
             "ss_provisional_thresholds",
         ):
             mapping = getattr(self, name)
             missing = set(_FILING_STATUSES) - set(mapping)
             if missing:
-                raise TableError(f"BracketTable.{name} missing filing status(es): {sorted(missing)}")
+                raise TableError(
+                    f"BracketTable.{name} missing filing status(es): {sorted(missing)}"
+                )
         for fs, brk in self.ordinary_brackets.items():
             if not brk or brk[-1][0] != _INF:
                 raise TableError(f"ordinary_brackets[{fs}] must be non-empty and end at infinity")
@@ -135,7 +143,9 @@ class BracketTable:
             additional_std_deduction_per_senior=_fs_float_map(
                 d.get("additional_std_deduction_per_senior"), "additional_std_deduction_per_senior"
             ),
-            senior_bonus_deduction_per_senior=float(d.get("senior_bonus_deduction_per_senior", 0.0)),
+            senior_bonus_deduction_per_senior=float(
+                d.get("senior_bonus_deduction_per_senior", 0.0)
+            ),
             senior_bonus_phaseout=_fs_pair_map(
                 d.get("senior_bonus_phaseout"), "senior_bonus_phaseout"
             ),
@@ -146,15 +156,23 @@ class BracketTable:
             ),
             niit_rate=float(d.get("niit_rate", 0.038)),
             senior_age=int(d.get("senior_age", 65)),
+            table_version=str(
+                d.get("table_version", d.get("tableVersion", "caller-provided-unversioned"))
+            ),
         )
 
-    def total_deduction(self, fs: FilingStatus, *, itemized: float | None, n_seniors: int, magi: float) -> float:
+    def total_deduction(
+        self, fs: FilingStatus, *, itemized: float | None, n_seniors: int, magi: float
+    ) -> float:
         """Total below-the-line deduction: itemized-or-standard (+ additional 65+
         standard if not itemizing) + the phased-out OBBBA senior bonus."""
         if itemized is not None:
             base = itemized
         else:
-            base = self.standard_deduction[fs] + self.additional_std_deduction_per_senior[fs] * n_seniors
+            base = (
+                self.standard_deduction[fs]
+                + self.additional_std_deduction_per_senior[fs] * n_seniors
+            )
         bonus = self.senior_bonus_deduction_per_senior * n_seniors
         threshold, rate = self.senior_bonus_phaseout[fs]
         if bonus > 0.0 and magi > threshold:
@@ -190,6 +208,7 @@ class IrmaaTable:
     source_year: int
     filing_status: FilingStatus
     tiers: list[IrmaaTier]
+    table_version: str = "caller-provided-unversioned"
 
     def __post_init__(self) -> None:
         if not self.tiers:
@@ -219,6 +238,9 @@ class IrmaaTable:
             source_year=int(d["source_year"]),
             filing_status=cast(FilingStatus, str(d["filing_status"])),
             tiers=tiers,
+            table_version=str(
+                d.get("table_version", d.get("tableVersion", "caller-provided-unversioned"))
+            ),
         )
 
 
@@ -332,11 +354,85 @@ class AcaSituation:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class EducationVehicleRule:
+    """Reference education-savings vehicle rules for one tax year.
+
+    These public rules are for display and assumption stamping, not for tax
+    advice or state-plan selection. State-specific 529 caps, deductions, credits,
+    investment menus, and recapture rules stay outside this public engine table.
+    """
+
+    tax_year: int
+    vehicle: str
+    label: str
+    contribution_limit: float | None
+    annual_gift_exclusion: float | None
+    five_year_superfunding_single: float | None
+    five_year_superfunding_married_joint: float | None
+    magi_phaseout_single: tuple[float, float] | None
+    magi_phaseout_married_joint: tuple[float, float] | None
+    qualified_distribution_treatment: str
+    nonqualified_distribution_penalty_rate: float | None
+    notes: tuple[str, ...]
+    table_version: str
+
+
 # --- illustrative reference factories (NOT for production use as-is) --------
 
-# Illustrative current-basis figures. Bracket schedules + standard deductions are
-# pulled from the engine's published table (engine/planning/tax.py); the
-# preferential/NIIT/SS/senior figures below are an illustrative 2025/2026 basis.
+# Illustrative current-basis figures. These reference registries are explicit by
+# year so missing years fail closed instead of silently reusing a stale basis.
+_REFERENCE_TAX_TABLE_VERSION_BY_YEAR: dict[int, str] = {
+    2026: "federal-income-tax-reference-2026-illustrative-v1",
+}
+_STD_DEDUCTION_BY_YEAR: dict[int, dict[FilingStatus, float]] = {
+    2026: {
+        "single": 15_000.0,
+        "married_joint": 30_000.0,
+        "married_separate": 15_000.0,
+        "head_of_household": 22_500.0,
+    },
+}
+_ORDINARY_BRACKETS_BY_YEAR: dict[int, dict[FilingStatus, list[tuple[float, float]]]] = {
+    2026: {
+        "single": [
+            (11_925, 0.10),
+            (48_475, 0.12),
+            (103_350, 0.22),
+            (197_300, 0.24),
+            (250_525, 0.32),
+            (626_350, 0.35),
+            (_INF, 0.37),
+        ],
+        "married_joint": [
+            (23_850, 0.10),
+            (96_950, 0.12),
+            (206_700, 0.22),
+            (394_600, 0.24),
+            (501_050, 0.32),
+            (751_600, 0.35),
+            (_INF, 0.37),
+        ],
+        "married_separate": [
+            (11_925, 0.10),
+            (48_475, 0.12),
+            (103_350, 0.22),
+            (197_300, 0.24),
+            (250_525, 0.32),
+            (375_800, 0.35),
+            (_INF, 0.37),
+        ],
+        "head_of_household": [
+            (17_000, 0.10),
+            (64_850, 0.12),
+            (103_350, 0.22),
+            (197_300, 0.24),
+            (250_500, 0.32),
+            (626_350, 0.35),
+            (_INF, 0.37),
+        ],
+    },
+}
 _ADDITIONAL_STD_65: dict[FilingStatus, float] = {
     "single": 2_000.0,
     "married_joint": 1_600.0,
@@ -369,19 +465,159 @@ _SS_PROVISIONAL: dict[FilingStatus, tuple[float, float]] = {
 }
 
 
+class TaxTableProvider(Protocol):
+    """Snapshot-able tax-table source used by planning engines and tool wrappers."""
+
+    def bracket_table(self, year: int) -> BracketTable:
+        """Return the complete federal tax table for ``year`` or fail closed."""
+
+    def irmaa_table(self, filing_status: FilingStatus, source_year: int) -> IrmaaTable:
+        """Return the IRMAA table for ``source_year`` / filing status or fail closed."""
+
+
+class ReferenceTaxTableProvider:
+    """Built-in illustrative provider for tests, demos, and keyless public tools."""
+
+    def bracket_table(self, year: int) -> BracketTable:
+        if year not in _REFERENCE_TAX_TABLE_VERSION_BY_YEAR:
+            available = ", ".join(str(y) for y in sorted(_REFERENCE_TAX_TABLE_VERSION_BY_YEAR))
+            raise TableError(
+                f"no reference federal tax table registered for tax year {year}; "
+                f"available years: {available}"
+            )
+        return BracketTable(
+            year=year,
+            ordinary_brackets=deepcopy(_ORDINARY_BRACKETS_BY_YEAR[year]),
+            standard_deduction=dict(_STD_DEDUCTION_BY_YEAR[year]),
+            additional_std_deduction_per_senior=dict(_ADDITIONAL_STD_65),
+            senior_bonus_deduction_per_senior=6_000.0,
+            senior_bonus_phaseout=dict(_SENIOR_BONUS_PHASEOUT),
+            ltcg_breakpoints=dict(_LTCG_BREAKPOINTS),
+            niit_threshold=dict(_NIIT_THRESHOLD),
+            ss_provisional_thresholds=dict(_SS_PROVISIONAL),
+            table_version=_REFERENCE_TAX_TABLE_VERSION_BY_YEAR[year],
+        )
+
+    def irmaa_table(self, filing_status: FilingStatus, source_year: int) -> IrmaaTable:
+        if source_year not in _REFERENCE_IRMAA_TIERS_BY_YEAR:
+            available = ", ".join(str(y) for y in sorted(_REFERENCE_IRMAA_TIERS_BY_YEAR))
+            raise TableError(
+                f"no reference IRMAA table registered for source year {source_year}; "
+                f"available years: {available}"
+            )
+        by_status = _REFERENCE_IRMAA_TIERS_BY_YEAR[source_year]
+        schedule_key: FilingStatus = (
+            "married_joint"
+            if filing_status == "married_joint"
+            else "married_separate"
+            if filing_status == "married_separate"
+            else "single"
+        )
+        return IrmaaTable(
+            source_year=source_year,
+            filing_status=filing_status,
+            tiers=list(by_status[schedule_key]),
+            table_version=(f"irmaa-reference-{source_year}-{schedule_key}-illustrative-v1"),
+        )
+
+
+_REFERENCE_PROVIDER = ReferenceTaxTableProvider()
+
+
+_REFERENCE_EDUCATION_RULES_VERSION_BY_YEAR: dict[int, str] = {
+    2026: "education-vehicle-reference-2026-irs-pub970-giftfaq-v1",
+}
+
+
+def reference_education_vehicle_rules(tax_year: int = 2026) -> tuple[EducationVehicleRule, ...]:
+    """Reference 529 / Coverdell / UGMA-UTMA comparison rules.
+
+    Source basis checked on 2026-07-07: IRS Topic 310 and Publication 970 for
+    Coverdell ESA limits/phaseouts; IRS gift-tax FAQ for the 2026 annual
+    gift-tax exclusion. The 529 five-year figure is annual exclusion × 5; review
+    Form 709 handling and state-specific limits before using in advice.
+    """
+
+    if tax_year not in _REFERENCE_EDUCATION_RULES_VERSION_BY_YEAR:
+        available = ", ".join(str(y) for y in sorted(_REFERENCE_EDUCATION_RULES_VERSION_BY_YEAR))
+        raise TableError(
+            f"no reference education vehicle rules registered for tax year {tax_year}; "
+            f"available years: {available}"
+        )
+    version = _REFERENCE_EDUCATION_RULES_VERSION_BY_YEAR[tax_year]
+    annual_exclusion = 19_000.0
+    return (
+        EducationVehicleRule(
+            tax_year=tax_year,
+            vehicle="529",
+            label="529 qualified tuition program",
+            contribution_limit=None,
+            annual_gift_exclusion=annual_exclusion,
+            five_year_superfunding_single=annual_exclusion * 5.0,
+            five_year_superfunding_married_joint=annual_exclusion * 10.0,
+            magi_phaseout_single=None,
+            magi_phaseout_married_joint=None,
+            qualified_distribution_treatment=(
+                "Federal tax-free when used for qualified education expenses."
+            ),
+            nonqualified_distribution_penalty_rate=0.10,
+            notes=(
+                "No federal annual contribution cap; state aggregate account limits vary.",
+                "Five-year gift-tax election figure is illustrative and requires Form 709 review.",
+                "Nonqualified-distribution penalty generally applies to the earnings portion.",
+                "State tax deductions/credits and recapture rules are not modeled.",
+            ),
+            table_version=version,
+        ),
+        EducationVehicleRule(
+            tax_year=tax_year,
+            vehicle="coverdell_esa",
+            label="Coverdell education savings account",
+            contribution_limit=2_000.0,
+            annual_gift_exclusion=None,
+            five_year_superfunding_single=None,
+            five_year_superfunding_married_joint=None,
+            magi_phaseout_single=(95_000.0, 110_000.0),
+            magi_phaseout_married_joint=(190_000.0, 220_000.0),
+            qualified_distribution_treatment=(
+                "Federal tax-free to the extent distributions do not exceed qualified education expenses."
+            ),
+            nonqualified_distribution_penalty_rate=0.10,
+            notes=(
+                "Total contributions for one beneficiary cannot exceed $2,000 per year.",
+                "Excess contributions can trigger a 6% excise tax while excess remains.",
+                "Nonqualified-distribution penalty generally applies to the earnings portion.",
+                "Beneficiary age and special-needs rules are not modeled by this table.",
+            ),
+            table_version=version,
+        ),
+        EducationVehicleRule(
+            tax_year=tax_year,
+            vehicle="ugma_utma",
+            label="UGMA/UTMA custodial account",
+            contribution_limit=None,
+            annual_gift_exclusion=annual_exclusion,
+            five_year_superfunding_single=None,
+            five_year_superfunding_married_joint=None,
+            magi_phaseout_single=None,
+            magi_phaseout_married_joint=None,
+            qualified_distribution_treatment=(
+                "No federal qualified-education tax exclusion; assets are custodial property."
+            ),
+            nonqualified_distribution_penalty_rate=None,
+            notes=(
+                "Transfers are generally irrevocable gifts to the minor.",
+                "Income taxation and financial-aid treatment depend on facts not modeled here.",
+                "Use only as a planning comparison; not an account recommendation.",
+            ),
+            table_version=version,
+        ),
+    )
+
+
 def reference_bracket_table(year: int = 2026) -> BracketTable:
     """An illustrative current-basis :class:`BracketTable`. Verify before real use."""
-    return BracketTable(
-        year=year,
-        ordinary_brackets={fs: ordinary_brackets(fs) for fs in _FILING_STATUSES},
-        standard_deduction={fs: standard_deduction(fs) for fs in _FILING_STATUSES},
-        additional_std_deduction_per_senior=dict(_ADDITIONAL_STD_65),
-        senior_bonus_deduction_per_senior=6_000.0,
-        senior_bonus_phaseout=dict(_SENIOR_BONUS_PHASEOUT),
-        ltcg_breakpoints=dict(_LTCG_BREAKPOINTS),
-        niit_threshold=dict(_NIIT_THRESHOLD),
-        ss_provisional_thresholds=dict(_SS_PROVISIONAL),
-    )
+    return _REFERENCE_PROVIDER.bracket_table(year)
 
 
 # Illustrative IRMAA tiers. Single/MFJ Part B + Part D monthly surcharges on a
@@ -408,6 +644,14 @@ _IRMAA_MFS = [
     IrmaaTier(106_000.0, 406.90, 78.60),
     IrmaaTier(394_000.0, 443.90, 85.80),
 ]
+_REFERENCE_IRMAA_TIERS_BY_YEAR: dict[int, dict[FilingStatus, list[IrmaaTier]]] = {
+    2025: {
+        "single": _IRMAA_SINGLE,
+        "head_of_household": _IRMAA_SINGLE,
+        "married_joint": _IRMAA_MFJ,
+        "married_separate": _IRMAA_MFS,
+    },
+}
 
 
 def reference_irmaa_table(filing_status: FilingStatus, source_year: int = 2025) -> IrmaaTable:
@@ -416,23 +660,31 @@ def reference_irmaa_table(filing_status: FilingStatus, source_year: int = 2025) 
     ``head_of_household`` shares the ``single`` IRMAA schedule (Medicare uses the
     individual return; HoH is not a distinct IRMAA basis).
     """
-    if filing_status == "married_joint":
-        tiers = list(_IRMAA_MFJ)
-    elif filing_status == "married_separate":
-        tiers = list(_IRMAA_MFS)
-    else:
-        tiers = list(_IRMAA_SINGLE)
-    return IrmaaTable(source_year=source_year, filing_status=filing_status, tiers=tiers)
+    return _REFERENCE_PROVIDER.irmaa_table(filing_status, source_year)
 
 
 # A small, documented set of state rules. Everything else defaults to "not
 # modeled" at the composite layer (state tax surfaced as unmodeled, never assumed).
-_NO_INCOME_TAX_STATES = frozenset(
-    {"AK", "FL", "NV", "NH", "SD", "TN", "TX", "WA", "WY"}
-)
+_NO_INCOME_TAX_STATES = frozenset({"AK", "FL", "NV", "NH", "SD", "TN", "TX", "WA", "WY"})
 _REFERENCE_STATE_RATES: dict[str, float] = {
-    "AZ": 0.025, "CO": 0.044, "IL": 0.0495, "MA": 0.05, "MI": 0.0425,
-    "NC": 0.045, "NY": 0.0685, "OH": 0.035, "VA": 0.0575,
+    "AZ": 0.025,
+    "CO": 0.044,
+    "DE": 0.066,
+    "MD": 0.0575,
+    "IL": 0.0495,
+    "MA": 0.05,
+    "MI": 0.0425,
+    "NC": 0.045,
+    "NJ": 0.05525,
+    "NY": 0.0685,
+    "OH": 0.035,
+    "VA": 0.0575,
+}
+_REFERENCE_RETIREMENT_EXEMPT_STATES: dict[str, tuple[float, int]] = {
+    "PA": (0.0307, 59),
+    "IL": (0.0495, 0),
+    "MS": (0.044, 59),
+    "IA": (0.038, 55),
 }
 
 
@@ -444,8 +696,9 @@ def reference_state_rule(state_code: str) -> StateConversionRule | None:
     documented exempt-past-retirement-age case.
     """
     code = state_code.upper()
-    if code == "PA":
-        return StateConversionRule("PA", "exempt_retirement", rate=0.0307, retirement_exempt_age=59)
+    if code in _REFERENCE_RETIREMENT_EXEMPT_STATES:
+        rate, age = _REFERENCE_RETIREMENT_EXEMPT_STATES[code]
+        return StateConversionRule(code, "exempt_retirement", rate=rate, retirement_exempt_age=age)
     if code in _NO_INCOME_TAX_STATES:
         return StateConversionRule(code, "none")
     if code in _REFERENCE_STATE_RATES:
@@ -487,13 +740,18 @@ __all__ = [
     "AcaCliffMode",
     "AcaSituation",
     "BracketTable",
+    "EducationVehicleRule",
+    "FilingStatus",
     "IrmaaTable",
     "IrmaaTier",
+    "ReferenceTaxTableProvider",
     "StateConversionRule",
     "StateTreatment",
     "TableError",
+    "TaxTableProvider",
     "reference_aca_situation",
     "reference_bracket_table",
+    "reference_education_vehicle_rules",
     "reference_irmaa_table",
     "reference_state_rule",
 ]

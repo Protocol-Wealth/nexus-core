@@ -3,7 +3,8 @@
 Operator handoff / current-state snapshot for `nexus-core` — the public,
 Apache-2.0 regime-adaptive financial-analysis + DeFi/market-data engine
 (github.com/Protocol-Wealth/nexus-core). Public, read-only, no client data,
-no account/API key; remote MCP may use transparent OAuth with no user login.
+native MCP can remain a public demo surface; REST/JSON calculation paths can be
+service-key gated; remote MCP may use transparent OAuth with no user login.
 This file is the practical "what's live, what's next" reference for the next
 session.
 
@@ -16,7 +17,9 @@ Stack: Python 3.12, FastAPI + FastMCP, sync `httpx`, `asyncpg`, `mypy --strict`,
 > two, they win. Live status was refreshed 2026-07-01: `/health` is healthy,
 > `/mcp/tools` reports contractVersion `0.1.0` with 23 planning tools, GitHub has
 > no open PRs and seven open issues (#197-#203), and `ruff` + `mypy --strict`
-> remain CI-enforced.
+> remain CI-enforced. Local source as of 2026-07-06 adds collar-book
+> executable-fill modeling plus optional REST/JSON access gating, but it has not
+> been live-smoked.
 
 ---
 
@@ -70,6 +73,13 @@ degrade gracefully to `None`/empty/`503` when their API key is absent.
 
 - `/api/options/price`
 - `/api/options/overlay/{covered-call,cash-secured-put,collar}`
+- `/api/options/overlay/collar-screen` — batch theoretical equity collar screen
+- `/api/options/overlay/collar-book` — advisor research worksheet; local source
+  accepts optional executable fill inputs (`executable_net_credit` or `call_bid`
+  / `put_ask`) and reports fill haircut/executable yield
+- `/api/options/equity/{symbol}/expirations`,
+  `/api/options/equity/{symbol}/chain?expiration=` — MBOUM listed equity option
+  expirations/chains
 - `/api/options/crypto/currencies`,
   `/api/options/crypto/{currency}/instruments`,
   `/api/options/crypto/instrument/{instrument_name}` — Deribit crypto options on
@@ -108,7 +118,10 @@ degrade gracefully to `None`/empty/`503` when their API key is absent.
 
 - `/api/usage` — provider usage / quota report
 - `/mcp` — MCP-over-HTTP transport (FastMCP)
-- `/mcp/tools`, `POST /mcp/tools/{tool_id}` — PII-free planning REST gateway
+- `/api/planning/tools`, `POST /api/planning/tools/{tool_id}` — PII-free
+  planning REST gateway
+- `/mcp/tools`, `POST /mcp/tools/{tool_id}` — legacy planning REST gateway
+  aliases
   with 23 tools, contractVersion `0.1.0`
 
 ---
@@ -149,7 +162,9 @@ is absent):
   unset)
 - `MCP_OAUTH_SIGNING_KEY` (optional transparent OAuth token signing for hosted
   remote MCP clients)
-- `NEXUS_RATE_LIMIT_PER_MIN` (default 60), `NEXUS_CORS_ORIGINS`
+- `NEXUS_PUBLIC_MCP_PROFILE` (`full` default or `demo`),
+  `NEXUS_ACCESS_MODE` (`public` default or `restricted`), `NEXUS_API_KEYS`,
+  `NEXUS_RATE_LIMIT_PER_MIN` (default 60), `NEXUS_CORS_ORIGINS`
 
 ---
 

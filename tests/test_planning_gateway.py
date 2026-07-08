@@ -107,12 +107,18 @@ def test_planning_error_public_messages_are_sanitized() -> None:
     assert PlanningInputError("  field 'age' must be a number  ").public_message == (
         "field 'age' must be a number"
     )
-    assert PlanningInputError(
-        "Traceback (most recent call last):\n  File \"engine.py\", line 1"
-    ).public_message == "invalid planning request"
-    assert PlanningInfeasibleError(
-        "Traceback (most recent call last):\n  File \"solver.py\", line 1"
-    ).public_message == "planning request infeasible"
+    assert (
+        PlanningInputError(
+            'Traceback (most recent call last):\n  File "engine.py", line 1'
+        ).public_message
+        == "invalid planning request"
+    )
+    assert (
+        PlanningInfeasibleError(
+            'Traceback (most recent call last):\n  File "solver.py", line 1'
+        ).public_message
+        == "planning request infeasible"
+    )
 
 
 def test_planning_input_error_response_uses_public_message(
@@ -123,7 +129,7 @@ def test_planning_input_error_response_uses_public_message(
             return {"contractVersion": "0.1.0"}
 
     def _bad_input(_body: dict[str, Any]) -> dict[str, Any]:
-        raise PlanningInputError("Traceback (most recent call last):\n  File \"engine.py\"")
+        raise PlanningInputError('Traceback (most recent call last):\n  File "engine.py"')
 
     monkeypatch.setattr(
         planning_gateway,
@@ -133,7 +139,9 @@ def test_planning_input_error_response_uses_public_message(
     router = planning_gateway.build_planning_router(
         market=_FakeMarket(), regime_engine=_FakeRegimeEngine()
     )
-    endpoint = next(route.endpoint for route in router.routes if route.path == "/mcp/tools/{tool_id}")
+    endpoint = next(
+        route.endpoint for route in router.routes if route.path == "/mcp/tools/{tool_id}"
+    )
 
     response = asyncio.run(endpoint("bad_input", _Request()))
 
@@ -159,7 +167,9 @@ def test_internal_engine_error_logs_without_traceback(
     router = planning_gateway.build_planning_router(
         market=_FakeMarket(), regime_engine=_FakeRegimeEngine()
     )
-    endpoint = next(route.endpoint for route in router.routes if route.path == "/mcp/tools/{tool_id}")
+    endpoint = next(
+        route.endpoint for route in router.routes if route.path == "/mcp/tools/{tool_id}"
+    )
 
     with caplog.at_level(logging.WARNING, logger=planning_gateway.__name__):
         response = asyncio.run(endpoint("explode", _Request()))
@@ -206,10 +216,12 @@ def test_planning_response_carries_disclaimer() -> None:
 def test_list_tools_version_handshake() -> None:
     body = _list_gateway_tools()
     assert body["contractVersion"] == CONTRACT_VERSION
-    assert len(body["tools"]) == 27
+    assert len(body["tools"]) == 34
     assert "glide_path" in body["tools"]
     assert "correlation_matrix" in body["tools"]
     assert "capital_market_assumptions" in body["tools"]
+    assert "historical_blend" in body["tools"]
+    assert "inherited_ira_analysis" in body["tools"]
     assert "tax_aware_withdrawal" in body["tools"]
     assert "regime_return_generator" in body["tools"]
     assert "monte_carlo_decumulation" in body["tools"]
@@ -222,14 +234,19 @@ def test_list_tools_version_handshake() -> None:
     assert "regime_conditioned_swr" in body["tools"]
     assert "portfolio_xray" in body["tools"]
     assert "optimize_allocation" in body["tools"]
+    assert "risk_profile_score" in body["tools"]
     assert "build_planning_report" in body["tools"]
     assert "project_cash_flow" in body["tools"]
     assert "fire" in body["tools"]
     assert "risk_metrics" in body["tools"]
+    assert "performance_analysis" in body["tools"]
     assert "rebalance" in body["tools"]
     assert "cashflow_planning_bridge" in body["tools"]
     assert "cash_reserve_analysis" in body["tools"]
     assert "budget_pacing_projection" in body["tools"]
+    assert "education_funding" in body["tools"]
+    assert "education_vehicle_rules" in body["tools"]
+    assert "income_layering" in body["tools"]
 
 
 _MC_PAYLOAD: dict[str, Any] = {
@@ -286,10 +303,17 @@ def test_monte_carlo_default_scenario_non_degenerate() -> None:
     assert set(body["terminalValues"]) == {"p10", "p25", "p50", "p75", "p90"}
     assert body["terminalValues"]["p90"] > 0  # upside paths retain wealth
     assert len(body["medianBalanceByYear"]) == 50  # horizonAge - currentAge
+    assert body["successProbabilityConfidenceInterval"]["method"] == "wilson"
     assert set(body["depletionStats"]["depletionAgePercentiles"]) == {"p10", "p50", "p90"}
+    assert len(body["depletionCurve"]) == 50
+    assert body["conditionalShortfall"]["basis"] == "cumulative_unmet_portfolio_withdrawal_nominal"
     assert body["firstDecadeReturnVsOutcome"]["years"] == 10
+    assert len(body["firstDecadeReturnVsOutcome"]["deciles"]) == 10
     assert len(body["regimePathSummary"]) == 50  # emf_regime populated
     assert body["seedUsed"] == 12345
+    assert body["runManifest"]["manifestVersion"] == "monte_carlo_run_manifest_0.1.0"
+    assert len(body["runManifest"]["assumptionsHash"]) == 64
+    assert body["runManifest"]["paths"] == 3000
 
 
 def test_monte_carlo_spend_schedule_late_ltc_bump_lowers_success() -> None:
@@ -315,15 +339,187 @@ def test_monte_carlo_spend_schedule_late_ltc_bump_lowers_success() -> None:
     shocked = _monte_carlo_decumulation_tool(
         {
             **base_payload,
-            "spendSchedule": [
-                {"mode": "delta", "startAge": 91, "endAge": 95, "amount": 70000}
-            ],
+            "spendSchedule": [{"mode": "delta", "startAge": 91, "endAge": 95, "amount": 70000}],
         },
         market,
         regime,
     )
     assert shocked["successProbability"] < base["successProbability"]
     assert shocked["depletionStats"]["depletionAgePercentiles"]["p50"] >= 60
+
+
+def test_monte_carlo_ltc_shock_reports_same_seed_impact() -> None:
+    base_payload = {
+        **_MC_PAYLOAD,
+        "currentAge": 60,
+        "retirementAge": 67,
+        "horizonAge": 95,
+        "accounts": [
+            {
+                "type": "traditional",
+                "balance": 1_200_000,
+                "allocation": {"us_equity": 0.6, "us_bonds": 0.4},
+            }
+        ],
+        "annualSpend": 70_000,
+        "paths": 3_000,
+        "seed": 6789,
+        "ltcShock": {
+            "onsetAge": 84,
+            "annualCost": 120_000,
+            "durationYears": 4,
+            "costInflation": 0.04,
+        },
+    }
+    body = _monte_carlo_decumulation_tool(base_payload, _FakeMarket(), _FakeRegimeEngine())
+
+    assert body["ltcShock"]["onsetAge"] == 84
+    assert body["ltcShock"]["nominalTotalCost"] > 480_000
+    assert body["ltcShockImpact"]["basis"] == "same_seed_same_returns_with_vs_without_ltc_shock"
+    assert body["ltcShockImpact"]["withShockSuccessProbability"] == body["successProbability"]
+    assert body["ltcShockImpact"]["successProbabilityDelta"] <= 0
+    assert (
+        body["ltcShockImpact"]["baselineTerminalValues"]["p50"]
+        >= body["ltcShockImpact"]["withShockTerminalValues"]["p50"]
+    )
+
+
+def test_monte_carlo_ltc_shock_rejects_guardrails_v1_combination() -> None:
+    with pytest.raises(PlanningInputError, match="ltcShock and guardrails"):
+        _monte_carlo_decumulation_tool(
+            {
+                **_MC_PAYLOAD,
+                "paths": 400,
+                "ltcShock": {
+                    "onsetAge": 84,
+                    "annualCost": 120_000,
+                    "durationYears": 4,
+                    "costInflation": 0.04,
+                },
+                "guardrails": {"rule": "guyton_klinger"},
+            },
+            _FakeMarket(),
+            _FakeRegimeEngine(),
+        )
+
+
+def test_monte_carlo_goals_add_ordered_schedule_and_lower_success() -> None:
+    base_payload = {
+        **_MC_PAYLOAD,
+        "paths": 400,
+        "seed": 2468,
+        "returnModel": "multivariate_normal",
+    }
+    market = _FakeMarket()
+    regime = _FakeRegimeEngine()
+    base = _monte_carlo_decumulation_tool(base_payload, market, regime)
+    with_goals = _monte_carlo_decumulation_tool(
+        {
+            **base_payload,
+            "goals": [
+                {"id": "wish-late", "tier": "wish", "targetAmount": 1_200_000, "yearsToGoal": 20},
+                {"id": "need-soon", "tier": "need", "targetAmount": 350_000, "yearsToGoal": 10},
+                {"id": "want-soon", "tier": "want", "targetAmount": 250_000, "yearsToGoal": 10},
+            ],
+        },
+        market,
+        regime,
+    )
+
+    assert with_goals["successProbability"] < base["successProbability"]
+    assert with_goals["goalFundingPolicy"] == {
+        "mode": "priority_then_earlier_year_then_input_order",
+        "basis": "path_level_priority_funding_after_base_spend_before_growth",
+    }
+    assert [row["id"] for row in with_goals["goalFundingSchedule"]] == [
+        "need-soon",
+        "want-soon",
+        "wish-late",
+    ]
+    assert [row["projectionYear"] for row in with_goals["goalFundingSchedule"]] == [11, 11, 21]
+    assert "goalFunding" in with_goals
+
+
+def test_monte_carlo_goals_allocate_path_level_by_priority() -> None:
+    payload = {
+        "contractVersion": "0.1.0",
+        "currentAge": 60,
+        "retirementAge": 60,
+        "horizonAge": 62,
+        "accounts": [{"type": "taxable", "balance": 100_000, "allocation": {"cash": 1.0}}],
+        "assetClasses": [
+            {"id": "cash", "label": "Cash", "expectedReturn": 0.0, "volatility": 0.0, "lambda": 0.0}
+        ],
+        "correlations": None,
+        "annualSpend": 0,
+        "spendColaRate": 0,
+        "guaranteedIncome": [],
+        "filingStatus": "single",
+        "returnModel": "multivariate_normal",
+        "paths": 50,
+        "seed": 1357,
+        "goals": [
+            {"id": "want-1", "tier": "want", "targetAmount": 80_000, "yearsToGoal": 0},
+            {"id": "need-1", "tier": "need", "targetAmount": 80_000, "yearsToGoal": 0},
+        ],
+    }
+
+    result = _monte_carlo_decumulation_tool(payload, _FakeMarket(), _FakeRegimeEngine())
+    by_id = {row["id"]: row for row in result["goalFunding"]["goals"]}
+
+    assert [row["id"] for row in result["goalFundingSchedule"]] == ["need-1", "want-1"]
+    assert by_id["need-1"]["fullyFundedProbability"] == 1.0
+    assert by_id["need-1"]["fundedAmountPercentiles"]["p50"] == 80_000.0
+    assert by_id["want-1"]["fullyFundedProbability"] == 0.0
+    assert by_id["want-1"]["fundedAmountPercentiles"]["p50"] == 20_000.0
+
+
+def test_solve_goal_with_goals_returns_confirmed_goal_funding() -> None:
+    body = {
+        "contractVersion": "0.1.0",
+        "solveFor": "initial_savings",
+        "targetSuccess": 0.95,
+        "bounds": {"min": 100_000, "max": 220_000},
+        "currentAge": 60,
+        "retirementAge": 60,
+        "horizonAge": 62,
+        "accounts": [{"type": "taxable", "balance": 100_000, "allocation": {"cash": 1.0}}],
+        "assetClasses": [
+            {"id": "cash", "label": "Cash", "expectedReturn": 0.0, "volatility": 0.0, "lambda": 0.0}
+        ],
+        "correlations": None,
+        "annualSpend": 0,
+        "spendColaRate": 0,
+        "guaranteedIncome": [],
+        "returnModel": "multivariate_normal",
+        "paths": 50,
+        "seed": 1357,
+        "goals": [
+            {"id": "need-1", "tier": "need", "targetAmount": 80_000, "yearsToGoal": 0},
+            {"id": "want-1", "tier": "want", "targetAmount": 80_000, "yearsToGoal": 0},
+        ],
+    }
+
+    result = _solve_goal_tool(body, _FakeMarket(), _FakeRegimeEngine())
+
+    assert result["solveFor"] == "initial_savings"
+    assert result["goalFundingPolicy"]["basis"] == (
+        "path_level_priority_funding_after_base_spend_before_growth"
+    )
+    assert [row["id"] for row in result["goalFundingSchedule"]] == ["need-1", "want-1"]
+    assert result["goalFunding"]["goals"][0]["fullyFundedProbability"] == 1.0
+
+
+def test_monte_carlo_goal_outside_horizon_returns_400() -> None:
+    with pytest.raises(PlanningInputError, match="inside the Monte Carlo horizon"):
+        _monte_carlo_decumulation_tool(
+            {
+                **_MC_PAYLOAD,
+                "goals": [{"id": "late-1", "targetAmount": 1, "yearsToGoal": 50}],
+            },
+            _FakeMarket(),
+            _FakeRegimeEngine(),
+        )
 
 
 def test_monte_carlo_retirement_age_lifts_success() -> None:
@@ -403,6 +599,7 @@ def test_monte_carlo_guardrails_end_to_end() -> None:
         "cut",
         "raise",
     }
+    assert "cutCountPercentiles" in body["guardrailStats"]
 
 
 def test_monte_carlo_without_guardrails_omits_the_dynamic_fields() -> None:
@@ -522,6 +719,30 @@ def test_tax_aware_withdrawal_happy_path() -> None:
     assert body["contractVersion"] == CONTRACT_VERSION
     assert body["withdrawals"][0]["type"] == "taxable"
     assert "totalTax" in body and "effectiveRate" in body and body["rmdSatisfied"] is True
+
+
+def test_tax_aware_withdrawal_accepts_birth_year_policy() -> None:
+    r = _client().post(
+        "/mcp/tools/tax_aware_withdrawal",
+        json={
+            "contractVersion": "0.1.0",
+            "year": 2026,
+            "filingStatus": "single",
+            "accounts": [
+                {"type": "traditional", "balance": 1_000_000, "allocation": {"x": 1.0}},
+                {"type": "taxable", "balance": 500_000, "allocation": {"x": 1.0}},
+            ],
+            "grossNeed": 10_000,
+            "age": 73,
+            "birthYear": 1960,
+            "otherTaxableIncome": 0,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["rmdStartAge"] == 75
+    assert body["withdrawals"][0]["type"] == "taxable"
+    assert body["withdrawals"][0]["gross"] == 10_000
 
 
 def test_tax_aware_withdrawal_infeasible_returns_422() -> None:
@@ -706,6 +927,24 @@ def test_rmd_happy_path() -> None:
     assert body["applies"] is True
     assert body["distributionPeriod"] == 26.5
     assert body["rmdAmount"] == round(500_000 / 26.5, 2)
+    assert body["rmdStartAgePolicyVersion"] == "secure2.0-goodfaith-73-per-89FR58644"
+
+
+def test_rmd_accepts_birth_year_policy() -> None:
+    r = _client().post(
+        "/mcp/tools/rmd",
+        json={
+            "contractVersion": "0.1.0",
+            "age": 73,
+            "balance": 500_000,
+            "birthYear": 1960,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["rmdStartAge"] == 75
+    assert body["applies"] is False
+    assert body["rmdAmount"] == 0.0
 
 
 def test_rmd_negative_balance_400() -> None:
@@ -904,6 +1143,46 @@ def test_risk_metrics_too_few_returns_400() -> None:
     assert "at least 2" in r.text
 
 
+_PERFORMANCE: dict[str, Any] = {
+    "contractVersion": "0.1.0",
+    "twrPeriods": [
+        {"startValue": 100000, "endValue": 110000, "netExternalFlow": 0},
+        {"startValue": 110000, "endValue": 220000, "netExternalFlow": 90000},
+    ],
+    "mwrFlows": [
+        {"tYears": 0, "amount": -100000},
+        {"tYears": 0.5, "amount": -90000},
+    ],
+    "terminalValue": 220000,
+    "terminalTimeYears": 1,
+    "grossReturns": [0.08, -0.02, 0.05],
+    "feeRates": [0.002, 0.002, 0.002],
+    "portfolioReturns": [0.08, -0.02, 0.05],
+    "benchmarkReturns": [0.07, -0.01, 0.04],
+    "periodsPerYear": 12,
+}
+
+
+def test_performance_analysis_happy_path() -> None:
+    r = _client().post("/mcp/tools/performance_analysis", json=_PERFORMANCE)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["contractVersion"] == CONTRACT_VERSION
+    assert body["timeWeighted"]["cumulativeReturn"] == 0.21
+    assert body["moneyWeighted"]["method"] == "bracketed_newton_bisection"
+    assert body["feeDrag"]["cumulativeFeeDrag"] < 0.0
+    assert body["benchmarkRelative"]["periods"] == 3
+
+
+def test_performance_analysis_rejects_partial_fee_drag() -> None:
+    r = _client().post(
+        "/mcp/tools/performance_analysis",
+        json={"contractVersion": "0.1.0", "grossReturns": [0.1, 0.2]},
+    )
+    assert r.status_code == 400
+    assert "fee_rates" in r.text
+
+
 _REBALANCE: dict[str, Any] = {
     "contractVersion": "0.1.0",
     "assetClasses": [
@@ -976,6 +1255,14 @@ def test_analyze_roth_conversion_gateway() -> None:
     assert y0["recommended_amount"] > 0
     # reference tables were used (no caller injection) -> snapshot says so.
     assert body["snapshot"]["irmaa_table_source"] == "engine_reference"
+    assert (
+        "Federal tax table version: federal-income-tax-reference-2026-illustrative-v1."
+        in body["assumptions"]
+    )
+    assert (
+        "IRMAA table version: irmaa-reference-2025-married_joint-illustrative-v1."
+        in body["assumptions"]
+    )
     assert body["disclaimer"]  # disclaimer attached
 
 
@@ -985,6 +1272,9 @@ def test_sequence_conversions_gateway() -> None:
     body = r.json()
     assert len(body["recommended_by_year"]) == 2
     assert body["total_recommended"] > 0
+    assert body["bracketTableYear"] == 2026
+    assert body["bracketTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
+    assert body["irmaaTableVersion"] == "irmaa-reference-2025-married_joint-illustrative-v1"
 
 
 def test_irmaa_headroom_gateway() -> None:
@@ -1011,6 +1301,16 @@ def test_new_tools_are_listed() -> None:
     assert "analyze_roth_conversion" in tools
     assert "sequence_conversions" in tools
     assert "irmaa_headroom" in tools
+
+
+def test_rest_planning_alias_matches_legacy_mcp_tools() -> None:
+    c = _client()
+    assert c.get("/api/planning/tools").json() == c.get("/mcp/tools").json()
+    body = {"contractVersion": CONTRACT_VERSION, "age": 73, "balance": 500_000}
+    legacy = c.post("/mcp/tools/rmd", json=body)
+    rest = c.post("/api/planning/tools/rmd", json=body)
+    assert rest.status_code == legacy.status_code == 200
+    assert rest.json() == legacy.json()
 
 
 def test_analyze_rejects_identity_in_contract() -> None:
@@ -1112,9 +1412,9 @@ def test_project_cash_flow_happy_path() -> None:
         "currentLiabilities": 250_000,
         "baseYear": 2026,
     }
-    r = _client().post("/mcp/tools/project_cash_flow", json=payload)
-    assert r.status_code == 200, r.text
-    body = r.json()
+    response = _call_gateway_tool("project_cash_flow", payload)
+    assert isinstance(response, JSONResponse)
+    body = _response_json(response)
     assert body["contractVersion"] == CONTRACT_VERSION
     assert len(body["years"]) == 90 - 45 + 1
     first = body["years"][0]
@@ -1126,10 +1426,121 @@ def test_project_cash_flow_happy_path() -> None:
     assert body["assumptions"]["filingStatus"] == "married_joint"
 
 
+def test_project_cash_flow_ltc_shock_adds_explicit_expense_rows() -> None:
+    payload = {
+        "contractVersion": "0.1.0",
+        "currentAge": 78,
+        "retirementAge": 65,
+        "terminalAge": 84,
+        "currentIncome": 0,
+        "currentExpenses": 80_000,
+        "currentPortfolio": 700_000,
+        "retirementIncome": 40_000,
+        "expectedReturn": 0.03,
+        "expenseInflationRate": 0.02,
+        "healthcareInflationRate": 0.04,
+        "ltcShock": {
+            "onsetAge": 80,
+            "annualCost": 100_000,
+            "durationYears": 3,
+        },
+    }
+    response = _call_gateway_tool("project_cash_flow", payload)
+    assert isinstance(response, JSONResponse)
+    body = _response_json(response)
+
+    shock_rows = [row for row in body["years"] if row.get("ltcShockExpense", 0) > 0]
+    assert [row["age"] for row in shock_rows] == [80, 81, 82]
+    assert shock_rows[0]["baseExpenses"] < shock_rows[0]["expenses"]
+    assert body["aggregate"]["lifetimeLtcShockCost"] == body["assumptions"]["ltcShock"][
+        "nominalTotalCost"
+    ]
+    assert body["assumptions"]["ltcShock"]["costInflation"] == 0.04
+
+
+def test_project_cash_flow_ltc_shock_supports_late_age_horizon() -> None:
+    payload = {
+        "contractVersion": "0.1.0",
+        "currentAge": 120,
+        "retirementAge": 65,
+        "terminalAge": 125,
+        "currentIncome": 0,
+        "currentExpenses": 40_000,
+        "currentPortfolio": 300_000,
+        "retirementIncome": 20_000,
+        "ltcShock": {
+            "onsetAge": 121,
+            "annualCost": 50_000,
+            "durationYears": 2,
+            "costInflation": 0.03,
+        },
+    }
+
+    body = _call_gateway_tool("project_cash_flow", payload)
+    assert isinstance(body, JSONResponse)
+    payload_body = _response_json(body)
+
+    shock_rows = [row for row in payload_body["years"] if row.get("ltcShockExpense", 0) > 0]
+    assert [row["age"] for row in shock_rows] == [121, 122]
+
+
+def test_project_cash_flow_ltc_shock_rejects_private_nested_fields() -> None:
+    response = _call_gateway_tool(
+        "project_cash_flow",
+        {
+            "contractVersion": "0.1.0",
+            "currentAge": 78,
+            "retirementAge": 65,
+            "terminalAge": 84,
+            "currentIncome": 0,
+            "currentExpenses": 80_000,
+            "currentPortfolio": 700_000,
+            "retirementIncome": 40_000,
+            "ltcShock": {
+                "onsetAge": 80,
+                "annualCost": 100_000,
+                "durationYears": 3,
+                "providerName": "Example Facility",
+            },
+        },
+    )
+
+    assert isinstance(response, PlainTextResponse)
+    assert response.status_code == 400
+    assert "ltcShock only accepts" in _response_text(response)
+
+
+def test_project_cash_flow_account_balances_gateway() -> None:
+    payload = {
+        "contractVersion": "0.1.0",
+        "currentAge": 70,
+        "retirementAge": 65,
+        "terminalAge": 72,
+        "currentIncome": 0,
+        "currentExpenses": 70_000,
+        "retirementIncome": 20_000,
+        "filingStatus": "single",
+        "accountBalances": {"taxable": 25_000, "traditional": 175_000, "roth": 0},
+        "accountReturns": {"taxable": 0.03, "traditional": 0.03, "roth": 0.03},
+        "earlyWithdrawalPenaltyRate": 0,
+    }
+    response = _call_gateway_tool("project_cash_flow", payload)
+    assert isinstance(response, JSONResponse)
+    body = _response_json(response)
+
+    assert body["aggregate"]["startingPortfolio"] == 200_000
+    assert body["aggregate"]["startingAccountBalances"]["taxable"] == 25_000
+    first = body["years"][0]
+    assert first["withdrawalsByAccount"]["taxable"] == pytest.approx(25_000.0)
+    assert first["withdrawalsByAccount"]["traditional"] > 0.0
+    assert first["accountBalances"]["taxable"] == pytest.approx(0.0)
+    assert body["assumptions"]["withdrawalOrder"] == ["taxable", "traditional", "roth"]
+
+
 def test_project_cash_flow_bad_horizon_400() -> None:
-    r = _client().post(
-        "/mcp/tools/project_cash_flow",
-        json={
+    response = _call_gateway_tool(
+        "project_cash_flow",
+        {
             "contractVersion": "0.1.0",
             "currentAge": 60,
             "retirementAge": 65,
@@ -1139,14 +1550,14 @@ def test_project_cash_flow_bad_horizon_400() -> None:
             "currentPortfolio": 100_000,
         },
     )
-    assert r.status_code == 400
-    assert "terminal_age" in r.text
+    assert response.status_code == 400
+    assert "terminal_age" in _response_text(response)
 
 
 def test_project_cash_flow_bad_filing_status_400() -> None:
-    r = _client().post(
-        "/mcp/tools/project_cash_flow",
-        json={
+    response = _call_gateway_tool(
+        "project_cash_flow",
+        {
             "contractVersion": "0.1.0",
             "currentAge": 40,
             "retirementAge": 65,
@@ -1157,8 +1568,8 @@ def test_project_cash_flow_bad_filing_status_400() -> None:
             "filingStatus": "joint",
         },
     )
-    assert r.status_code == 400
-    assert "filing_status" in r.text
+    assert response.status_code == 400
+    assert "filing_status" in _response_text(response)
 
 
 def test_cashflow_planning_bridge_gateway() -> None:
@@ -1314,9 +1725,7 @@ def test_budget_pacing_projection_invalid_date_400() -> None:
         ),
     ],
 )
-def test_cashflow_bridge_tools_reject_identity_keys(
-    tool_id: str, payload: dict[str, Any]
-) -> None:
+def test_cashflow_bridge_tools_reject_identity_keys(tool_id: str, payload: dict[str, Any]) -> None:
     r = _call_gateway_tool(tool_id, {**payload, "email": "client@example.com"})
     assert r.status_code == 400
     assert "identity" in _response_text(r).lower()
@@ -1332,7 +1741,11 @@ _SOLVE_BASE: dict[str, Any] = {
     "retirementAge": 65,
     "horizonAge": 95,
     "accounts": [
-        {"type": "traditional", "balance": 1_200_000, "allocation": {"us_equity": 0.6, "us_bonds": 0.4}},
+        {
+            "type": "traditional",
+            "balance": 1_200_000,
+            "allocation": {"us_equity": 0.6, "us_bonds": 0.4},
+        },
         {"type": "roth", "balance": 300_000, "allocation": {"us_equity": 0.8, "us_bonds": 0.2}},
     ],
     "assetClasses": [
@@ -1428,7 +1841,11 @@ def test_solve_goal_infeasible_reports_best_achievable() -> None:
         solveFor="annual_spend",
         annualSpend=400_000,
         accounts=[
-            {"type": "traditional", "balance": 500_000, "allocation": {"us_equity": 0.9, "us_bonds": 0.1}}
+            {
+                "type": "traditional",
+                "balance": 500_000,
+                "allocation": {"us_equity": 0.9, "us_bonds": 0.1},
+            }
         ],
         targetSuccess=0.999,
         bounds={"min": 350_000, "max": 800_000},
@@ -1441,7 +1858,8 @@ def test_solve_goal_infeasible_reports_best_achievable() -> None:
 
 def test_solve_goal_bad_solve_for_400() -> None:
     r = _client().post(
-        "/mcp/tools/solve_goal", json={**_SOLVE_BASE, "solveFor": "crystal_ball", "targetSuccess": 0.8}
+        "/mcp/tools/solve_goal",
+        json={**_SOLVE_BASE, "solveFor": "crystal_ball", "targetSuccess": 0.8},
     )
     assert r.status_code == 400
     assert "solveFor" in r.text
@@ -1450,7 +1868,8 @@ def test_solve_goal_bad_solve_for_400() -> None:
 def test_solve_goal_bad_target_400() -> None:
     for bad in (0.0, 1.5, -0.2):
         r = _client().post(
-            "/mcp/tools/solve_goal", json={**_SOLVE_BASE, "solveFor": "annual_spend", "targetSuccess": bad}
+            "/mcp/tools/solve_goal",
+            json={**_SOLVE_BASE, "solveFor": "annual_spend", "targetSuccess": bad},
         )
         assert r.status_code == 400
         assert "targetSuccess" in r.text
@@ -1483,7 +1902,11 @@ def test_solve_goal_rejects_invalid_base_body_400() -> None:
         "solveFor": "annual_spend",
         "targetSuccess": 0.80,
         "accounts": [
-            {"type": "traditional", "balance": 1000, "allocation": {"us_equity": 0.5, "us_bonds": 0.4}}
+            {
+                "type": "traditional",
+                "balance": 1000,
+                "allocation": {"us_equity": 0.5, "us_bonds": 0.4},
+            }
         ],
     }
     r = _client().post("/mcp/tools/solve_goal", json=bad)
