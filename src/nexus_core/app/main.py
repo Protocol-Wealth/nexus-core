@@ -32,7 +32,7 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
 from .. import __version__
 from ..data import db
@@ -60,6 +60,13 @@ from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..disclaimers import FULL as _FULL_DISCLAIMER
 from ..engine.regime import RegimeEngine
 from .access_gate import NexusAccessGate
+from .agent_discovery import (
+    api_catalog_link_header,
+    render_api_catalog,
+    render_mcp_server_card,
+    render_robots_txt,
+    render_sitemap_xml,
+)
 from .benchmarks import build_benchmarks_router
 from .chain import build_chain_router
 from .disclosure import render_disclosure_card
@@ -291,8 +298,12 @@ def create_app(
     mcp_enabled = mcp_app is not None
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-    def landing() -> str:
-        return render_landing(mcp_enabled=mcp_enabled)
+    def landing() -> HTMLResponse:
+        # Advertise the agent-discovery resources via an RFC 8288 Link header.
+        return HTMLResponse(
+            render_landing(mcp_enabled=mcp_enabled),
+            headers={"Link": api_catalog_link_header()},
+        )
 
     @app.get("/mcp-guide", response_class=HTMLResponse, include_in_schema=False)
     def mcp_guide() -> str:
@@ -322,6 +333,41 @@ def create_app(
         """Machine-readable AI-system disclosure (pwos-core disclosure-card schema)."""
         return JSONResponse(
             render_disclosure_card(),
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @app.get("/robots.txt", response_class=PlainTextResponse, include_in_schema=False)
+    def robots_txt() -> PlainTextResponse:
+        """robots.txt — AI-crawler rules + Content-Signal + sitemap pointer."""
+        return PlainTextResponse(
+            render_robots_txt(),
+            media_type="text/plain; charset=utf-8",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @app.get("/sitemap.xml", include_in_schema=False)
+    def sitemap_xml() -> Response:
+        """Minimal sitemap of the public HTML/text surfaces."""
+        return Response(
+            render_sitemap_xml(),
+            media_type="application/xml",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @app.get("/.well-known/api-catalog", include_in_schema=False)
+    def api_catalog() -> JSONResponse:
+        """RFC 9727 API catalogue (application/linkset+json)."""
+        return JSONResponse(
+            render_api_catalog(),
+            media_type="application/linkset+json",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @app.get("/.well-known/mcp/server-card.json", include_in_schema=False)
+    def mcp_server_card() -> JSONResponse:
+        """SEP-format MCP Server Card for this deployment's /mcp transport."""
+        return JSONResponse(
+            render_mcp_server_card(),
             headers={"Cache-Control": "public, max-age=86400"},
         )
 

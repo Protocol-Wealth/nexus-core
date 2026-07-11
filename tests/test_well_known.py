@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from nexus_core.app import create_app
@@ -70,3 +71,86 @@ def test_security_headers_on_html_and_json() -> None:
     assert "content-security-policy" in html.headers
     assert "unsafe-inline" in html.headers["content-security-policy"]  # inline styles must work
     assert "content-security-policy" not in api.headers
+
+
+def test_mcp_server_card_sep() -> None:
+    with _client() as client:
+        r = client.get("/.well-known/mcp/server-card.json")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/json")
+    card = r.json()
+    # MCP InitializeResult shape
+    assert card["protocolVersion"]  # non-empty, from the installed MCP SDK
+    assert card["serverInfo"]["name"] == "nexus-core"
+    assert card["serverInfo"]["version"]  # from the package
+    assert card["serverInfo"]["title"]
+    # ServerCapabilities object, not a bare boolean
+    assert card["capabilities"]["tools"] == {"listChanged": False}
+    assert isinstance(card["instructions"], str) and card["instructions"]
+    # SEP discovery extras
+    assert card["transport"] == {"type": "streamable-http", "endpoint": "https://nexusmcp.site/mcp"}
+    assert "335298" in card["provider"]["registration"]
+    # posture is the canonical disclaimer, not a hand-written string
+    assert "not investment, tax, legal, or financial advice" in card["policy"]["posture"].lower()
+
+
+def test_mcp_server_card_is_profile_aware(monkeypatch: pytest.MonkeyPatch) -> None:
+    # demo profile advertises only the closed-world tools it actually exposes
+    monkeypatch.setenv("NEXUS_PUBLIC_MCP_PROFILE", "demo")
+    with _client() as client:
+        demo = client.get("/.well-known/mcp/server-card.json").json()
+    demo_instr = demo["instructions"].lower()
+    assert "demo profile" in demo_instr
+    assert "no live-vendor" in demo_instr
+
+    # full profile advertises the full tool domains
+    monkeypatch.setenv("NEXUS_PUBLIC_MCP_PROFILE", "full")
+    with _client() as client:
+        full = client.get("/.well-known/mcp/server-card.json").json()
+    full_instr = full["instructions"].lower()
+    assert "full profile" in full_instr
+    assert "regime" in full_instr and "market" in full_instr
+
+
+def test_api_catalog_rfc9727() -> None:
+    with _client() as client:
+        r = client.get("/.well-known/api-catalog")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/linkset+json")
+    entry = r.json()["linkset"][0]
+    assert entry["anchor"] == "https://nexusmcp.site/"
+    hrefs = [
+        link["href"]
+        for rel in ("service-desc", "service-doc", "status")
+        for link in entry.get(rel, [])
+    ]
+    assert "https://nexusmcp.site/openapi.json" in hrefs
+    assert "https://nexusmcp.site/.well-known/mcp/server-card.json" in hrefs
+    assert "https://nexusmcp.site/health" in hrefs
+
+
+def test_robots_txt_ai_rules_and_content_signal() -> None:
+    with _client() as client:
+        r = client.get("/robots.txt")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/plain")
+    body = r.text
+    assert "User-agent: GPTBot" in body
+    assert "User-agent: Google-Extended" in body
+    assert "Content-Signal:" in body
+    assert "Sitemap: https://nexusmcp.site/sitemap.xml" in body
+
+
+def test_sitemap_xml() -> None:
+    with _client() as client:
+        r = client.get("/sitemap.xml")
+    assert r.status_code == 200
+    assert "xml" in r.headers["content-type"]
+    assert "<loc>https://nexusmcp.site/</loc>" in r.text
+
+
+def test_landing_advertises_link_header() -> None:
+    with _client() as client:
+        r = client.get("/")
+    assert r.status_code == 200
+    assert 'rel="api-catalog"' in r.headers.get("link", "")
