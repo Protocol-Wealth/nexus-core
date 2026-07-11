@@ -70,3 +70,62 @@ def test_security_headers_on_html_and_json() -> None:
     assert "content-security-policy" in html.headers
     assert "unsafe-inline" in html.headers["content-security-policy"]  # inline styles must work
     assert "content-security-policy" not in api.headers
+
+
+def test_mcp_server_card_sep() -> None:
+    with _client() as client:
+        r = client.get("/.well-known/mcp/server-card.json")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/json")
+    card = r.json()
+    assert card["serverInfo"]["name"] == "nexus-core"
+    assert card["serverInfo"]["version"]  # non-empty, from the package
+    assert card["transport"] == {"type": "streamable-http", "endpoint": "https://nexusmcp.site/mcp"}
+    assert card["capabilities"]["tools"] is True
+    assert "335298" in card["provider"]["registration"]
+    # posture is the canonical disclaimer, not a hand-written string
+    assert "not investment, tax, legal, or financial advice" in card["policy"]["posture"].lower()
+
+
+def test_api_catalog_rfc9727() -> None:
+    with _client() as client:
+        r = client.get("/.well-known/api-catalog")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/linkset+json")
+    entry = r.json()["linkset"][0]
+    assert entry["anchor"] == "https://nexusmcp.site/"
+    hrefs = [
+        link["href"]
+        for rel in ("service-desc", "service-doc", "status")
+        for link in entry.get(rel, [])
+    ]
+    assert "https://nexusmcp.site/openapi.json" in hrefs
+    assert "https://nexusmcp.site/.well-known/mcp/server-card.json" in hrefs
+    assert "https://nexusmcp.site/health" in hrefs
+
+
+def test_robots_txt_ai_rules_and_content_signal() -> None:
+    with _client() as client:
+        r = client.get("/robots.txt")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/plain")
+    body = r.text
+    assert "User-agent: GPTBot" in body
+    assert "User-agent: Google-Extended" in body
+    assert "Content-Signal:" in body
+    assert "Sitemap: https://nexusmcp.site/sitemap.xml" in body
+
+
+def test_sitemap_xml() -> None:
+    with _client() as client:
+        r = client.get("/sitemap.xml")
+    assert r.status_code == 200
+    assert "xml" in r.headers["content-type"]
+    assert "<loc>https://nexusmcp.site/</loc>" in r.text
+
+
+def test_landing_advertises_link_header() -> None:
+    with _client() as client:
+        r = client.get("/")
+    assert r.status_code == 200
+    assert 'rel="api-catalog"' in r.headers.get("link", "")
