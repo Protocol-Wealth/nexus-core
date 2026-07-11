@@ -27,13 +27,17 @@ _PROVIDER = {
 }
 
 #: Stable, profile-agnostic one-line summary of the engine for ``serverInfo``.
-#: Describes what the engine *is* (the whole capability set); the profile-aware
-#: ``instructions`` field states which tools *this* transport actually exposes.
+#: Describes what the engine *is* (its analytical domains) without asserting that
+#: any given domain is exposed on this MCP transport — the profile-aware
+#: ``instructions`` field and ``tools/list`` are authoritative on the actual tool
+#: set, so this must not overclaim MCP exposure (e.g. the demo profile exposes
+#: only option/collar/health/describe).
 _SERVER_DESCRIPTION = (
-    "Regime-adaptive financial-analysis engine exposed as Model Context Protocol "
-    "tools: macro-regime classification, market and economic data, options analytics, "
-    "and de-identified planning illustrations. Public educational endpoint, "
-    "informational only: no advice, no trade execution, and no client data."
+    "Regime-adaptive financial-analysis engine: macro-regime classification, market "
+    "and economic data, options analytics, and de-identified planning math. Public "
+    "educational endpoint, informational only: no advice, no trade execution, and no "
+    "client data. The tools this transport actually exposes are given in the "
+    "instructions field and by tools/list."
 )
 
 _POLICY = {
