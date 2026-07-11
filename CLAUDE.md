@@ -3,6 +3,31 @@
 > Repo: `Protocol-Wealth/nexus-core` · License: Apache 2.0 · Patent Pending: USPTO #64/034,229 · OIN member.
 > Open-source extraction of the [Protocol Wealth research engine](https://nexusmcp.site); nothing in this repo is client-specific or proprietary to PW.
 
+**Current state (2026-07-10 ET — public agent-discovery live + Markdown negotiation):**
+- **Deployed:** Cloud Run revision `nexus-core-00064-fqx` serves 100% traffic on
+  `nexusmcp.site` (behavior-verified). The agent-discovery well-known surfaces are
+  live (`#232`): an SEP MCP Server Card at `/.well-known/mcp/server-card.json`, an
+  RFC 9727 API catalogue at `/.well-known/api-catalog`, `robots.txt` (AI-crawler
+  rules + Content-Signal + sitemap pointer), `sitemap.xml`, and an RFC 8288 `Link`
+  header on the landing page. isitagentready.com scores the site **71 / Level 2
+  Bot-Aware**. Source: `app/agent_discovery.py`, wired in `app/main.py`.
+- **Markdown content negotiation (`#233`):** `GET /` returns a Markdown rendering
+  when a client sends `Accept: text/markdown`; HTML stays the default for browsers.
+  The parser honors RFC 9110 quality values (a `q=0` rejects Markdown; Markdown is
+  chosen only when named more specifically than a bare `*/*`), and `Vary: Accept`
+  keeps the Cloudflare edge from cross-serving. Source:
+  `app/landing.py::accept_prefers_markdown` + `render_landing_markdown`.
+- **Card `serverInfo.description`:** the MCP Server Card carries a stable,
+  profile-agnostic engine description that does NOT overclaim MCP tool exposure
+  (the demo transport exposes only `option_price`/`collar_book`/`health`/`describe`);
+  the exact tool set is deferred to the `instructions` field + `tools/list`.
+  `policy.posture` stays the canonical `disclaimers.TERSE`. The
+  `protocolwealthllc.com` mirror of this card is reconciled field-for-field
+  (pw-website `#290`/`#291`).
+- **N/A for this read-only, publish-not-crawl surface** (deliberate, not gaps):
+  Auth.md, Web Bot Auth, Agent Skills (that modality is AskPWBot's on pw-website),
+  WebMCP, agentic commerce.
+
 **Current state (2026-07-07 ET — private consumer boundary closeout):**
 - **Access model:** hosted Nexus is a split surface. Native `/mcp` remains a
   public OAuth-compatible demo endpoint with `NEXUS_PUBLIC_MCP_PROFILE=demo`.
