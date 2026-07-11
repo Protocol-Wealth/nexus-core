@@ -12,6 +12,7 @@ advice position (the ``policy.posture`` is the canonical ``disclaimers.TERSE``).
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from .. import __version__
@@ -52,33 +53,64 @@ _AI_BOTS = [
 _SITEMAP_PATHS = ["/", "/mcp-guide", "/docs", "/llms.txt"]
 
 
+def _public_mcp_profile() -> str:
+    """Active public MCP tool profile (``NEXUS_PUBLIC_MCP_PROFILE``): ``full`` or ``demo``.
+
+    Read here rather than imported from ``app.mcp_mount`` to keep this module free of
+    the optional ``fastmcp`` dependency. The env var is the shared contract, so the
+    published card reflects the tools the ``/mcp`` transport actually registers.
+    """
+    return os.environ.get("NEXUS_PUBLIC_MCP_PROFILE", "full").strip().lower() or "full"
+
+
+def _mcp_protocol_version() -> str:
+    """The MCP protocol version this deployment negotiates, from the installed SDK."""
+    try:
+        from mcp.types import LATEST_PROTOCOL_VERSION
+
+        return str(LATEST_PROTOCOL_VERSION)
+    except Exception:  # pragma: no cover - core-only installs without the mcp SDK
+        return "2025-06-18"
+
+
 def render_mcp_server_card() -> dict[str, Any]:
-    """SEP-format MCP Server Card describing this deployment's ``/mcp`` transport."""
+    """MCP Server Card describing this deployment's ``/mcp`` transport.
+
+    Mirrors the MCP ``InitializeResult`` shape — ``protocolVersion``, ``capabilities``
+    as a ServerCapabilities object, ``serverInfo`` — plus SEP discovery extras
+    (transport, provider, policy). Profile-aware: the ``instructions`` reflect whether
+    the public transport runs the full tool set or the closed-world demo profile, so
+    agents are not told about tools ``tools/list`` will not expose.
+    """
+    if _public_mcp_profile() == "demo":
+        tool_summary = (
+            "Demo profile — closed-world tools only: option pricing and collar "
+            "worksheets (Black-Scholes, illustration only) plus server health and "
+            "self-description. No live-vendor regime, market-data, economic-data, or "
+            "planning tools are exposed on this transport."
+        )
+    else:
+        tool_summary = (
+            "Full profile: macro-regime classification and signals, market quotes and "
+            "history, FRED economic series, options analytics (illustration only), and "
+            "de-identified planning illustrations."
+        )
     return {
+        "protocolVersion": _mcp_protocol_version(),
         "serverInfo": {
             "name": "nexus-core",
             "title": "Protocol Wealth — Nexus Core (public MCP)",
             "version": __version__,
-            "description": (
-                "Regime-adaptive financial-analysis engine exposed as Model Context "
-                "Protocol tools: macro-regime classification, market and economic data, "
-                "options analytics, and de-identified planning illustrations. Public "
-                "educational endpoint — informational only, no advice, no trade "
-                "execution, and no client data."
-            ),
         },
-        "provider": dict(_PROVIDER),
+        "capabilities": {"tools": {"listChanged": False}},
+        "instructions": (
+            "Regime-adaptive financial-analysis engine exposed as Model Context Protocol "
+            f"tools. {tool_summary} Informational and educational only — not investment, "
+            "tax, or legal advice, no trade execution, and no client data. Call "
+            "tools/list after connecting for the exact tool set."
+        ),
         "transport": {"type": "streamable-http", "endpoint": f"{_BASE}/mcp"},
-        "capabilities": {
-            "tools": True,
-            "categories": [
-                "regime-analysis — Entropic Macro Framework classification and signals",
-                "market-data — quotes and price history for stocks, ETFs, indices, crypto",
-                "economic-data — FRED economic series",
-                "options-analytics — Black-Scholes overlays and collar worksheets (illustration only)",
-                "planning-illustration — glide-path / allocation modeling; de-identified inputs only",
-            ],
-        },
+        "provider": dict(_PROVIDER),
         "documentation": f"{_BASE}/mcp-guide",
         "openSource": "https://github.com/Protocol-Wealth/nexus-core",
         "policy": dict(_POLICY),

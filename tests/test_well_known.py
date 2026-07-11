@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from nexus_core.app import create_app
@@ -78,13 +79,37 @@ def test_mcp_server_card_sep() -> None:
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("application/json")
     card = r.json()
+    # MCP InitializeResult shape
+    assert card["protocolVersion"]  # non-empty, from the installed MCP SDK
     assert card["serverInfo"]["name"] == "nexus-core"
-    assert card["serverInfo"]["version"]  # non-empty, from the package
+    assert card["serverInfo"]["version"]  # from the package
+    assert card["serverInfo"]["title"]
+    # ServerCapabilities object, not a bare boolean
+    assert card["capabilities"]["tools"] == {"listChanged": False}
+    assert isinstance(card["instructions"], str) and card["instructions"]
+    # SEP discovery extras
     assert card["transport"] == {"type": "streamable-http", "endpoint": "https://nexusmcp.site/mcp"}
-    assert card["capabilities"]["tools"] is True
     assert "335298" in card["provider"]["registration"]
     # posture is the canonical disclaimer, not a hand-written string
     assert "not investment, tax, legal, or financial advice" in card["policy"]["posture"].lower()
+
+
+def test_mcp_server_card_is_profile_aware(monkeypatch: pytest.MonkeyPatch) -> None:
+    # demo profile advertises only the closed-world tools it actually exposes
+    monkeypatch.setenv("NEXUS_PUBLIC_MCP_PROFILE", "demo")
+    with _client() as client:
+        demo = client.get("/.well-known/mcp/server-card.json").json()
+    demo_instr = demo["instructions"].lower()
+    assert "demo profile" in demo_instr
+    assert "no live-vendor" in demo_instr
+
+    # full profile advertises the full tool domains
+    monkeypatch.setenv("NEXUS_PUBLIC_MCP_PROFILE", "full")
+    with _client() as client:
+        full = client.get("/.well-known/mcp/server-card.json").json()
+    full_instr = full["instructions"].lower()
+    assert "full profile" in full_instr
+    assert "regime" in full_instr and "market" in full_instr
 
 
 def test_api_catalog_rfc9727() -> None:
