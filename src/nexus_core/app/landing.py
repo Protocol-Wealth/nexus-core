@@ -222,4 +222,66 @@ def render_landing_markdown(*, mcp_enabled: bool) -> str:
     )
 
 
-__all__ = ["render_landing", "render_landing_markdown"]
+def _parse_accept(accept: str) -> list[tuple[str, str, float]]:
+    """Parse an ``Accept`` header into ``(type, subtype, q)`` triples (RFC 9110 §12.5.1)."""
+    ranges: list[tuple[str, str, float]] = []
+    for part in accept.split(","):
+        token = part.strip()
+        if not token:
+            continue
+        segments = token.split(";")
+        media = segments[0].strip().lower()
+        mtype, _, msub = media.partition("/") if "/" in media else (media, "", "*")
+        q = 1.0
+        for param in segments[1:]:
+            key, _, value = param.strip().partition("=")
+            if key.strip().lower() == "q":
+                try:
+                    q = float(value.strip())
+                except ValueError:
+                    q = 1.0
+        ranges.append((mtype.strip(), msub.strip() or "*", q))
+    return ranges
+
+
+def _match_q(ranges: list[tuple[str, str, float]], mtype: str, msub: str) -> tuple[float, int]:
+    """Best ``(q, specificity)`` for the media range matching ``mtype/msub``.
+
+    Specificity: ``2`` exact ``type/subtype``, ``1`` ``type/*``, ``0`` ``*/*``, ``-1`` no
+    match. The most specific matching range wins regardless of ``q`` (so a ``q=0`` on the
+    exact type rejects it even when a wildcard would accept it).
+    """
+    best_q, best_spec = 0.0, -1
+    for rtype, rsub, q in ranges:
+        if rtype == mtype and rsub == msub:
+            spec = 2
+        elif rtype == mtype and rsub == "*":
+            spec = 1
+        elif rtype == "*" and rsub == "*":
+            spec = 0
+        else:
+            continue
+        if spec > best_spec or (spec == best_spec and q > best_q):
+            best_q, best_spec = q, spec
+    return best_q, best_spec
+
+
+def accept_prefers_markdown(accept: str) -> bool:
+    """Whether an ``Accept`` header asks for ``text/markdown`` over the HTML default.
+
+    Honors RFC 9110 quality values: a ``q=0`` range rejects Markdown, and Markdown is
+    chosen only when it is at least as preferred as HTML *and* named more specifically
+    than a bare ``*/*`` — so a browser (or a plain ``*/*`` default from curl/agents) still
+    receives HTML.
+    """
+    if not accept:
+        return False
+    ranges = _parse_accept(accept)
+    q_md, spec_md = _match_q(ranges, "text", "markdown")
+    q_html, _ = _match_q(ranges, "text", "html")
+    if q_md <= 0 or spec_md < 1:
+        return False
+    return q_md >= q_html
+
+
+__all__ = ["accept_prefers_markdown", "render_landing", "render_landing_markdown"]

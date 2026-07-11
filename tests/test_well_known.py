@@ -189,6 +189,35 @@ def test_landing_markdown_in_accept_list() -> None:
     assert r.headers["content-type"].startswith("text/markdown")
 
 
+@pytest.mark.parametrize(
+    ("accept", "expected"),
+    [
+        ("text/markdown", True),
+        ("text/markdown, text/plain, */*", True),  # explicitly named, ties with */*
+        ("text/markdown;q=0.9, text/html;q=0.8", True),  # markdown preferred
+        ("*/*", False),  # curl / agent default -> HTML
+        ("", False),
+        ("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", False),  # browser
+        ("text/html, text/markdown;q=0.1", False),  # HTML preferred
+        ("text/markdown;q=0, text/html", False),  # markdown explicitly rejected
+        ("text/markdown;q=0", False),  # rejected, nothing else acceptable
+        ("application/json", False),
+    ],
+)
+def test_accept_prefers_markdown(accept: str, expected: bool) -> None:
+    from nexus_core.app.landing import accept_prefers_markdown
+
+    assert accept_prefers_markdown(accept) is expected
+
+
+def test_landing_rejects_markdown_qzero_serves_html() -> None:
+    # A client that explicitly rejects Markdown (q=0) must get HTML, not Markdown.
+    with _client() as client:
+        r = client.get("/", headers={"Accept": "text/markdown;q=0, text/html"})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+
+
 def test_mcp_server_card_has_description() -> None:
     with _client() as client:
         card = client.get("/.well-known/mcp/server-card.json").json()
