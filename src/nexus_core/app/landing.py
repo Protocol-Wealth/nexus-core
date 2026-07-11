@@ -166,4 +166,122 @@ def render_landing(*, mcp_enabled: bool) -> str:
     )
 
 
-__all__ = ["render_landing"]
+_MD_MCP_LINKS = (
+    "- MCP setup guide: https://nexusmcp.site/mcp-guide\n"
+    "- MCP Server Card: https://nexusmcp.site/.well-known/mcp/server-card.json\n"
+)
+
+_MD_MCP_ENDPOINT = (
+    "- `POST /mcp`: Model Context Protocol endpoint "
+    "(connect any MCP-compatible AI client)\n"
+)
+
+
+def render_landing_markdown(*, mcp_enabled: bool) -> str:
+    """Return a Markdown rendering of the landing page.
+
+    Served from ``GET /`` when a client negotiates ``Accept: text/markdown``
+    (agent-friendly content negotiation); HTML stays the default for browsers.
+    Mirrors the HTML landing's substance: what the service is, the public entry
+    points, the key endpoints, and the canonical disclaimer.
+
+    Args:
+        mcp_enabled: Whether the MCP HTTP transport is mounted; controls whether
+            the ``/mcp`` endpoint and its setup guide are advertised.
+    """
+    mcp_links = _MD_MCP_LINKS if mcp_enabled else ""
+    mcp_endpoint = _MD_MCP_ENDPOINT if mcp_enabled else ""
+    return (
+        "# Nexus Core\n\n"
+        "A regime-adaptive financial analysis engine, exposed as a public API and as "
+        "Model Context Protocol (MCP) tools. Market data, macro signals, options, DeFi "
+        "analytics, and PII-free planning math. Native MCP can run as a public demo "
+        "endpoint; production REST/JSON calculation paths can require a service API key. "
+        "Remote MCP clients may complete transparent OAuth with no login.\n\n"
+        "## Start here\n\n"
+        "- API documentation (interactive OpenAPI / Swagger): https://nexusmcp.site/docs\n"
+        "- OpenAPI schema (machine-readable contract): https://nexusmcp.site/openapi.json\n"
+        "- Agent site map: https://nexusmcp.site/llms.txt\n"
+        f"{mcp_links}"
+        f"- Source (Apache-2.0): {_REPO_URL}\n\n"
+        "## Endpoints\n\n"
+        "- `GET /api/regime`: current macro regime classification\n"
+        "- `GET /api/regime/signals`: raw regime signal readings\n"
+        "- `GET /api/market/quote/{symbol}`: latest quote (stocks, ETFs, indices, crypto)\n"
+        "- `GET /api/market/history/{symbol}`: OHLCV price history\n"
+        "- `GET /api/economic/{series_id}`: FRED economic series\n"
+        f"{mcp_endpoint}"
+        "\n## Public surface only\n\n"
+        "This deployment contains no client data, no account surfaces, no suitability "
+        "logic, and no advisory workflow state. Planning endpoints accept de-identified "
+        "inputs only.\n\n"
+        "---\n\n"
+        f"{_FULL_DISCLAIMER}\n\n"
+        f"Nexus Core v{__version__} | Apache-2.0 | Patent Pending USPTO #64/034,229 | "
+        "Built by Protocol Wealth, LLC (SEC-registered RIA, CRD #335298).\n"
+    )
+
+
+def _parse_accept(accept: str) -> list[tuple[str, str, float]]:
+    """Parse an ``Accept`` header into ``(type, subtype, q)`` triples (RFC 9110 §12.5.1)."""
+    ranges: list[tuple[str, str, float]] = []
+    for part in accept.split(","):
+        token = part.strip()
+        if not token:
+            continue
+        segments = token.split(";")
+        media = segments[0].strip().lower()
+        mtype, _, msub = media.partition("/") if "/" in media else (media, "", "*")
+        q = 1.0
+        for param in segments[1:]:
+            key, _, value = param.strip().partition("=")
+            if key.strip().lower() == "q":
+                try:
+                    q = float(value.strip())
+                except ValueError:
+                    q = 1.0
+        ranges.append((mtype.strip(), msub.strip() or "*", q))
+    return ranges
+
+
+def _match_q(ranges: list[tuple[str, str, float]], mtype: str, msub: str) -> tuple[float, int]:
+    """Best ``(q, specificity)`` for the media range matching ``mtype/msub``.
+
+    Specificity: ``2`` exact ``type/subtype``, ``1`` ``type/*``, ``0`` ``*/*``, ``-1`` no
+    match. The most specific matching range wins regardless of ``q`` (so a ``q=0`` on the
+    exact type rejects it even when a wildcard would accept it).
+    """
+    best_q, best_spec = 0.0, -1
+    for rtype, rsub, q in ranges:
+        if rtype == mtype and rsub == msub:
+            spec = 2
+        elif rtype == mtype and rsub == "*":
+            spec = 1
+        elif rtype == "*" and rsub == "*":
+            spec = 0
+        else:
+            continue
+        if spec > best_spec or (spec == best_spec and q > best_q):
+            best_q, best_spec = q, spec
+    return best_q, best_spec
+
+
+def accept_prefers_markdown(accept: str) -> bool:
+    """Whether an ``Accept`` header asks for ``text/markdown`` over the HTML default.
+
+    Honors RFC 9110 quality values: a ``q=0`` range rejects Markdown, and Markdown is
+    chosen only when it is at least as preferred as HTML *and* named more specifically
+    than a bare ``*/*`` — so a browser (or a plain ``*/*`` default from curl/agents) still
+    receives HTML.
+    """
+    if not accept:
+        return False
+    ranges = _parse_accept(accept)
+    q_md, spec_md = _match_q(ranges, "text", "markdown")
+    q_html, _ = _match_q(ranges, "text", "html")
+    if q_md <= 0 or spec_md < 1:
+        return False
+    return q_md >= q_html
+
+
+__all__ = ["accept_prefers_markdown", "render_landing", "render_landing_markdown"]

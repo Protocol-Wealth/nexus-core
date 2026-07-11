@@ -154,3 +154,74 @@ def test_landing_advertises_link_header() -> None:
         r = client.get("/")
     assert r.status_code == 200
     assert 'rel="api-catalog"' in r.headers.get("link", "")
+
+
+def test_landing_html_is_default() -> None:
+    # Browsers (Accept: */*) and anything not asking for Markdown get HTML.
+    with _client() as client:
+        r = client.get("/")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    assert "<!DOCTYPE html>" in r.text
+    assert "accept" in r.headers.get("vary", "").lower()  # negotiated -> Vary: Accept
+
+
+def test_landing_markdown_negotiation() -> None:
+    # Agents that send `Accept: text/markdown` get a Markdown rendering.
+    with _client() as client:
+        r = client.get("/", headers={"Accept": "text/markdown"})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/markdown")
+    assert "accept" in r.headers.get("vary", "").lower()
+    assert 'rel="api-catalog"' in r.headers.get("link", "")  # discovery header still set
+    body = r.text
+    assert body.startswith("# Nexus Core")
+    assert "/api/regime" in body
+    # Canonical disclaimer travels with the Markdown surface too.
+    assert "not investment, tax, legal, or financial advice" in body.lower()
+
+
+def test_landing_markdown_in_accept_list() -> None:
+    # A ranked Accept list that includes text/markdown still negotiates Markdown.
+    with _client() as client:
+        r = client.get("/", headers={"Accept": "text/markdown, text/plain, */*"})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/markdown")
+
+
+@pytest.mark.parametrize(
+    ("accept", "expected"),
+    [
+        ("text/markdown", True),
+        ("text/markdown, text/plain, */*", True),  # explicitly named, ties with */*
+        ("text/markdown;q=0.9, text/html;q=0.8", True),  # markdown preferred
+        ("*/*", False),  # curl / agent default -> HTML
+        ("", False),
+        ("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", False),  # browser
+        ("text/html, text/markdown;q=0.1", False),  # HTML preferred
+        ("text/markdown;q=0, text/html", False),  # markdown explicitly rejected
+        ("text/markdown;q=0", False),  # rejected, nothing else acceptable
+        ("application/json", False),
+    ],
+)
+def test_accept_prefers_markdown(accept: str, expected: bool) -> None:
+    from nexus_core.app.landing import accept_prefers_markdown
+
+    assert accept_prefers_markdown(accept) is expected
+
+
+def test_landing_rejects_markdown_qzero_serves_html() -> None:
+    # A client that explicitly rejects Markdown (q=0) must get HTML, not Markdown.
+    with _client() as client:
+        r = client.get("/", headers={"Accept": "text/markdown;q=0, text/html"})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+
+
+def test_mcp_server_card_has_description() -> None:
+    with _client() as client:
+        card = client.get("/.well-known/mcp/server-card.json").json()
+    desc = card["serverInfo"]["description"]
+    assert isinstance(desc, str) and desc
+    assert "regime-adaptive" in desc.lower()
+    assert "no client data" in desc.lower()

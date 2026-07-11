@@ -26,6 +26,20 @@ _PROVIDER = {
     "registration": "SEC-registered investment adviser, CRD #335298",
 }
 
+#: Stable, profile-agnostic one-line summary of the engine for ``serverInfo``.
+#: Describes what the engine *is* (its analytical domains) without asserting that
+#: any given domain is exposed on this MCP transport — the profile-aware
+#: ``instructions`` field and ``tools/list`` are authoritative on the actual tool
+#: set, so this must not overclaim MCP exposure (e.g. the demo profile exposes
+#: only option/collar/health/describe).
+_SERVER_DESCRIPTION = (
+    "Regime-adaptive financial-analysis engine: macro-regime classification, market "
+    "and economic data, options analytics, and de-identified planning math. Public "
+    "educational endpoint, informational only: no advice, no trade execution, and no "
+    "client data. The tools this transport actually exposes are given in the "
+    "instructions field and by tools/list."
+)
+
 _POLICY = {
     "posture": _TERSE,
     "data": (
@@ -101,6 +115,7 @@ def render_mcp_server_card() -> dict[str, Any]:
             "name": "nexus-core",
             "title": "Protocol Wealth — Nexus Core (public MCP)",
             "version": __version__,
+            "description": _SERVER_DESCRIPTION,
         },
         "capabilities": {"tools": {"listChanged": False}},
         "instructions": (
