@@ -30,7 +30,7 @@ import logging
 import os
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
@@ -70,7 +70,7 @@ from .agent_discovery import (
 from .benchmarks import build_benchmarks_router
 from .chain import build_chain_router
 from .disclosure import render_disclosure_card
-from .landing import render_landing
+from .landing import render_landing, render_landing_markdown
 from .llms_txt import render_llms_txt
 from .lp import build_lp_router
 from .mcp_guide import render_mcp_guide
@@ -297,12 +297,22 @@ def create_app(
 
     mcp_enabled = mcp_app is not None
 
-    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-    def landing() -> HTMLResponse:
+    @app.get("/", include_in_schema=False)
+    def landing(request: Request) -> Response:
         # Advertise the agent-discovery resources via an RFC 8288 Link header.
+        # Content-negotiated: agents that send `Accept: text/markdown` get a
+        # Markdown rendering; browsers (and anything else) get HTML. `Vary:
+        # Accept` keeps the Cloudflare edge from serving one to the other.
+        headers = {"Link": api_catalog_link_header(), "Vary": "Accept"}
+        if "text/markdown" in request.headers.get("accept", "").lower():
+            return PlainTextResponse(
+                render_landing_markdown(mcp_enabled=mcp_enabled),
+                media_type="text/markdown; charset=utf-8",
+                headers=headers,
+            )
         return HTMLResponse(
             render_landing(mcp_enabled=mcp_enabled),
-            headers={"Link": api_catalog_link_header()},
+            headers=headers,
         )
 
     @app.get("/mcp-guide", response_class=HTMLResponse, include_in_schema=False)

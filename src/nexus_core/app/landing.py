@@ -166,4 +166,60 @@ def render_landing(*, mcp_enabled: bool) -> str:
     )
 
 
-__all__ = ["render_landing"]
+_MD_MCP_LINKS = (
+    "- MCP setup guide: https://nexusmcp.site/mcp-guide\n"
+    "- MCP Server Card: https://nexusmcp.site/.well-known/mcp/server-card.json\n"
+)
+
+_MD_MCP_ENDPOINT = (
+    "- `POST /mcp`: Model Context Protocol endpoint "
+    "(connect any MCP-compatible AI client)\n"
+)
+
+
+def render_landing_markdown(*, mcp_enabled: bool) -> str:
+    """Return a Markdown rendering of the landing page.
+
+    Served from ``GET /`` when a client negotiates ``Accept: text/markdown``
+    (agent-friendly content negotiation); HTML stays the default for browsers.
+    Mirrors the HTML landing's substance: what the service is, the public entry
+    points, the key endpoints, and the canonical disclaimer.
+
+    Args:
+        mcp_enabled: Whether the MCP HTTP transport is mounted; controls whether
+            the ``/mcp`` endpoint and its setup guide are advertised.
+    """
+    mcp_links = _MD_MCP_LINKS if mcp_enabled else ""
+    mcp_endpoint = _MD_MCP_ENDPOINT if mcp_enabled else ""
+    return (
+        "# Nexus Core\n\n"
+        "A regime-adaptive financial analysis engine, exposed as a public API and as "
+        "Model Context Protocol (MCP) tools. Market data, macro signals, options, DeFi "
+        "analytics, and PII-free planning math. Native MCP can run as a public demo "
+        "endpoint; production REST/JSON calculation paths can require a service API key. "
+        "Remote MCP clients may complete transparent OAuth with no login.\n\n"
+        "## Start here\n\n"
+        "- API documentation (interactive OpenAPI / Swagger): https://nexusmcp.site/docs\n"
+        "- OpenAPI schema (machine-readable contract): https://nexusmcp.site/openapi.json\n"
+        "- Agent site map: https://nexusmcp.site/llms.txt\n"
+        f"{mcp_links}"
+        f"- Source (Apache-2.0): {_REPO_URL}\n\n"
+        "## Endpoints\n\n"
+        "- `GET /api/regime`: current macro regime classification\n"
+        "- `GET /api/regime/signals`: raw regime signal readings\n"
+        "- `GET /api/market/quote/{symbol}`: latest quote (stocks, ETFs, indices, crypto)\n"
+        "- `GET /api/market/history/{symbol}`: OHLCV price history\n"
+        "- `GET /api/economic/{series_id}`: FRED economic series\n"
+        f"{mcp_endpoint}"
+        "\n## Public surface only\n\n"
+        "This deployment contains no client data, no account surfaces, no suitability "
+        "logic, and no advisory workflow state. Planning endpoints accept de-identified "
+        "inputs only.\n\n"
+        "---\n\n"
+        f"{_FULL_DISCLAIMER}\n\n"
+        f"Nexus Core v{__version__} | Apache-2.0 | Patent Pending USPTO #64/034,229 | "
+        "Built by Protocol Wealth, LLC (SEC-registered RIA, CRD #335298).\n"
+    )
+
+
+__all__ = ["render_landing", "render_landing_markdown"]
