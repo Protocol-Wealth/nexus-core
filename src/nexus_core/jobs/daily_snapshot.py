@@ -70,27 +70,29 @@ async def run_regime_snapshot(engine: RegimeEngine) -> dict[str, object]:
 
     # REFUSE TO PERSIST A FABRICATED CALL.
     #
-    # SignalFetcher resolves each macro signal as `self._fetch_x() or self.default_x`
-    # — so with no FRED key it silently substitutes NEUTRAL PRIORS (real_rates=1.5,
-    # dxy=100.0, vix=20.0, credit_spreads=150.0) instead of raising. On the SERVING
-    # path that is a documented, acceptable degradation: a caller gets a lower-precision
-    # answer now and can ask again later.
+    # SignalFetcher resolves each reading as `fetched or default` — a provider outage,
+    # an unreachable upstream, or a key that is present but INVALID / EXPIRED /
+    # RATE-LIMITED all silently yield neutral priors (real_rates=1.5, dxy=100.0,
+    # vix=20.0, credit_spreads=150.0, and defaults for the gold/SPX anchor itself)
+    # rather than an error. On the SERVING path that is deliberate: a caller gets a
+    # lower-precision answer now and can ask again later.
     #
     # On THIS path it is not. A defaulted row would be written as though it were an
     # observation, fed back as tomorrow's `prior_regime` through the anchor hysteresis,
-    # and become part of the permanent record that every future accuracy, transition and
-    # calibration measure is derived from. Three of the five signals would be invented.
-    # A history that is silently fabricated is strictly worse than no history — it can't
-    # be distinguished from a real one after the fact, and it is the thing this table
-    # exists to make measurable.
+    # and become part of the permanent record every future accuracy, transition-hit-rate
+    # and calibration measure is derived from. A silently fabricated history is strictly
+    # worse than no history: after the fact it cannot be told apart from a real one, and
+    # measurability is the whole reason this table exists.
     #
-    # So: fail loudly, exit non-zero, let the scheduler retry. Never write a guess.
-    macro = engine.fetcher.macro
-    if macro is None or not macro.is_configured():
+    # Checking that a key is CONFIGURED is not sufficient — an expired key produces a
+    # complete set of invented readings with no error. So we check the READINGS.
+    signals, defaulted = engine.fetcher.fetch_checked()
+    if defaulted:
         raise RuntimeError(
-            "Macro provider is not configured (FRED_API_KEY) — refusing to persist a "
-            "regime call computed from default priors. The serving path may degrade; "
-            "the historical record must not."
+            "Refusing to persist a regime call: these decision-critical signals fell "
+            f"back to defaults rather than being observed: {sorted(defaulted)}. "
+            "Check FRED_API_KEY (valid, not rate-limited) and market-data reachability. "
+            "The serving path may degrade; the historical record must not."
         )
 
     # Feed yesterday's stored call back in as the prior. The anchor hysteresis is
@@ -100,7 +102,7 @@ async def run_regime_snapshot(engine: RegimeEngine) -> dict[str, object]:
     previous = await read_regime_history(limit=1)
     prior_regime = previous[-1]["regime"] if previous else None
 
-    result = engine.classify(prior_regime=prior_regime).to_dict()
+    result = engine.classify(signals, prior_regime=prior_regime).to_dict()
     snapshot_date = datetime.now(UTC).date().isoformat()
     await write_regime_snapshot(
         snapshot_date,

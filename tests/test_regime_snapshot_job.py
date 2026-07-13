@@ -17,28 +17,30 @@ from nexus_core.engine.regime.signals import RegimeResult, RegimeSignals, Signal
 from nexus_core.jobs import daily_snapshot
 
 
-class _StubMacro:
-    def __init__(self, configured: bool = True) -> None:
-        self._configured = configured
-
-    def is_configured(self) -> bool:
-        return self._configured
-
-
 class _StubFetcher:
-    def __init__(self, macro: _StubMacro | None) -> None:
-        self.macro = macro
+    """Stands in for SignalFetcher — reports which readings fell back to defaults."""
+
+    def __init__(self, signals: RegimeSignals, defaulted: frozenset[str]) -> None:
+        self._signals = signals
+        self._defaulted = defaulted
+
+    def fetch_checked(self) -> tuple[RegimeSignals, frozenset[str]]:
+        return self._signals, self._defaulted
 
 
 class _StubEngine:
     """Stands in for RegimeEngine — classify() returns a fixed result."""
 
-    def __init__(self, result: RegimeResult, *, macro: _StubMacro | None = None) -> None:
+    def __init__(self, result: RegimeResult, *, defaulted: frozenset[str] = frozenset()) -> None:
         self._result = result
         self.seen_prior: str | None = None
-        self.fetcher = _StubFetcher(macro if macro is not None else _StubMacro(True))
+        self.seen_signals: RegimeSignals | None = None
+        self.fetcher = _StubFetcher(result.signals, defaulted)
 
-    def classify(self, *, prior_regime: str | None = None) -> RegimeResult:
+    def classify(
+        self, signals: RegimeSignals | None = None, *, prior_regime: str | None = None
+    ) -> RegimeResult:
+        self.seen_signals = signals
         self.seen_prior = prior_regime
         return self._result
 
@@ -110,14 +112,31 @@ def test_run_regime_snapshot_no_db_raises(monkeypatch: pytest.MonkeyPatch) -> No
         asyncio.run(daily_snapshot.run_regime_snapshot(_StubEngine(_result())))  # type: ignore[arg-type]
 
 
-def test_unconfigured_macro_refuses_to_write(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Never persist a regime computed from default priors.
+@pytest.mark.parametrize(
+    "defaulted",
+    [
+        frozenset({"gold_spx_ratio"}),  # the anchor — the signal that DECIDES the regime
+        frozenset({"real_rates"}),  # the REPRESSION override
+        frozenset({"vix"}),  # the DEFLATION override
+        frozenset({"credit_spreads"}),  # the other half of the DEFLATION override
+        frozenset({"dxy"}),  # confidence-only, but still part of the stored record
+        frozenset({"real_rates", "vix", "credit_spreads"}),  # a dead FRED key
+    ],
+)
+def test_defaulted_reading_refuses_to_write(
+    monkeypatch: pytest.MonkeyPatch, defaulted: frozenset[str]
+) -> None:
+    """Never persist a regime computed from a reading that was not actually observed.
 
-    SignalFetcher resolves macro signals as ``_fetch_x() or default_x``, so a missing
-    FRED key does NOT raise — it silently substitutes neutral priors. On the serving
-    path that is an acceptable degradation. Here it would write an invented row as an
-    observation, feed it back as tomorrow's prior through the anchor hysteresis, and
-    poison the record that every accuracy measure is derived from. Fail loudly instead.
+    This is the failure Codex flagged (P1, #246) and it is the one that matters: a
+    FRED key that is PRESENT BUT INVALID, expired, or rate-limited produces a full set
+    of fabricated readings with NO error, so checking `is_configured()` catches nothing.
+    Same for an unreachable market provider — which defaults the gold/SPX anchor itself,
+    the one signal that selects the base regime.
+
+    A defaulted row would be written as an observation, fed back as tomorrow's prior
+    through the anchor hysteresis, and become part of the permanent record every
+    accuracy measure is derived from. Fail loudly; let the scheduler retry.
     """
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg:///x?host=/cloudsql/y")
 
@@ -129,8 +148,29 @@ def test_unconfigured_macro_refuses_to_write(monkeypatch: pytest.MonkeyPatch) ->
 
     monkeypatch.setattr(daily_snapshot, "write_regime_snapshot", fake_write)
 
-    engine = _StubEngine(_result(), macro=_StubMacro(configured=False))
-    with pytest.raises(RuntimeError, match="FRED_API_KEY"):
+    engine = _StubEngine(_result(), defaulted=defaulted)
+    with pytest.raises(RuntimeError, match="Refusing to persist"):
         asyncio.run(daily_snapshot.run_regime_snapshot(engine))  # type: ignore[arg-type]
 
     assert wrote is False, "a defaulted regime call must never reach the history table"
+
+
+def test_observed_readings_are_the_ones_classified(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The job classifies the signals it verified — not a second, unchecked fetch."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg:///x?host=/cloudsql/y")
+
+    async def fake_write(snapshot_date: str, **kwargs: Any) -> None:
+        return None
+
+    async def fake_read(limit: int = 1) -> list[dict[str, Any]]:
+        return []
+
+    monkeypatch.setattr(daily_snapshot, "write_regime_snapshot", fake_write)
+    monkeypatch.setattr(daily_snapshot, "read_regime_history", fake_read)
+
+    engine = _StubEngine(_result())
+    asyncio.run(daily_snapshot.run_regime_snapshot(engine))  # type: ignore[arg-type]
+
+    # Checking one set of readings and then classifying a different (re-fetched) set
+    # would reintroduce the whole bug.
+    assert engine.seen_signals is engine.fetcher.fetch_checked()[0]
