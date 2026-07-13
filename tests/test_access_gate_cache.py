@@ -13,14 +13,9 @@ released against a credential.
 
 from __future__ import annotations
 
-import hashlib
-
 import pytest
 
 from nexus_core.app.access_gate import _privatize_cache_control
-
-_KEY = "test-key"
-_DIGEST = hashlib.sha256(_KEY.encode()).hexdigest()
 
 
 def _headers(msg: dict[str, object]) -> dict[bytes, bytes]:
