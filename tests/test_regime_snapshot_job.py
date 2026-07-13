@@ -17,12 +17,26 @@ from nexus_core.engine.regime.signals import RegimeResult, RegimeSignals, Signal
 from nexus_core.jobs import daily_snapshot
 
 
+class _StubMacro:
+    def __init__(self, configured: bool = True) -> None:
+        self._configured = configured
+
+    def is_configured(self) -> bool:
+        return self._configured
+
+
+class _StubFetcher:
+    def __init__(self, macro: _StubMacro | None) -> None:
+        self.macro = macro
+
+
 class _StubEngine:
     """Stands in for RegimeEngine — classify() returns a fixed result."""
 
-    def __init__(self, result: RegimeResult) -> None:
+    def __init__(self, result: RegimeResult, *, macro: _StubMacro | None = None) -> None:
         self._result = result
         self.seen_prior: str | None = None
+        self.fetcher = _StubFetcher(macro if macro is not None else _StubMacro(True))
 
     def classify(self, *, prior_regime: str | None = None) -> RegimeResult:
         self.seen_prior = prior_regime
@@ -94,3 +108,29 @@ def test_run_regime_snapshot_no_db_raises(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.delenv("DATABASE_URL", raising=False)
     with pytest.raises(RuntimeError, match="DATABASE_URL"):
         asyncio.run(daily_snapshot.run_regime_snapshot(_StubEngine(_result())))  # type: ignore[arg-type]
+
+
+def test_unconfigured_macro_refuses_to_write(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Never persist a regime computed from default priors.
+
+    SignalFetcher resolves macro signals as ``_fetch_x() or default_x``, so a missing
+    FRED key does NOT raise — it silently substitutes neutral priors. On the serving
+    path that is an acceptable degradation. Here it would write an invented row as an
+    observation, feed it back as tomorrow's prior through the anchor hysteresis, and
+    poison the record that every accuracy measure is derived from. Fail loudly instead.
+    """
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg:///x?host=/cloudsql/y")
+
+    wrote = False
+
+    async def fake_write(snapshot_date: str, **kwargs: Any) -> None:
+        nonlocal wrote
+        wrote = True
+
+    monkeypatch.setattr(daily_snapshot, "write_regime_snapshot", fake_write)
+
+    engine = _StubEngine(_result(), macro=_StubMacro(configured=False))
+    with pytest.raises(RuntimeError, match="FRED_API_KEY"):
+        asyncio.run(daily_snapshot.run_regime_snapshot(engine))  # type: ignore[arg-type]
+
+    assert wrote is False, "a defaulted regime call must never reach the history table"

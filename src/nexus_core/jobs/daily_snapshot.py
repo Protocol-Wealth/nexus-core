@@ -62,10 +62,36 @@ async def run_regime_snapshot(engine: RegimeEngine) -> dict[str, object]:
     returns, transition hit-rate, agreement-score calibration) is measured
     against, so a day lost here is not recoverable later.
 
-    Raises ``RuntimeError`` if the DB is unconfigured (so the day is retried).
+    Raises ``RuntimeError`` if the DB or the macro provider is unconfigured, so
+    the day is retried rather than recorded wrong (see below).
     """
     if not db.is_configured():
         raise RuntimeError("DATABASE_URL is not configured")
+
+    # REFUSE TO PERSIST A FABRICATED CALL.
+    #
+    # SignalFetcher resolves each macro signal as `self._fetch_x() or self.default_x`
+    # — so with no FRED key it silently substitutes NEUTRAL PRIORS (real_rates=1.5,
+    # dxy=100.0, vix=20.0, credit_spreads=150.0) instead of raising. On the SERVING
+    # path that is a documented, acceptable degradation: a caller gets a lower-precision
+    # answer now and can ask again later.
+    #
+    # On THIS path it is not. A defaulted row would be written as though it were an
+    # observation, fed back as tomorrow's `prior_regime` through the anchor hysteresis,
+    # and become part of the permanent record that every future accuracy, transition and
+    # calibration measure is derived from. Three of the five signals would be invented.
+    # A history that is silently fabricated is strictly worse than no history — it can't
+    # be distinguished from a real one after the fact, and it is the thing this table
+    # exists to make measurable.
+    #
+    # So: fail loudly, exit non-zero, let the scheduler retry. Never write a guess.
+    macro = engine.fetcher.macro
+    if macro is None or not macro.is_configured():
+        raise RuntimeError(
+            "Macro provider is not configured (FRED_API_KEY) — refusing to persist a "
+            "regime call computed from default priors. The serving path may degrade; "
+            "the historical record must not."
+        )
 
     # Feed yesterday's stored call back in as the prior. The anchor hysteresis is
     # only meaningful against a real prior regime, and the engine's in-process
