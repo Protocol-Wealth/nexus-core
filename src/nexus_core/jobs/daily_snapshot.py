@@ -128,6 +128,18 @@ def run() -> int:
     both writes upsert on the day, so a retry is safe.
     """
     logging.basicConfig(level=logging.INFO)
+
+    # httpx logs the FULL request URL at INFO ("HTTP Request: GET <url> ..."), and
+    # some upstreams take their credential in the QUERY STRING rather than a header.
+    # basicConfig(INFO) above raises the ROOT level, which switches that logging on —
+    # so the job must pin httpx back down or it writes provider keys into the log
+    # sink. (The web service is unaffected: uvicorn's log config leaves httpx at
+    # WARNING. This is specific to a CLI/job entrypoint raising the root level.)
+    # Nothing of ours is lost: our own INFO lines still emit, and a failed request
+    # still surfaces at WARNING/ERROR.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
     exit_code = 0
 
     try:
