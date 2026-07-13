@@ -62,10 +62,38 @@ async def run_regime_snapshot(engine: RegimeEngine) -> dict[str, object]:
     returns, transition hit-rate, agreement-score calibration) is measured
     against, so a day lost here is not recoverable later.
 
-    Raises ``RuntimeError`` if the DB is unconfigured (so the day is retried).
+    Raises ``RuntimeError`` if the DB or the macro provider is unconfigured, so
+    the day is retried rather than recorded wrong (see below).
     """
     if not db.is_configured():
         raise RuntimeError("DATABASE_URL is not configured")
+
+    # REFUSE TO PERSIST A FABRICATED CALL.
+    #
+    # SignalFetcher resolves each reading as `fetched or default` — a provider outage,
+    # an unreachable upstream, or a key that is present but INVALID / EXPIRED /
+    # RATE-LIMITED all silently yield neutral priors (real_rates=1.5, dxy=100.0,
+    # vix=20.0, credit_spreads=150.0, and defaults for the gold/SPX anchor itself)
+    # rather than an error. On the SERVING path that is deliberate: a caller gets a
+    # lower-precision answer now and can ask again later.
+    #
+    # On THIS path it is not. A defaulted row would be written as though it were an
+    # observation, fed back as tomorrow's `prior_regime` through the anchor hysteresis,
+    # and become part of the permanent record every future accuracy, transition-hit-rate
+    # and calibration measure is derived from. A silently fabricated history is strictly
+    # worse than no history: after the fact it cannot be told apart from a real one, and
+    # measurability is the whole reason this table exists.
+    #
+    # Checking that a key is CONFIGURED is not sufficient — an expired key produces a
+    # complete set of invented readings with no error. So we check the READINGS.
+    signals, defaulted = engine.fetcher.fetch_checked()
+    if defaulted:
+        raise RuntimeError(
+            "Refusing to persist a regime call: these decision-critical signals fell "
+            f"back to defaults rather than being observed: {sorted(defaulted)}. "
+            "Check FRED_API_KEY (valid, not rate-limited) and market-data reachability. "
+            "The serving path may degrade; the historical record must not."
+        )
 
     # Feed yesterday's stored call back in as the prior. The anchor hysteresis is
     # only meaningful against a real prior regime, and the engine's in-process
@@ -74,7 +102,7 @@ async def run_regime_snapshot(engine: RegimeEngine) -> dict[str, object]:
     previous = await read_regime_history(limit=1)
     prior_regime = previous[-1]["regime"] if previous else None
 
-    result = engine.classify(prior_regime=prior_regime).to_dict()
+    result = engine.classify(signals, prior_regime=prior_regime).to_dict()
     snapshot_date = datetime.now(UTC).date().isoformat()
     await write_regime_snapshot(
         snapshot_date,

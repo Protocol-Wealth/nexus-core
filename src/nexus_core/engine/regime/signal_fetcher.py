@@ -97,9 +97,48 @@ class SignalFetcher:
 
         This is a convenience wrapper — for more control, call the individual
         ``fetch_*`` methods and build ``RegimeSignals`` yourself.
+
+        Readings that fail to resolve fall back to neutral defaults rather than
+        raising. Callers that PERSIST the resulting classification must use
+        :meth:`fetch_checked` instead — see its docstring for why.
         """
-        gold = self._fetch_gold_price() or self.default_gold
-        spx = self._fetch_spx_price() or self.default_spx
+        signals, _ = self.fetch_checked()
+        return signals
+
+    def fetch_checked(self) -> tuple[RegimeSignals, frozenset[str]]:
+        """Fetch all signals, reporting which decision-critical ones were DEFAULTED.
+
+        Every reading here resolves as ``fetched or default``: a provider outage, an
+        expired or rate-limited key, or an unreachable upstream silently yields a
+        neutral prior instead of an error. On the serving path that is deliberate and
+        documented — a caller gets a lower-precision answer now and can ask again.
+
+        A caller that WRITES the classification down needs to know the difference,
+        because a defaulted reading is an invented one. Checking that an API key is
+        configured is not enough: a key that is present but invalid, expired, or
+        rate-limited still produces a full set of fabricated readings with no error.
+        The only sound check is on the readings themselves.
+
+        Returns the signals plus the names of the DECISION-CRITICAL fields that fell
+        back — the Gold/SPX anchor (which alone selects the base regime) and the four
+        readings the crisis overrides and the confidence score are computed from.
+        An empty set means every field that can change the call was really observed.
+
+        (Fallback is triggered by a falsy value, matching the historical ``or``
+        semantics exactly — so a real ``real_rates`` of precisely 0.0 is reported as
+        defaulted. Preserved deliberately: correcting it would change classification
+        behavior, which is CIO-owned and not this method's business.)
+        """
+        defaulted: set[str] = set()
+
+        raw_gold = self._fetch_gold_price()
+        raw_spx = self._fetch_spx_price()
+        # The anchor. If either leg is missing, the ratio that DECIDES the regime is
+        # synthetic — nothing downstream can be trusted, so name it explicitly.
+        if not raw_gold or not raw_spx:
+            defaulted.add("gold_spx_ratio")
+        gold = raw_gold or self.default_gold
+        spx = raw_spx or self.default_spx
         gold_spx_ratio = gold / spx if spx > 0 else 0.45
         gold_spx_200wma = self.default_gold_spx_200wma
 
@@ -110,17 +149,30 @@ class SignalFetcher:
         else:
             vs_wma = "testing"
 
+        raw_real_rates = self._fetch_real_rates()
+        raw_dxy = self._fetch_dxy()
+        raw_vix = self._fetch_vix()
+        raw_spreads = self._fetch_credit_spreads()
+        for name, raw in (
+            ("real_rates", raw_real_rates),
+            ("dxy", raw_dxy),
+            ("vix", raw_vix),
+            ("credit_spreads", raw_spreads),
+        ):
+            if not raw:
+                defaulted.add(name)
+
         bond_futures = self._fetch_bond_futures_30y()
         yield_curve_spread, yield_curve_status = self._fetch_yield_curve_slope()
 
-        return RegimeSignals(
+        signals = RegimeSignals(
             gold_spx_ratio=round(gold_spx_ratio, 4),
             gold_spx_200wma=round(gold_spx_200wma, 4),
             gold_spx_vs_wma=vs_wma,
-            real_rates=self._fetch_real_rates() or self.default_real_rates,
-            dxy=self._fetch_dxy() or self.default_dxy,
-            vix=self._fetch_vix() or self.default_vix,
-            credit_spreads=self._fetch_credit_spreads() or self.default_credit_spreads,
+            real_rates=raw_real_rates or self.default_real_rates,
+            dxy=raw_dxy or self.default_dxy,
+            vix=raw_vix or self.default_vix,
+            credit_spreads=raw_spreads or self.default_credit_spreads,
             hy_credit_spreads=self._fetch_hy_credit_spreads(),
             breadth=self._fetch_breadth(),
             precious_metals_signal=self._fetch_precious_metals_signal(),
@@ -131,6 +183,7 @@ class SignalFetcher:
             yield_curve_status=yield_curve_status,
             timestamp=datetime.now(UTC),
         )
+        return signals, frozenset(defaulted)
 
     # ---------------------------------------------------------------- per-signal
 
