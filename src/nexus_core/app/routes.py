@@ -11,12 +11,14 @@ providers (yfinance, ``httpx``) are blocking.
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Path, Query, Response
 
 from .. import __version__
+from ..data import db
 from ..data.providers import MacroDataProvider, MarketDataProvider
+from ..data.regime_history import read_regime_history
 from ..disclaimers import TERSE, with_disclaimer
 from ..engine.regime import RegimeEngine
 
@@ -66,6 +68,31 @@ def build_router(
         """Return the raw signal readings feeding regime classification."""
         response.headers["Cache-Control"] = f"public, max-age={_REGIME_TTL}"
         return with_disclaimer(engine.fetch_signals().to_dict())
+
+    @router.get(
+        "/api/regime/history",
+        tags=["regime"],
+        summary="Persisted daily regime classifications",
+    )
+    async def get_regime_history(
+        response: Response,
+        days: Annotated[int, Query(ge=1, le=3650, description="Max stored days")] = 365,
+    ) -> dict[str, Any]:
+        """Stored daily regime calls, oldest first.
+
+        The classification is otherwise computed and discarded, so this history
+        is what makes the framework measurable at all: regime-conditional
+        realized returns, transition hit-rate, and calibration of the agreement
+        score are all derived from these rows. Written once a day by the
+        ``nexus-core snapshot`` Cloud Run Job — there is no public write path.
+        """
+        if not db.is_configured():
+            raise HTTPException(
+                status_code=503, detail="History unavailable: DATABASE_URL not configured"
+            )
+        rows = await read_regime_history(limit=days)
+        response.headers["Cache-Control"] = f"public, max-age={_REGIME_TTL}"
+        return with_disclaimer({"days": len(rows), "history": rows})
 
     @router.get(
         "/api/market/quote/{symbol}",

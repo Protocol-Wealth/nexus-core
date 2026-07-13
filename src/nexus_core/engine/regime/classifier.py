@@ -3,8 +3,9 @@
 """Regime classifier — pure function from signals to regime code.
 
 Given a ``RegimeSignals`` instance and configured thresholds, classify each
-signal and return a ``RegimeResult`` with the majority-supported regime,
-confidence score, and per-signal explainability data.
+signal and return a ``RegimeResult``. The regime is NOT a majority vote: the
+Gold/SPX anchor selects the base state (with a hysteresis band against the prior
+call) and two crisis conditions can override it.
 
 The classifier is intentionally a small pure module — it doesn't fetch data,
 doesn't persist state (aside from the injected hysteresis state), and doesn't
@@ -81,14 +82,11 @@ class RegimeClassifier:
         """
         signal_statuses = self._classify_signals(signals, prediction_market)
 
-        # Primary classification: Gold/SPX ratio is the anchor signal.
+        # Primary classification: Gold/SPX ratio is the anchor signal. Sticky in
+        # the direction of `prior_regime` (see _anchor_regime) so noise around a
+        # cutoff cannot flip the published regime day to day.
         t = self.thresholds
-        if signals.gold_spx_ratio < t.gold_spx_growth_max:
-            primary = RegimeCode.GROWTH
-        elif signals.gold_spx_ratio < t.gold_spx_transition_max:
-            primary = RegimeCode.TRANSITION
-        else:
-            primary = RegimeCode.HARD_ASSET
+        primary = self._anchor_regime(signals.gold_spx_ratio, prior_regime)
 
         # Crisis overrides — sustained stress trumps the gold/SPX reading.
         if signals.vix > t.vix_crisis and signals.credit_spreads > t.spreads_wide_max:
@@ -97,7 +95,7 @@ class RegimeClassifier:
             primary = RegimeCode.REPRESSION
 
         # Confidence: how many of the classified signals agree with primary?
-        confidence = self._confidence(signal_statuses, primary)
+        confidence = self._confidence(signal_statuses, primary, signals)
 
         rationale = self._build_rationale(signal_statuses, primary)
 
@@ -296,9 +294,36 @@ class RegimeClassifier:
 
         return statuses
 
-    @staticmethod
-    def _confidence(statuses: list[SignalStatus], regime: RegimeCode) -> int:
-        """Confidence 0-100 based on signal agreement with the regime."""
+    def _confidence(
+        self,
+        statuses: list[SignalStatus],
+        regime: RegimeCode,
+        signals: RegimeSignals,
+    ) -> int:
+        """Conviction 0-100 in the classification.
+
+        Two paths, because the regime is reached two different ways and scoring
+        both by "signal agreement" was incoherent:
+
+        * **Anchor regimes** (GROWTH / TRANSITION / HARD_ASSET) — how many signal
+          rows point the same way as the call, plus a bonus when the anchor
+          itself agrees. Agreement is the right notion here.
+
+        * **Override regimes** (DEFLATION / REPRESSION) — scored by the MARGIN of
+          the condition that fired, not by agreement. The old formula scored
+          these by anchor agreement too, but the anchor can only ever support
+          GROWTH, TRANSITION or HARD_ASSET — so a crisis call could never earn
+          the bonus and few rows could support it. The ceiling was ~33 for
+          DEFLATION and ~16 for REPRESSION: the engine reported its most severe
+          calls with its lowest conviction numbers. An override firing at all is
+          already a strong statement, so it floors at 60 and rises with how far
+          past the thresholds the readings actually are.
+
+        Still a conviction score, not a calibrated probability — calibrating it
+        against outcomes is what ``regime_history`` now makes possible.
+        """
+        if regime in (RegimeCode.DEFLATION, RegimeCode.REPRESSION):
+            return self._override_confidence(regime, signals)
         if not statuses:
             return 50
         supporting = sum(1 for s in statuses if s.supports_regime == regime.value)
@@ -309,6 +334,58 @@ class RegimeClassifier:
         if gold_spx and gold_spx.supports_regime == regime.value:
             base = min(100, base + 15)
         return max(0, min(100, base))
+
+    def _override_confidence(self, regime: RegimeCode, s: RegimeSignals) -> int:
+        """Conviction for an override regime, from how far past its thresholds.
+
+        Floor 60 (the override fired, which is itself a strong statement),
+        scaling to 100 as the readings move deeper past the trigger. A DEFLATION
+        on VIX 36 / spreads 251bps is marginal; one on VIX 60 / spreads 500bps is
+        not, and the number now says so.
+        """
+        t = self.thresholds
+        if regime is RegimeCode.DEFLATION:
+            # Both conditions had to hold to get here; average their margins.
+            vix_margin = (s.vix - t.vix_crisis) / t.vix_crisis
+            spread_margin = (s.credit_spreads - t.spreads_wide_max) / t.spreads_wide_max
+            depth = max(0.0, (vix_margin + spread_margin) / 2.0)
+        else:  # REPRESSION — how far below the -1.0% real-rate trigger
+            trigger = t.real_rates_repression
+            depth = max(0.0, (trigger - s.real_rates) / abs(trigger))
+        return int(max(60, min(100, 60 + 40 * min(1.0, depth))))
+
+    def _anchor_regime(self, ratio: float, prior_regime: str | None) -> RegimeCode:
+        """Bucket the Gold/SPX anchor, sticky in the direction of the prior call.
+
+        Without this, the single signal that decides the regime has no dead-zone:
+        a ratio hovering at 0.4999 / 0.5001 flips the published regime between
+        GROWTH and TRANSITION day to day on noise alone. The band requires the
+        ratio to clear a boundary by ``gold_spx_hysteresis_band`` before leaving
+        the state it is already in; a first classification (no prior) uses the
+        plain cutoffs. Crisis overrides are deliberately NOT damped — they are
+        applied after this and must be free to register immediately.
+        """
+        t = self.thresholds
+        band = t.gold_spx_hysteresis_band
+
+        if prior_regime == RegimeCode.GROWTH.value and ratio < t.gold_spx_growth_max + band:
+            return RegimeCode.GROWTH
+        if prior_regime == RegimeCode.TRANSITION.value and (
+            t.gold_spx_growth_max - band <= ratio < t.gold_spx_transition_max + band
+        ):
+            return RegimeCode.TRANSITION
+        if (
+            prior_regime == RegimeCode.HARD_ASSET.value
+            and ratio >= t.gold_spx_transition_max - band
+        ):
+            return RegimeCode.HARD_ASSET
+
+        # No prior, a crisis prior, or the ratio cleared the band — plain cutoffs.
+        if ratio < t.gold_spx_growth_max:
+            return RegimeCode.GROWTH
+        if ratio < t.gold_spx_transition_max:
+            return RegimeCode.TRANSITION
+        return RegimeCode.HARD_ASSET
 
     @staticmethod
     def _build_rationale(statuses: list[SignalStatus], regime: RegimeCode) -> str:
