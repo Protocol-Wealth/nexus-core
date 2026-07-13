@@ -41,6 +41,7 @@ app/             FastAPI application factory + routers
   main.py        create_app() — wires providers, engine, routers, middleware
   routes.py      regime, market, economic
   scoring.py     /api/score (shares context builder with MCP score_asset)
+  layers.py      /api/layer/{ticker} + /api/layers (shares the layer view with MCP classify_layer)
   options.py     options pricing + overlays + Deribit crypto options
   wallet.py chain.py vaults.py lp.py benchmarks.py snapshots.py
   ratelimit.py   in-process per-IP sliding-window limiter
@@ -97,7 +98,7 @@ FRED series 1 hr); Cloudflare is set to respect origin.
 | Agent/discovery | `/docs`, `/openapi.json`, `/mcp-guide`, `/llms.txt`, `/.well-known/security.txt`, `/.well-known/ai-disclosure.json` |
 | OAuth metadata | `/.well-known/oauth-protected-resource[/mcp]`, `/.well-known/oauth-authorization-server`, `/register`, `/authorize`, `/token` (transparent MCP OAuth) |
 | Regime | `/api/regime`, `/api/regime/signals` |
-| Scoring | `/api/score/{ticker}` (8-check EMF, SEC EDGAR fundamentals) |
+| Scoring | `/api/score/{ticker}` (8-check EMF, SEC EDGAR fundamentals), `/api/layer/{ticker}` + `/api/layers` (durability-layer classification + published layer stack) |
 | Market | `/api/market/quote/{symbol}`, `/api/market/history/{symbol}` |
 | Economic | `/api/economic/{series_id}` (FRED) |
 | Options | `/api/options/price`, `/api/options/overlay/{covered-call,cash-secured-put,collar}`, `/api/options/crypto/currencies`, `/api/options/crypto/{currency}/instruments`, `/api/options/crypto/instrument/{instrument_name}` (BTC/ETH inverse + SOL/XRP/TRX/AVAX USDC-linear, Deribit) |
@@ -149,6 +150,38 @@ without changing the decision when absent (see `RegimeSignals` in
 6. Entropy — implied vs realized vol
 7. Hurst Exponent — multi-window persistence
 8. Catalyst — near-term events
+
+## Durability Layers
+
+Every asset is classified into one of seven durability layers. The layer is a
+structural input to scoring: it sets the λ (decay-constant) ceiling the Lambda
+check tests against (`LAYER_DECAY_THRESHOLDS`) and the target portfolio weight
+each regime assigns to the asset (`LAYER_WEIGHTS_BY_REGIME`).
+
+| Code | Key | Name | Horizon | λ ceiling |
+|------|-----|------|---------|-----------|
+| L1 | `L1_foundation` | Foundation | 40-60 yr | 0.05 |
+| L2 | `L2_backbone` | Backbone | 15-30 yr | 0.08 |
+| L3 | `L3_engine` | Engine | 5-10 yr | 0.20 |
+| L4 | `L4_datatoll` | Data Infrastructure | 7-12 yr | 0.15 |
+| L5 | `L5_interface` | Interface | 3-5 yr | 0.30 |
+| L6 | `L6_frontier` | Frontier | 1-3 yr | 0.50 |
+| L7 | `L7_catalyst` | Catalyst | tactical | 0.50 |
+
+The code key for layer 4 stays `L4_datatoll` (engines and downstream bridges key
+on it); "Data Infrastructure" is its published display name.
+
+Classification (`engine/scoring/emf/context_helpers.py::classify_layer`) applies
+one priority order and reports which rule decided it: explicit ticker map →
+asset-class route (crypto pairs, sector/commodity ETFs) → sector/industry keyword
+rule → sector default → `UNCLASSIFIED`. An asset that matches nothing is left
+`UNCLASSIFIED` rather than defaulted to a layer, so the layer-dependent checks
+report insufficient data instead of guessing. Broad-market ETFs are deliberately
+unmapped — a diversified index has no single durability layer.
+
+The taxonomy (names, horizons, profiles) lives in `engine/scoring/emf/layers.py`
+and is served by `GET /api/layer/{ticker}`, `GET /api/layers`, and the MCP
+`classify_layer` tool.
 
 ## LP Engine
 

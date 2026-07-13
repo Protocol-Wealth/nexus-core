@@ -42,10 +42,19 @@ investment advice.
 from __future__ import annotations
 
 from ..checks import Check
+from .context_helpers import LayerClassification, classify_layer, layer_for
 from .croic import CROICCheck, compute_croic
 from .fscore import FScoreCheck, compute_fscore
 from .hurst import HurstCheck, compute_hurst
 from .lambda_decay import LambdaCheck, compute_lambda
+from .layers import (
+    LAYER_HORIZON_YEARS,
+    LAYER_HORIZONS,
+    LAYER_NAMES,
+    describe_layer,
+    layer_catalog,
+    layer_profile,
+)
 from .perez import PerezPhaseCheck, compute_perez_phase
 from .regime_alignment import RegimeAlignmentCheck, regime_layer_weight
 from .sector_tailwind import SectorTailwindCheck, compute_period_return, sector_etf_for
@@ -76,10 +85,15 @@ __all__ = [
     "CROICCheck",
     "FScoreCheck",
     "HurstCheck",
+    "LAYER_HORIZONS",
+    "LAYER_HORIZON_YEARS",
+    "LAYER_NAMES",
     "LambdaCheck",
+    "LayerClassification",
     "PerezPhaseCheck",
     "RegimeAlignmentCheck",
     "SectorTailwindCheck",
+    "classify_layer",
     "classify_sector",
     "compute_croic",
     "compute_fscore",
@@ -87,6 +101,10 @@ __all__ = [
     "compute_lambda",
     "compute_perez_phase",
     "compute_period_return",
+    "describe_layer",
+    "layer_catalog",
+    "layer_for",
+    "layer_profile",
     "protocol_wealth_checks",
     "regime_layer_weight",
     "sector_etf_for",

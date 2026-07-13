@@ -71,6 +71,7 @@ from .benchmarks import build_benchmarks_router
 from .chain import build_chain_router
 from .disclosure import render_disclosure_card
 from .landing import accept_prefers_markdown, render_landing, render_landing_markdown
+from .layers import build_layer_router
 from .llms_txt import render_llms_txt
 from .lp import build_lp_router
 from .mcp_guide import render_mcp_guide
@@ -273,6 +274,7 @@ def create_app(
         )
     )
     app.include_router(build_score_router(market=market, regime_engine=engine))
+    app.include_router(build_layer_router())
     app.include_router(build_wallet_router(debank=DeBankClient()))
     app.include_router(build_chain_router(tatum=TatumClient()))
     app.include_router(build_vaults_router(vaultsfyi=VaultsFyiClient()))
