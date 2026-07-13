@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 from ..data import db
 from ..data.macro import FredMacroData
 from ..data.market import CoinGeckoMarketData
-from ..data.regime_history import write_regime_snapshot
+from ..data.regime_history import read_regime_history, write_regime_snapshot
 from ..data.snapshots import write_benchmark_snapshot
 from ..engine.benchmarks import ASSET_COIN_IDS
 from ..engine.regime import RegimeEngine
@@ -66,7 +66,15 @@ async def run_regime_snapshot(engine: RegimeEngine) -> dict[str, object]:
     """
     if not db.is_configured():
         raise RuntimeError("DATABASE_URL is not configured")
-    result = engine.classify().to_dict()  # fetches signals, then classifies
+
+    # Feed yesterday's stored call back in as the prior. The anchor hysteresis is
+    # only meaningful against a real prior regime, and the engine's in-process
+    # value resets on every Cloud Run cold start — the stored history is the only
+    # durable source of "what we said last time".
+    previous = await read_regime_history(limit=1)
+    prior_regime = previous[-1]["regime"] if previous else None
+
+    result = engine.classify(prior_regime=prior_regime).to_dict()
     snapshot_date = datetime.now(UTC).date().isoformat()
     await write_regime_snapshot(
         snapshot_date,

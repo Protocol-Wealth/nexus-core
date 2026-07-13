@@ -22,8 +22,10 @@ class _StubEngine:
 
     def __init__(self, result: RegimeResult) -> None:
         self._result = result
+        self.seen_prior: str | None = None
 
-    def classify(self) -> RegimeResult:
+    def classify(self, *, prior_regime: str | None = None) -> RegimeResult:
+        self.seen_prior = prior_regime
         return self._result
 
 
@@ -64,10 +66,18 @@ def test_run_regime_snapshot_writes_the_call_down(monkeypatch: pytest.MonkeyPatc
         captured["date"] = snapshot_date
         captured.update(kwargs)
 
+    async def fake_read(limit: int = 1) -> list[dict[str, Any]]:
+        return [{"regime": "TRANSITION"}]  # yesterday's stored call
+
     monkeypatch.setattr(daily_snapshot, "write_regime_snapshot", fake_write)
+    monkeypatch.setattr(daily_snapshot, "read_regime_history", fake_read)
 
-    out = asyncio.run(daily_snapshot.run_regime_snapshot(_StubEngine(_result())))  # type: ignore[arg-type]
+    engine = _StubEngine(_result())
+    out = asyncio.run(daily_snapshot.run_regime_snapshot(engine))  # type: ignore[arg-type]
 
+    # yesterday's stored regime is fed back as the prior — this is what makes the
+    # anchor hysteresis work across Cloud Run cold starts
+    assert engine.seen_prior == "TRANSITION"
     assert out["regime"] == "GROWTH"
     assert out["confidence_score"] == 73
     # the persisted row carries the readings that produced the call, so the

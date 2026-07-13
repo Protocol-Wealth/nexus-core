@@ -51,6 +51,16 @@ class RegimeThresholds:
     gold_spx_transition_max: float = 0.70
     gold_spx_hard_asset_min: float = 0.70
 
+    # Gold/SPX hysteresis band. The anchor is the ONLY signal that selects the
+    # base regime, and without a dead-zone a ratio oscillating either side of a
+    # cutoff (0.4999 / 0.5001) flips the published regime day to day on noise.
+    # The band makes the cutoff sticky in the direction of the prior regime: the
+    # ratio must clear the boundary by `band` to leave the state it is already
+    # in. Applied ONLY to the anchor — the crisis overrides (DEFLATION /
+    # REPRESSION) are deliberately NOT damped, because a crisis must be allowed
+    # to register immediately.
+    gold_spx_hysteresis_band: float = 0.02
+
     # Real rates (10Y TIPS yield or 10Y nominal - breakeven inflation).
     real_rates_risk_on: float = 1.5
     real_rates_neutral_min: float = 0.0

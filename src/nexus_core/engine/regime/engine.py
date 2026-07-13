@@ -130,6 +130,7 @@ class RegimeEngine:
         *,
         prediction_market: dict[str, float | str] | None = None,
         as_of: date | None = None,
+        prior_regime: str | None = None,
     ) -> RegimeResult:
         """Classify the current regime. Falls back to fetching signals if none passed.
 
@@ -148,9 +149,15 @@ class RegimeEngine:
         now = datetime.now(UTC)
         days_in_regime = (now - self._regime_start).days if self._regime_start else 0
 
+        # The anchor hysteresis is only meaningful against a real prior call.
+        # `self._current_regime` is IN-PROCESS state, which on Cloud Run resets on
+        # every cold start, revision, and new instance — so callers that can supply
+        # a durable prior (the daily job reads the last `regime_history` row) pass
+        # it explicitly and it wins over the in-process value.
+        effective_prior = prior_regime if prior_regime is not None else self._current_regime
         result = self.classifier.classify(
             signals,
-            prior_regime=self._current_regime,
+            prior_regime=effective_prior,
             days_in_regime=days_in_regime,
             prediction_market=prediction_market,
             as_of=as_of,
