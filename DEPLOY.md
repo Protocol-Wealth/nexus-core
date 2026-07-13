@@ -264,8 +264,23 @@ gcloud run jobs deploy nexus-snapshot-job \
   --vpc-egress private-ranges-only \
   --set-cloudsql-instances pwllc-prod:us-central1:nexus-marketdata \
   --set-secrets "DATABASE_URL=nexus-marketdata-database-url:latest,\
-COINGECKO_API_KEY=nexus-coingecko-api-key:latest"
+COINGECKO_API_KEY=nexus-coingecko-api-key:latest,\
+FRED_API_KEY=nexus-fred-api-key:latest,\
+MBOUM_API_KEY=nexus-mboum-api-key:latest,\
+MARKETSTACK_API_KEY=nexus-marketstack-api-key:latest"
 ```
+
+> **`FRED_API_KEY` is REQUIRED on the job, not optional.** The job runs two legs: the
+> benchmark snapshot (CoinGecko) and the **regime snapshot**. The regime leg reads real
+> rates, DXY and credit spreads from FRED. `SignalFetcher` resolves each macro signal as
+> `_fetch_x() or default_x`, so a missing key does **not** raise — it silently substitutes
+> neutral priors (`real_rates=1.5`, `dxy=100.0`, `vix=20.0`, `credit_spreads=150.0`).
+> That is fine on the serving path and **not** fine here: the row is written as an
+> observation, fed back as the next day's `prior_regime` through the anchor hysteresis, and
+> becomes the permanent record every accuracy and calibration measure is derived from.
+> `run_regime_snapshot` therefore refuses to write when the macro provider is unconfigured
+> and exits non-zero so the scheduler retries. MBOUM/MARKETSTACK are the market-data
+> fallbacks behind the keyless yfinance primary (gold/SPX, VIX).
 
 Run it manually to verify:
 

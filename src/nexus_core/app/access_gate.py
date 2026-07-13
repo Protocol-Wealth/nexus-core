@@ -68,8 +68,54 @@ def _authorized(headers: dict[bytes, bytes]) -> bool:
     return any(hmac.compare_digest(presented, digest) for digest in _key_digests())
 
 
+def _privatize_cache_control(message: dict[str, Any]) -> dict[str, Any]:
+    """Force ``Cache-Control: private`` on an authorized response to a gated path.
+
+    The REST routes stamp ``Cache-Control: public, max-age=N``. That is right for a
+    ``public`` deployment, where the surface is open by design. It is wrong in
+    ``restricted`` mode: ``public`` grants a SHARED cache (a CDN, a proxy) permission
+    to store the response and hand it to a caller who never presented a key. An
+    access decision made at the origin does not travel with a cached body, so a
+    response released against a credential must not be shared-cacheable at all.
+
+    ``private`` is the exactly-correct semantic here: produced for ONE authorized
+    caller — a browser may keep it, a shared cache may not store it. Freshness
+    (``max-age``) is preserved, so client-side caching still works; only the
+    shared-cache permission is withdrawn. ``s-maxage`` is dropped because it
+    addresses shared caches specifically and is meaningless once private.
+
+    Applied centrally in the gate rather than per route: the gate is the only layer
+    that knows a response was released against a credential, and a per-route fix is
+    one a future route will forget to apply.
+    """
+    headers: list[tuple[bytes, bytes]] = [
+        (k, v) for (k, v) in message.get("headers", []) if k.lower() != b"cache-control"
+    ]
+    existing = next(
+        (v for (k, v) in message.get("headers", []) if k.lower() == b"cache-control"),
+        b"",
+    )
+    directives = [
+        d.strip()
+        for d in existing.decode("latin-1").split(",")
+        if d.strip() and d.strip().lower() not in ("public", "private")
+    ]
+    # s-maxage is a SHARED-cache directive; it has no meaning once the response is
+    # private, and leaving it would invite a proxy to honor it anyway.
+    directives = [d for d in directives if not d.lower().startswith("s-maxage")]
+    value = ", ".join(["private", *directives]) if directives else "private"
+    headers.append((b"cache-control", value.encode("latin-1")))
+    message = dict(message)
+    message["headers"] = headers
+    return message
+
+
 class NexusAccessGate:
-    """Require an API key on protected REST/JSON surfaces in restricted mode."""
+    """Require an API key on protected REST/JSON surfaces in restricted mode.
+
+    Also guarantees that a response released against a key is never stored in a
+    shared cache — see :func:`_privatize_cache_control`.
+    """
 
     def __init__(self, app: Any) -> None:
         self.app = app
@@ -86,7 +132,13 @@ class NexusAccessGate:
 
         headers = dict(scope.get("headers") or [])
         if _authorized(headers):
-            await self.app(scope, receive, send)
+
+            async def _send(message: dict[str, Any]) -> None:
+                if message.get("type") == "http.response.start":
+                    message = _privatize_cache_control(message)
+                await send(message)
+
+            await self.app(scope, receive, _send)
             return
 
         body = json.dumps(
