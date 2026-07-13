@@ -39,7 +39,7 @@ not individualized investment advice.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 from ....data.providers import PriceBar
 from ..checks import ScoringContext
@@ -170,6 +170,94 @@ def sector_for_ticker(ticker: str | None, fundamentals: Any = None) -> str | Non
     return sector or None
 
 
+class LayerClassification(NamedTuple):
+    """A layer assignment plus *why* the classifier landed there.
+
+    Attributes:
+        layer: Short code (``"L1"``..``"L7"``) or :data:`UNCLASSIFIED`.
+        source: Which rule in the priority order produced the layer — one of
+            ``ticker_map`` / ``asset_class_crypto`` / ``asset_class_sector_etf``
+            / ``sector_industry_keyword`` / ``sector_default`` /
+            ``unclassified``.
+        matched_on: The token the matching rule fired on (the ticker, the
+            sector name, or the ``industry:``/``sector:``-prefixed keyword), or
+            ``None`` when nothing matched.
+    """
+
+    layer: str
+    source: str
+    matched_on: str | None
+
+
+# Sector / industry keyword rules, in the exact priority order the upstream
+# classifier applies them. Each entry is (layer, sector names, industry
+# keywords) — a sector-name hit or an industry-keyword substring hit assigns
+# the layer. Data-driven so the classification and its provenance can never
+# drift apart.
+_KEYWORD_RULES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
+    ("L1", ("energy", "basic materials"), ("nuclear",)),
+    ("L2", ("utilities",), ("data center", "infrastructure", "water")),
+    ("L3", (), ("semiconductor", "chip")),
+    ("L4", (), ("security", "cyber", "defense")),
+    ("L5", (), ("software", "saas", "application", "e-commerce")),
+    ("L6", (), ("biotech", "space", "quantum")),
+)
+
+
+def classify_layer(sector_or_ticker: str | None, *, fundamentals: Any = None) -> LayerClassification:
+    """Classify into an EMF durability layer, reporting the deciding rule.
+
+    The single implementation of the layer priority order (see :func:`layer_for`,
+    which returns only the layer). Carrying the deciding rule out with the layer
+    is what lets the public surfaces explain *why* an asset landed where it did.
+    """
+    token = _clean_str(sector_or_ticker)
+
+    # 1. Known-ticker exact match (case-insensitive).
+    if token:
+        upper = token.upper()
+        hit = _TICKER_TO_LAYER.get(upper)
+        if hit is not None:
+            return LayerClassification(hit, "ticker_map", upper)
+        # 1b. Asset-class routing (D2-B): crypto + sector/commodity ETFs that
+        # aren't individual operating companies. Broad-market ETFs are absent
+        # here, so they continue to UNCLASSIFIED (NOT APPLICABLE).
+        crypto_layer = CRYPTO_LAYER.get(upper)
+        if crypto_layer is not None:
+            return LayerClassification(crypto_layer, "asset_class_crypto", upper)
+        etf_layer = SECTOR_ETF_LAYER.get(upper)
+        if etf_layer is not None:
+            return LayerClassification(etf_layer, "asset_class_sector_etf", upper)
+
+    # Sector / industry come from fundamentals when present; otherwise treat
+    # the bare token as a sector name (so ``layer_for("Energy")`` works).
+    sector = _clean_str(_attr_or_key(fundamentals, "sector")) or (
+        token if fundamentals is None else ""
+    )
+    industry = _clean_str(_attr_or_key(fundamentals, "industry"))
+    sector_l = sector.lower()
+    industry_l = industry.lower()
+
+    # 2. Sector / industry keyword classification (order matters, per upstream).
+    for layer, sectors, keywords in _KEYWORD_RULES:
+        if sector_l in sectors:
+            return LayerClassification(layer, "sector_industry_keyword", f"sector:{sector_l}")
+        for keyword in keywords:
+            if keyword in industry_l:
+                return LayerClassification(
+                    layer, "sector_industry_keyword", f"industry:{keyword}"
+                )
+
+    # 3. Matched a sector but no specific keyword — use the sector default.
+    if sector_l:
+        default = SECTOR_LAYER_DEFAULTS.get(sector_l)
+        if default is not None:
+            return LayerClassification(default, "sector_default", sector_l)
+
+    # 4. No positive match.
+    return LayerClassification(UNCLASSIFIED, "unclassified", None)
+
+
 def layer_for(sector_or_ticker: str | None, *, fundamentals: Any = None) -> str:
     """Classify a ticker (or sector) into an EMF durability layer short code.
 
@@ -188,55 +276,11 @@ def layer_for(sector_or_ticker: str | None, *, fundamentals: Any = None) -> str:
     (Lambda). The argument may be a ticker or a sector name; when it is a
     sector and no ``fundamentals`` are given, the sector is used directly for
     keyword / default classification.
+
+    Thin wrapper over :func:`classify_layer` — same rules, same result, without
+    the provenance.
     """
-    token = _clean_str(sector_or_ticker)
-
-    # 1. Known-ticker exact match (case-insensitive).
-    if token:
-        upper = token.upper()
-        hit = _TICKER_TO_LAYER.get(upper)
-        if hit is not None:
-            return hit
-        # 1b. Asset-class routing (D2-B): crypto + sector/commodity ETFs that
-        # aren't individual operating companies. Broad-market ETFs are absent
-        # here, so they continue to UNCLASSIFIED (NOT APPLICABLE).
-        asset_layer = CRYPTO_LAYER.get(upper) or SECTOR_ETF_LAYER.get(upper)
-        if asset_layer is not None:
-            return asset_layer
-
-    # Sector / industry come from fundamentals when present; otherwise treat
-    # the bare token as a sector name (so ``layer_for("Energy")`` works).
-    sector = _clean_str(_attr_or_key(fundamentals, "sector")) or (
-        token if fundamentals is None else ""
-    )
-    industry = _clean_str(_attr_or_key(fundamentals, "industry"))
-    sector_l = sector.lower()
-    industry_l = industry.lower()
-
-    # 2. Sector / industry keyword classification (order matters, per upstream).
-    if sector_l in ("energy", "basic materials") or "nuclear" in industry_l:
-        return "L1"
-    if sector_l == "utilities" or any(
-        kw in industry_l for kw in ("data center", "infrastructure", "water")
-    ):
-        return "L2"
-    if "semiconductor" in industry_l or "chip" in industry_l:
-        return "L3"
-    if any(kw in industry_l for kw in ("security", "cyber", "defense")):
-        return "L4"
-    if any(kw in industry_l for kw in ("software", "saas", "application", "e-commerce")):
-        return "L5"
-    if any(kw in industry_l for kw in ("biotech", "space", "quantum")):
-        return "L6"
-
-    # 3. Matched a sector but no specific keyword — use the sector default.
-    if sector_l:
-        default = SECTOR_LAYER_DEFAULTS.get(sector_l)
-        if default is not None:
-            return default
-
-    # 4. No positive match.
-    return UNCLASSIFIED
+    return classify_layer(sector_or_ticker, fundamentals=fundamentals).layer
 
 
 def _bars_period_return(bars: list[PriceBar]) -> float | None:
@@ -390,12 +434,16 @@ def populate_context(
 
 
 __all__ = [
+    "CRYPTO_LAYER",
     "DEFAULT_RETURN_DAYS",
     "MODEL_TICKERS",
+    "SECTOR_ETF_LAYER",
     "SECTOR_LAYER_DEFAULTS",
     "SPY_SYMBOL",
     "UNCLASSIFIED",
+    "LayerClassification",
     "build_context_fields",
+    "classify_layer",
     "compute_sector_return",
     "compute_spy_return",
     "layer_for",

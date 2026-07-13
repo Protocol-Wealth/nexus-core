@@ -145,8 +145,9 @@ def test_full_tool_set_registers() -> None:
 
 def test_minimal_server_registers_only_meta_tools() -> None:
     # health + describe are always available (server self-description), even with
-    # no providers wired.
-    assert _tool_names(build_server()) == {"health", "describe"}
+    # no providers wired — as is classify_layer, which is pure compute over the
+    # published EMF layer maps and needs no provider.
+    assert _tool_names(build_server()) == {"health", "describe", "classify_layer"}
 
 
 def test_only_supplied_groups_register() -> None:

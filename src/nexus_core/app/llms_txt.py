@@ -54,7 +54,7 @@ pair (`BTC-USD`); crypto *options* use a Deribit code (`BTC`, `ETH`, `SOL`).
 
 ## Tools
 - **Regime** (`current_regime`, `regime_signals`) — macro regime classification + raw signals.
-- **Scoring** (`score_asset`) — 8-check EMF durability score on SEC EDGAR fundamentals; a confidence tier, not a buy/sell call. Use `BTC-USD` for crypto.
+- **Scoring** (`score_asset`, `classify_layer`) — 8-check EMF durability score on SEC EDGAR fundamentals; a confidence tier, not a buy/sell call. Use `BTC-USD` for crypto. `classify_layer` returns an asset's EMF durability layer (L1 Foundation .. L7 Catalyst) with its display name, durability horizon, λ decay ceiling, per-regime target weights, and the rule that decided the classification (ticker map / asset-class route / sector keyword / sector default) — pure compute over the published layer maps, no upstream call.
 - **Market** (`get_quote`, `get_quotes`, `get_price_history`) — quotes + OHLCV. Use `bitcoin` (coin id) here, not `BTC-USD`.
 - **Economic** (`get_economic_series`) — FRED series (e.g. `DGS10`, `DFII10`).
 - **Options** (`option_price`, `covered_call`, `cash_secured_put`, `collar`, `equity_collar_screen`, `collar_book`, `equity_option_expirations`, `equity_option_chain`) — Black-Scholes price/Greeks + overlay illustrations, a batch (≤25 tickers) dividend-aware theoretical collar screen, a multi-name collar-book assembly worksheet (≤50 pre-screened candidates; whole-contract sizing with position/sector caps plus optional executable-fill haircut from bid-side call / ask-side put pricing — advisor research worksheet, no orders), and MBOUM-backed listed equity option expirations + single-expiration chains (bid/ask, OI, IV, delta). Educational, not recommendations.

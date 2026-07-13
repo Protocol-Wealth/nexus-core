@@ -19,7 +19,8 @@
   `app/landing.py::accept_prefers_markdown` + `render_landing_markdown`.
 - **Card `serverInfo.description`:** the MCP Server Card carries a stable,
   profile-agnostic engine description that does NOT overclaim MCP tool exposure
-  (the demo transport exposes only `option_price`/`collar_book`/`health`/`describe`);
+  (the demo transport exposes only `option_price`/`collar_book`/`classify_layer`/
+  `health`/`describe` — all closed-world, no live vendor call);
   the exact tool set is deferred to the `instructions` field + `tools/list`.
   `policy.posture` stays the canonical `disclaimers.TERSE`. The
   `protocolwealthllc.com` mirror of this card is reconciled field-for-field
@@ -51,7 +52,9 @@
   `NEXUS_ACCESS_MODE=restricted` + `NEXUS_API_KEYS`. Anonymous
   `/api/planning/tools` returns 401; the pw-api service bearer key returns the
   27-tool planning contract; OAuth MCP `tools/list` returns only
-  `option_price`, `collar_book`, `health`, and `describe`.
+  `option_price`, `collar_book`, `health`, and `describe` (plus `classify_layer`
+  as of the durability-layer surface — pure compute over the published EMF layer
+  maps, no vendor call).
 - **Collar-book executable-fill update:** the multi-name collar-book worksheet
   accepts per-share executable pricing (`executable_net_credit` or `call_bid`
   minus `put_ask`) through the engine plus REST/MCP parsers and reports
@@ -191,6 +194,7 @@ nexus-core --version
 | `/`, `/health`, `/health/db` | Landing, liveness, DB connectivity probe |
 | `/api/regime`, `/api/regime/signals` | EMF regime classification + raw signal readings (~15 min cache) |
 | `/api/score/{ticker}` | 8-check EMF scoring (SEC EDGAR fundamentals) |
+| `/api/layer/{ticker}`, `/api/layers` | EMF durability-layer classification (L1..L7) — display name, horizon, λ ceiling, per-regime target weights, and the rule that decided it (ticker map / asset-class route / sector keyword / sector default / UNCLASSIFIED). `/api/layers` publishes the whole stack. Same view as the MCP `classify_layer` tool. Taxonomy: `engine/scoring/emf/layers.py` |
 | `/api/market/quote/{symbol}`, `/api/market/history/{symbol}` | Composite market data (yfinance → MBOUM → MarketStack → CoinGecko) |
 | `/api/economic/{series_id}` | FRED series (503 when `FRED_API_KEY` unset) |
 | `/api/options/price`, `/api/options/overlay/{covered-call,cash-secured-put,collar}` | Black-Scholes educational overlays |

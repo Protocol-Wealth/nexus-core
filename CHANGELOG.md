@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### EMF durability-layer classification surface
+
+#### Added
+
+- `GET /api/layer/{ticker}` — the EMF durability-layer classification of an
+  asset: layer code (L1..L7) and display name, durability horizon, the λ decay
+  ceiling that applies to the layer, the layer's target weight in each of the
+  five regimes, and **how the layer was decided** (explicit ticker map,
+  asset-class route, sector/industry keyword rule, or sector default). An asset
+  that matches nothing returns `UNCLASSIFIED` — never a silent default layer.
+  Optional `?sector=` / `?industry=` query params classify an asset without the
+  SEC fundamentals lookup.
+- `GET /api/layers` — the published seven-layer durability stack (names,
+  horizons, λ ceilings, per-regime weights).
+- `classify_layer` MCP tool — the same view over the MCP transport. Pure compute
+  over the published layer maps (`readOnlyHint`, closed-world), so it registers
+  in every profile, including the public demo transport.
+- `engine/scoring/emf/layers.py` — the published layer taxonomy: `LAYER_NAMES`
+  (L4's code key stays `L4_datatoll`; its display name is "Data Infrastructure")
+  and `LAYER_HORIZONS` / `LAYER_HORIZON_YEARS` (L1 40-60 yr … L7 tactical). The
+  horizons were previously published only on the website and had no
+  representation in code.
+
+#### Changed
+
+- `engine/scoring/emf/context_helpers.py` gained `classify_layer`, which returns
+  the layer *and* the rule that produced it (`LayerClassification`). `layer_for`
+  is now a thin wrapper over it — same rules, same result, unchanged behavior.
+  No calibrated threshold / decay / weight value was touched.
+
 ### Planning assumption provenance (#198)
 
 #### Added

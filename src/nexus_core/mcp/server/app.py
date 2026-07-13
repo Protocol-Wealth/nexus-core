@@ -77,6 +77,7 @@ from ...engine.pricing.crypto_overlays import crypto_covered_call as _crypto_cov
 from ...engine.pricing.crypto_overlays import crypto_protective_put as _crypto_protective_put
 from ...engine.regime import RegimeEngine, RegimeResult
 from ...engine.scoring import ScoringFramework, format_structured
+from ...engine.scoring.emf.layers import describe_layer
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +236,42 @@ def build_server(
             response = _apply_filters("score_asset", response, filters, {})
             return json.dumps(response, indent=2)
 
+    # ----------------------- Durability-layer classification -----------------------
+    # Pure compute over the published EMF layer maps — no provider, no upstream —
+    # so it registers in every profile, including the public demo transport.
+
+    @mcp.tool(annotations=_RO_CLOSED)
+    def classify_layer(ticker: str, sector: str = "", industry: str = "") -> str:
+        """Classify an asset into its EMF durability layer (L1 Foundation .. L7 Catalyst).
+
+        The layer is the structural half of the EMF framework: it sets the λ
+        (decay-constant) ceiling the durability score tests against and the
+        target portfolio weight each macro regime assigns to the asset.
+
+        Args:
+            ticker: Asset identifier (e.g. "NVDA", "BTC-USD", "XLE").
+            sector: Optional GICS-style sector (e.g. "Industrials"). Only used
+                when the ticker is not an explicit or asset-class map hit.
+            industry: Optional industry (e.g. "Semiconductors"), same.
+
+        Returns the layer code and display name, its durability horizon, the λ
+        ceiling that applies, the layer's target weight in each of the five
+        regimes, and — the point of the tool — which rule decided the
+        classification (explicit ticker map, asset-class route, sector/industry
+        keyword, or sector default). An asset that cannot be positively
+        classified returns layer "UNCLASSIFIED"; it is never defaulted to a
+        layer. Read-only, no market data fetched. Educational, not advice.
+        """
+        symbol = (ticker or "").strip()
+        if not symbol:
+            return _err("classify_layer", "ticker must not be empty", filters, disclaimer)
+        return _ok(
+            "classify_layer",
+            describe_layer(symbol, sector=sector or None, industry=industry or None),
+            filters,
+            disclaimer,
+        )
+
     # ---------------------- Market / macro / DeFi / options ----------------------
 
     if demo_profile:
@@ -303,12 +340,13 @@ def build_server(
         categories = (
             {
                 "options": ["option_price", "collar_book"],
+                "scoring": ["classify_layer"],
                 "meta": ["health", "describe"],
             }
             if demo_profile
             else {
                 "regime": ["current_regime", "regime_signals"],
-                "scoring": ["score_asset"],
+                "scoring": ["score_asset", "classify_layer"],
                 "market": ["get_quote", "get_quotes", "get_price_history"],
                 "economic": ["get_economic_series"],
                 "options": [

@@ -87,6 +87,8 @@ de-identified calculation inputs after private ingestion.
 | `GET /api/regime` | EMF regime classification |
 | `GET /api/regime/signals` | Raw regime signal readings |
 | `GET /api/score/{ticker}` | 8-check EMF durability score (SEC EDGAR fundamentals) |
+| `GET /api/layer/{ticker}` | EMF durability-layer classification (L1..L7) + display name, horizon, λ ceiling, per-regime weights, and the rule that decided it |
+| `GET /api/layers` | The published 7-layer durability stack (names, horizons, λ ceilings, regime weights) |
 
 ### Market & Economic Data
 
