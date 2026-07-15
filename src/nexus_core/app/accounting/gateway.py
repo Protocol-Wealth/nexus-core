@@ -47,9 +47,9 @@ def _error(status_code: int, message: str) -> PlainTextResponse:
 def build_accounting_router(*, price_historian: PriceHistorian | None = None) -> APIRouter:
     """Build the accounting tool-gateway router.
 
-    ``describe`` is always available; ``price_history`` (P1) is registered when a
-    :class:`PriceHistorian` is injected (production wires the DefiLlama + Jupiter
-    oracle chain). Later phases inject further dependencies.
+    ``describe`` and ``decode_onchain_events`` (P2, pure) are always available;
+    ``price_history`` (P1) is registered when a :class:`PriceHistorian` is
+    injected (production wires the DefiLlama + Jupiter oracle chain).
     """
     router = APIRouter(tags=["accounting"])
     handlers = build_tool_handlers(price_historian=price_historian)

@@ -6,29 +6,35 @@ The accounting engine (epic nexus-core#248) computes cost basis, decodes onchain
 events, prices history, and reports realized PnL over a **de-identified event
 ledger**. Like the planning gateway, it is PII-free by construction:
 
-- ``ACCOUNTING_CONTRACT_VERSION`` — echoed in every successful response; the
-  consumer rejects a mismatch.
-- The event ledger carries **opaque** asset / account / transaction references
-  and public onchain facts only. It never carries client identity, a name, a
-  contact, a government id, or a wallet-to-client linkage. Any identity-shaped
-  key anywhere in a request body is rejected fail-closed (belt-and-braces with
-  ``extra="forbid"`` on every model), and the consumer (pw-api) additionally
-  scrubs values before egress.
-- Money and quantities are ``Decimal`` — never float — because this is
-  accounting math where representation error is a correctness bug.
+- ``ACCOUNTING_CONTRACT_VERSION`` — echoed in every successful response.
+- Domain models (the event ledger + raw-decoder input) live in
+  ``engine/accounting/models.py`` and are re-exported here as the wire contract.
+  Every reference is opaque or a public onchain fact; there is no client
+  identity, and ``extra="forbid"`` on every model rejects a smuggled field.
+- Any identity-shaped key anywhere in a request body is rejected fail-closed;
+  the consumer (pw-api) additionally scrubs values before egress.
+- Money and quantities are ``Decimal`` — never float.
 
 Clean-room: the accounting methodology is re-derived from public accounting
-rules (IRS FIFO / specific-ID) and protocol specifications. No AGPL code (e.g.
-Rotki) is copied; patterns may be studied, bytes may not.
+rules and protocol specs. No AGPL code (e.g. Rotki) is copied.
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
-from enum import Enum
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ...engine.accounting.models import (
+    AssetRef,
+    EventKind,
+    EventLedger,
+    LedgerEvent,
+    LedgerLeg,
+    MovementInput,
+    RawTransactionInput,
+)
 
 #: The accounting contract version. Bump on any breaking request/response change.
 ACCOUNTING_CONTRACT_VERSION = "0.1.0"
@@ -41,8 +47,6 @@ _TRACEBACK_MARKERS = (
 )
 
 #: Identity-shaped keys the engine refuses (case-insensitive, separators ignored).
-#: Accounting is done on opaque references and public onchain facts; no name,
-#: contact, government id, client id, or wallet-to-client linkage is ever needed.
 IDENTITY_KEYS: frozenset[str] = frozenset(
     {
         "name",
@@ -96,8 +100,7 @@ def find_identity_keys(payload: Any) -> list[str]:
     """Return any identity-shaped keys found anywhere in ``payload``.
 
     Recurses through nested dicts and lists. Matching is case-insensitive and
-    ignores non-alphanumeric separators (so ``client_id`` and ``clientId`` both
-    match ``clientid``). The original key spelling is returned for the message.
+    ignores non-alphanumeric separators.
     """
     found: list[str] = []
     _scan(payload, found)
@@ -115,84 +118,7 @@ def _scan(node: Any, found: list[str]) -> None:
             _scan(item, found)
 
 
-# --- The de-identified event ledger ------------------------------------------
-#
-# The normalized event stream a consumer sends. It is the output of the P2
-# decoders and the input to the P3 cost-basis engine. Every reference is opaque
-# or a public onchain fact; there is no client-identifying data.
-
-
-class EventKind(str, Enum):
-    """Normalized onchain event kinds relevant to accounting."""
-
-    acquire = "acquire"
-    dispose = "dispose"
-    swap = "swap"
-    transfer_in = "transfer_in"
-    transfer_out = "transfer_out"
-    deposit = "deposit"
-    withdraw = "withdraw"
-    lp_add = "lp_add"
-    lp_remove = "lp_remove"
-    stake = "stake"
-    unstake = "unstake"
-    claim = "claim"
-    fee = "fee"
-    other = "other"
-
-
-class AssetRef(BaseModel):
-    """A public, PII-free asset identity. ``asset_id`` is an opaque stable key
-    (e.g. a chain-prefixed contract/mint, or a caller-supplied hash)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    asset_id: str = Field(min_length=1, max_length=128)
-    symbol: str | None = Field(default=None, max_length=32)
-    chain: str | None = Field(default=None, max_length=32)
-    decimals: int | None = Field(default=None, ge=0, le=36)
-
-
-class LedgerLeg(BaseModel):
-    """One asset movement within an event. ``amount`` is a positive human-readable
-    quantity; ``direction`` says whether the account acquired or disposed it."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    asset: AssetRef
-    direction: Literal["in", "out"]
-    amount: Decimal = Field(gt=0)
-    unit_price_usd: Decimal | None = Field(default=None, ge=0)
-    usd_value: Decimal | None = Field(default=None, ge=0)
-
-
-class LedgerEvent(BaseModel):
-    """A single normalized event. ``account_ref`` and ``tx_ref`` are OPAQUE — an
-    opaque account id (never a wallet address) and an opaque transaction ref."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    event_id: str = Field(min_length=1, max_length=128)
-    account_ref: str = Field(min_length=1, max_length=128)
-    kind: EventKind
-    timestamp: int = Field(ge=0, description="unix seconds, UTC")
-    tx_ref: str | None = Field(default=None, max_length=128)
-    legs: list[LedgerLeg] = Field(min_length=1)
-    fee_usd: Decimal | None = Field(default=None, ge=0)
-
-
-class EventLedger(BaseModel):
-    """The de-identified event ledger a consumer sends to the accounting tools."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    events: list[LedgerEvent] = Field(default_factory=list)
-
-
 # --- price_history tool input (P1) -------------------------------------------
-#
-# A coin id is DefiLlama-style: ``{chain}:{address}`` (EVM), ``solana:{mint}``,
-# or ``coingecko:{id}`` — all public asset identity, no client linkage.
 
 
 class PriceQueryInput(BaseModel):
@@ -223,17 +149,31 @@ class PriceHistoryRequest(BaseModel):
     overrides: list[PriceOverrideInput] = Field(default_factory=list, max_length=500)
 
 
+# --- decode_onchain_events tool input (P2) -----------------------------------
+
+
+class DecodeRequest(BaseModel):
+    """Input to the ``decode_onchain_events`` tool: raw transactions to normalize."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    transactions: list[RawTransactionInput] = Field(min_length=1, max_length=2000)
+
+
 __all__ = [
     "ACCOUNTING_CONTRACT_VERSION",
     "IDENTITY_KEYS",
     "AccountingInputError",
     "AssetRef",
+    "DecodeRequest",
     "EventKind",
     "EventLedger",
     "LedgerEvent",
     "LedgerLeg",
+    "MovementInput",
     "PriceHistoryRequest",
     "PriceOverrideInput",
     "PriceQueryInput",
+    "RawTransactionInput",
     "find_identity_keys",
 ]

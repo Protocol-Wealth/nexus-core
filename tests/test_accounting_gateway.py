@@ -120,7 +120,7 @@ def test_find_identity_keys_catches_identity_wallet_and_client_keys() -> None:
 
 def test_build_tool_handlers_ships_describe_scaffold() -> None:
     handlers = build_tool_handlers()
-    assert set(handlers) == {"describe"}
+    assert set(handlers) == {"describe", "decode_onchain_events"}
     out = handlers["describe"]({})
     assert out["status"] == "scaffold"
     assert list(out["plannedTools"]) == list(PLANNED_TOOLS)
@@ -143,7 +143,7 @@ def test_route_lists_tools_with_contract_version() -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["contractVersion"] == ACCOUNTING_CONTRACT_VERSION
-    assert body["tools"] == ["describe"]
+    assert body["tools"] == ["decode_onchain_events", "describe"]
 
 
 def test_route_describe_echoes_contract_version_and_disclaimer() -> None:
@@ -172,6 +172,54 @@ def test_route_non_object_body_400() -> None:
         "/api/accounting/tools/describe", content="[]", headers={"content-type": "application/json"}
     )
     assert resp.status_code == 400
+
+
+def test_route_lists_decode_tool_always() -> None:
+    assert "decode_onchain_events" in _client().get("/api/accounting/tools").json()["tools"]
+
+
+def test_route_decode_normalizes_a_swap() -> None:
+    body = {
+        "transactions": [
+            {
+                "account_ref": "a",
+                "chain": "ethereum",
+                "timestamp": 1,
+                "protocol_hint": "uniswap_v3",
+                "movements": [
+                    {"asset": {"asset_id": "eth:usdc"}, "direction": "out", "amount": "1000"},
+                    {"asset": {"asset_id": "eth:weth"}, "direction": "in", "amount": "0.3"},
+                ],
+            }
+        ]
+    }
+    resp = _client().post("/api/accounting/tools/decode_onchain_events", json=body)
+    assert resp.status_code == 200
+    out = resp.json()
+    assert out["events"][0]["kind"] == "swap"
+    assert out["eventCountsByKind"] == {"swap": 1}
+
+
+def test_route_decode_invalid_body_400() -> None:
+    resp = _client().post("/api/accounting/tools/decode_onchain_events", json={"transactions": []})
+    assert resp.status_code == 400
+
+
+def test_route_decode_rejects_identity_field_400() -> None:
+    body = {
+        "transactions": [
+            {
+                "account_ref": "a",
+                "chain": "ethereum",
+                "timestamp": 1,
+                "clientId": "leak",
+                "movements": [{"asset": {"asset_id": "eth:a"}, "direction": "in", "amount": "1"}],
+            }
+        ]
+    }
+    resp = _client().post("/api/accounting/tools/decode_onchain_events", json=body)
+    assert resp.status_code == 400
+    assert "PII-free" in resp.text
 
 
 def test_route_price_history_absent_without_historian_404() -> None:

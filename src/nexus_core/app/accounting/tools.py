@@ -2,12 +2,11 @@
 # Copyright 2026 Protocol Wealth, LLC and contributors.
 """Onchain-accounting tool handlers.
 
-Ships a ``describe`` introspection tool always, and ``price_history`` (P1) when
-a :class:`PriceHistorian` is injected. The remaining roadmap tools land later
-(epic nexus-core#248):
+Always ships ``describe`` + ``decode_onchain_events``; adds ``price_history``
+when a :class:`PriceHistorian` is injected. Roadmap (epic nexus-core#248):
 
 - ``price_history`` (P1) — multi-oracle historical prices. **DONE**
-- ``decode_onchain_events`` (P2) — raw tx/logs to a normalized event ledger.
+- ``decode_onchain_events`` (P2) — raw tx/logs to a normalized event ledger. **DONE**
 - ``compute_cost_basis`` (P3) — FIFO lot tracking over the ledger.
 - ``onchain_pnl_report`` (P4) — realized PnL / disposition tracking.
 
@@ -21,8 +20,8 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from ...engine.accounting import PriceHistorian, PriceQuery, PriceResult
-from .contract import AccountingInputError, EventLedger, PriceHistoryRequest
+from ...engine.accounting import PriceHistorian, PriceQuery, PriceResult, decode_transactions
+from .contract import AccountingInputError, DecodeRequest, EventLedger, PriceHistoryRequest
 
 #: A tool handler: takes a validated JSON-object body, returns a JSON-able dict.
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
@@ -44,6 +43,21 @@ def _describe(_body: dict[str, Any]) -> dict[str, Any]:
         "plannedTools": list(PLANNED_TOOLS),
         "eventLedgerSchema": EventLedger.model_json_schema(),
     }
+
+
+def _decode_onchain_events(body: dict[str, Any]) -> dict[str, Any]:
+    """Decode raw transactions into a normalized event ledger. Pure; no I/O."""
+    try:
+        request = DecodeRequest.model_validate(body)
+    except ValidationError as exc:
+        raise AccountingInputError("invalid decode_onchain_events request body") from exc
+    ledger = decode_transactions(request.transactions)
+    counts: dict[str, int] = {}
+    for event in ledger.events:
+        counts[event.kind.value] = counts.get(event.kind.value, 0) + 1
+    payload: dict[str, Any] = ledger.model_dump(mode="json")
+    payload["eventCountsByKind"] = counts
+    return payload
 
 
 def _serialize_result(result: PriceResult) -> dict[str, Any]:
@@ -82,7 +96,10 @@ def build_tool_handlers(*, price_historian: PriceHistorian | None = None) -> dic
     ``describe`` is always present; ``price_history`` is registered when a
     historian is injected (production always injects one).
     """
-    handlers: dict[str, ToolHandler] = {"describe": _describe}
+    handlers: dict[str, ToolHandler] = {
+        "describe": _describe,
+        "decode_onchain_events": _decode_onchain_events,
+    }
     if price_historian is not None:
         handlers["price_history"] = _make_price_history_handler(price_historian)
     return handlers
