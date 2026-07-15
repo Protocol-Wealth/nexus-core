@@ -2,14 +2,14 @@
 # Copyright 2026 Protocol Wealth, LLC and contributors.
 """Onchain-accounting tool handlers.
 
-Always ships ``describe`` + ``decode_onchain_events`` + ``compute_cost_basis``;
-adds ``price_history`` when a :class:`PriceHistorian` is injected. Roadmap
-(epic nexus-core#248):
+Ships ``describe`` + ``decode_onchain_events`` + ``compute_cost_basis`` +
+``onchain_pnl_report`` always; adds ``price_history`` when a
+:class:`PriceHistorian` is injected. Roadmap complete (epic nexus-core#248):
 
 - ``price_history`` (P1) — multi-oracle historical prices. **DONE**
 - ``decode_onchain_events`` (P2) — raw tx/logs to a normalized event ledger. **DONE**
 - ``compute_cost_basis`` (P3) — FIFO lot tracking over the ledger. **DONE**
-- ``onchain_pnl_report`` (P4) — realized PnL / disposition tracking.
+- ``onchain_pnl_report`` (P4) — realized PnL / disposition tracking. **DONE**
 
 Handlers are pure ``dict -> dict`` callables, dispatched by the gateway.
 """
@@ -27,12 +27,14 @@ from ...engine.accounting import (
     PriceResult,
     compute_cost_basis,
     decode_transactions,
+    onchain_pnl_report,
 )
 from .contract import (
     AccountingInputError,
     CostBasisRequest,
     DecodeRequest,
     EventLedger,
+    PnlReportRequest,
     PriceHistoryRequest,
 )
 
@@ -89,6 +91,17 @@ def _compute_cost_basis(body: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def _onchain_pnl_report(body: dict[str, Any]) -> dict[str, Any]:
+    """Realized-PnL / disposition report (FIFO) over a priced ledger. Pure; no I/O."""
+    try:
+        request = PnlReportRequest.model_validate(body)
+    except ValidationError as exc:
+        raise AccountingInputError("invalid onchain_pnl_report request body") from exc
+    report = onchain_pnl_report(request.events, overrides=request.overrides, method=request.method)
+    payload: dict[str, Any] = report.model_dump(mode="json")
+    return payload
+
+
 def _serialize_result(result: PriceResult) -> dict[str, Any]:
     """Wire shape for a price result. Money as a string; a gap as an explicit null."""
     return {
@@ -129,6 +142,7 @@ def build_tool_handlers(*, price_historian: PriceHistorian | None = None) -> dic
         "describe": _describe,
         "decode_onchain_events": _decode_onchain_events,
         "compute_cost_basis": _compute_cost_basis,
+        "onchain_pnl_report": _onchain_pnl_report,
     }
     if price_historian is not None:
         handlers["price_history"] = _make_price_history_handler(price_historian)

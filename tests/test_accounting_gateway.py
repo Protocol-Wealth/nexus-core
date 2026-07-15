@@ -120,7 +120,12 @@ def test_find_identity_keys_catches_identity_wallet_and_client_keys() -> None:
 
 def test_build_tool_handlers_ships_describe_scaffold() -> None:
     handlers = build_tool_handlers()
-    assert set(handlers) == {"describe", "decode_onchain_events", "compute_cost_basis"}
+    assert set(handlers) == {
+        "describe",
+        "decode_onchain_events",
+        "compute_cost_basis",
+        "onchain_pnl_report",
+    }
     out = handlers["describe"]({})
     assert out["status"] == "scaffold"
     assert list(out["plannedTools"]) == list(PLANNED_TOOLS)
@@ -143,7 +148,12 @@ def test_route_lists_tools_with_contract_version() -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["contractVersion"] == ACCOUNTING_CONTRACT_VERSION
-    assert body["tools"] == ["compute_cost_basis", "decode_onchain_events", "describe"]
+    assert body["tools"] == [
+        "compute_cost_basis",
+        "decode_onchain_events",
+        "describe",
+        "onchain_pnl_report",
+    ]
 
 
 def test_route_describe_echoes_contract_version_and_disclaimer() -> None:
@@ -239,6 +249,37 @@ def test_route_compute_cost_basis_fifo() -> None:
 def test_route_compute_cost_basis_invalid_body_400() -> None:
     resp = _client().post("/api/accounting/tools/compute_cost_basis", json={"events": []})
     assert resp.status_code == 400
+
+
+def test_route_onchain_pnl_report() -> None:
+    body = {
+        "events": [
+            {
+                "event_id": "a",
+                "account_ref": "x",
+                "kind": "acquire",
+                "timestamp": 1_600_000_000,
+                "legs": [
+                    {"asset": {"asset_id": "a"}, "direction": "in", "amount": "1", "usd_value": "10"}
+                ],
+            },
+            {
+                "event_id": "d",
+                "account_ref": "x",
+                "kind": "dispose",
+                "timestamp": 1_600_100_000,
+                "legs": [
+                    {"asset": {"asset_id": "a"}, "direction": "out", "amount": "1", "usd_value": "30"}
+                ],
+            },
+        ]
+    }
+    resp = _client().post("/api/accounting/tools/onchain_pnl_report", json=body)
+    assert resp.status_code == 200
+    out = resp.json()
+    assert out["summary"]["realized_gain_usd"] == "20"
+    assert out["summary"]["complete"] is True
+    assert "tax professional" in out["disclaimer"]
 
 
 def test_route_decode_rejects_identity_field_400() -> None:

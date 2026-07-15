@@ -178,6 +178,20 @@ class CostBasisRequest(BaseModel):
     method: Literal["fifo"] = "fifo"
 
 
+# --- onchain_pnl_report tool input (P4) --------------------------------------
+
+
+class PnlReportRequest(BaseModel):
+    """Input to the ``onchain_pnl_report`` tool: a priced event ledger + opening-
+    basis overrides. Realized-only, so no as-of prices. FIFO in v1."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    events: list[LedgerEvent] = Field(min_length=1, max_length=5000)
+    overrides: list[BasisOverrideInput] = Field(default_factory=list, max_length=1000)
+    method: Literal["fifo"] = "fifo"
+
+
 __all__ = [
     "ACCOUNTING_CONTRACT_VERSION",
     "IDENTITY_KEYS",
@@ -187,6 +201,7 @@ __all__ = [
     "BasisOverrideInput",
     "CostBasisRequest",
     "DecodeRequest",
+    "PnlReportRequest",
     "EventKind",
     "EventLedger",
     "LedgerEvent",
