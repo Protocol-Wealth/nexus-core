@@ -58,6 +58,7 @@ from ..data.onchain import (
 )
 from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..disclaimers import FULL as _FULL_DISCLAIMER
+from ..engine.accounting import build_default_historian
 from ..engine.regime import RegimeEngine
 from .access_gate import NexusAccessGate
 from .accounting import build_accounting_router
@@ -298,9 +299,10 @@ def create_app(
     # Planning tool gateway. Included before the FastMCP `/mcp` mount (below) so
     # the explicit `/mcp/tools/...` routes take precedence over the transport.
     app.include_router(build_planning_router(market=market, regime_engine=engine))
-    # Onchain-accounting tool gateway (epic #248). Phase 0 scaffold: dep-free,
-    # PII-free, mounted before the /mcp transport like the planning gateway.
-    app.include_router(build_accounting_router())
+    # Onchain-accounting tool gateway (epic #248). PII-free; the price historian
+    # (DefiLlama coins + Jupiter) backs the price_history tool. Mounted before
+    # the /mcp transport like the planning gateway.
+    app.include_router(build_accounting_router(price_historian=build_default_historian()))
     # Transparent OAuth for the MCP transport (claude.ai connector handshake).
     # These endpoints are public; the gate above protects only the /mcp transport.
     app.include_router(build_oauth_router())

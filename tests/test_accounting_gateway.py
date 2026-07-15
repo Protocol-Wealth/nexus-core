@@ -22,6 +22,7 @@ from nexus_core.app.accounting.contract import (
     find_identity_keys,
 )
 from nexus_core.app.accounting.tools import PLANNED_TOOLS, build_tool_handlers
+from nexus_core.engine.accounting import PriceHistorian
 
 # A de-identified sample ledger: opaque refs + public onchain facts only.
 SAMPLE_LEDGER = {
@@ -169,5 +170,57 @@ def test_route_unknown_tool_404() -> None:
 def test_route_non_object_body_400() -> None:
     resp = _client().post(
         "/api/accounting/tools/describe", content="[]", headers={"content-type": "application/json"}
+    )
+    assert resp.status_code == 400
+
+
+def test_route_price_history_absent_without_historian_404() -> None:
+    resp = _client().post(
+        "/api/accounting/tools/price_history", json={"queries": [{"coin": "x", "timestamp": 1}]}
+    )
+    assert resp.status_code == 404
+
+
+# --- price_history route (P1), with an override-only historian ---------------
+
+
+def _client_with_historian() -> TestClient:
+    app = FastAPI()
+    # no live sources: overrides resolve deterministically, everything else gaps
+    app.include_router(build_accounting_router(price_historian=PriceHistorian([])))
+    return TestClient(app)
+
+
+def test_route_price_history_is_registered_with_a_historian() -> None:
+    resp = _client_with_historian().get("/api/accounting/tools")
+    assert "price_history" in resp.json()["tools"]
+
+
+def test_route_price_history_prices_via_override() -> None:
+    body = {
+        "queries": [{"coin": "eth:usdc", "timestamp": 100}],
+        "overrides": [{"coin": "eth:usdc", "timestamp": 100, "price_usd": "0.999"}],
+    }
+    resp = _client_with_historian().post("/api/accounting/tools/price_history", json=body)
+    assert resp.status_code == 200
+    price = resp.json()["prices"][0]
+    assert price["status"] == "priced"
+    assert price["priceUsd"] == "0.999"
+    assert price["source"] == "override"
+
+
+def test_route_price_history_gap_is_explicit_null() -> None:
+    resp = _client_with_historian().post(
+        "/api/accounting/tools/price_history",
+        json={"queries": [{"coin": "eth:unknown", "timestamp": 100}]},
+    )
+    price = resp.json()["prices"][0]
+    assert price["status"] == "unpriced"
+    assert price["priceUsd"] is None
+
+
+def test_route_price_history_invalid_body_400() -> None:
+    resp = _client_with_historian().post(
+        "/api/accounting/tools/price_history", json={"queries": []}
     )
     assert resp.status_code == 400
