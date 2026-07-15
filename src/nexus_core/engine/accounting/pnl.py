@@ -25,16 +25,9 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
+from ...disclaimers import TAX_AWARENESS
 from .cost_basis import DisposalRecord, compute_cost_basis
 from .models import BasisOverrideInput, LedgerEvent
-
-TAX_DISCLAIMER = (
-    "Illustrative onchain realized-PnL summary for tax awareness only — not tax "
-    "advice, not a tax return, and not a complete cost-basis record. It reflects "
-    "only the transactions tracked under management (FIFO), omits wash-sale, "
-    "like-kind, and other adjustments, and excludes any disposal whose basis or "
-    "proceeds are unknown. Confirm all figures with a qualified tax professional."
-)
 
 
 class PnlBucket(BaseModel):
@@ -154,8 +147,8 @@ def onchain_pnl_report(
         summary=summary,
         by_year=by_year,
         warnings=result.warnings,
-        disclaimer=TAX_DISCLAIMER,
+        disclaimer=TAX_AWARENESS,
     )
 
 
-__all__ = ["PnlBucket", "PnlReport", "PnlYear", "TAX_DISCLAIMER", "onchain_pnl_report"]
+__all__ = ["PnlBucket", "PnlReport", "PnlYear", "onchain_pnl_report"]

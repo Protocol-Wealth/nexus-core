@@ -15,6 +15,8 @@ Variants:
 - :data:`MC_DISCLAIMER` — for Monte Carlo / scenario / projection-shaped
   planning outputs, which need an explicit "illustrative, not a prediction"
   caveat.
+- :data:`TAX_AWARENESS` — for onchain realized-PnL / disposition reports; a
+  tax-awareness recordkeeping summary that is not tax advice or a tax return.
 - :data:`FULL` — the comprehensive text for web pages, the OpenAPI description,
   docs, and ``llms.txt``.
 - :data:`SAFEGUARDS` — a short statement of the risk mitigations the service
@@ -41,6 +43,18 @@ MC_DISCLAIMER = (
     "hypothetical, user-supplied assumptions — not predictions, forecasts, or "
     "guarantees of any individual's outcome. Past performance does not guarantee "
     "future results."
+)
+
+#: For onchain realized-PnL / disposition reports (the accounting engine). A
+#: tax-awareness recordkeeping summary — explicitly not tax advice, not a tax
+#: return, and not a complete cost-basis record (wash-sale / like-kind and other
+#: adjustments are omitted).
+TAX_AWARENESS = (
+    "Illustrative onchain realized-PnL summary for tax awareness only — not tax "
+    "advice, not a tax return, and not a complete cost-basis record. It reflects "
+    "only the transactions tracked under management (FIFO), omits wash-sale, "
+    "like-kind, and other adjustments, and excludes any disposal whose basis or "
+    "proceeds are unknown. Confirm all figures with a qualified tax professional."
 )
 
 #: Short statement of the risk mitigations the service applies. Surfaced on the
