@@ -60,6 +60,7 @@ from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..disclaimers import FULL as _FULL_DISCLAIMER
 from ..engine.regime import RegimeEngine
 from .access_gate import NexusAccessGate
+from .accounting import build_accounting_router
 from .agent_discovery import (
     api_catalog_link_header,
     render_api_catalog,
@@ -129,6 +130,10 @@ _OPENAPI_TAGS = [
     {
         "name": "planning",
         "description": "PII-free retirement-planning tools (pwplan-core contract). Public, browser-callable.",
+    },
+    {
+        "name": "accounting",
+        "description": "PII-free onchain-accounting tools (cost basis / decoding / price history / PnL) over a de-identified event ledger.",
     },
     {"name": "lp", "description": "Uniswap V3 / Aerodrome Slipstream LP analytics."},
     {"name": "wallet", "description": "Anonymous EVM wallet balances (DeBank)."},
@@ -293,6 +298,9 @@ def create_app(
     # Planning tool gateway. Included before the FastMCP `/mcp` mount (below) so
     # the explicit `/mcp/tools/...` routes take precedence over the transport.
     app.include_router(build_planning_router(market=market, regime_engine=engine))
+    # Onchain-accounting tool gateway (epic #248). Phase 0 scaffold: dep-free,
+    # PII-free, mounted before the /mcp transport like the planning gateway.
+    app.include_router(build_accounting_router())
     # Transparent OAuth for the MCP transport (claude.ai connector handshake).
     # These endpoints are public; the gate above protects only the /mcp transport.
     app.include_router(build_oauth_router())
