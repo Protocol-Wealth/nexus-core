@@ -125,8 +125,35 @@ class RawTransactionInput(BaseModel):
     fee_usd: Decimal | None = Field(default=None, ge=0)
 
 
+# --- cost-basis input (P3) ---------------------------------------------------
+
+
+class BasisOverrideInput(BaseModel):
+    """A manual opening cost basis for a position transferred in (from a
+    custodian or another wallet), keyed to the transfer-in event's ``event_id``.
+    ``acquired_at`` carries the original acquisition time for the holding period;
+    it defaults to the event timestamp when omitted."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str = Field(min_length=1, max_length=128)
+    cost_basis_usd: Decimal = Field(ge=0)
+    acquired_at: int | None = Field(default=None, ge=0)
+
+
+class AsOfPriceInput(BaseModel):
+    """A current unit price used to value open lots (unrealized PnL)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    asset_id: str = Field(min_length=1, max_length=128)
+    unit_price_usd: Decimal = Field(ge=0)
+
+
 __all__ = [
+    "AsOfPriceInput",
     "AssetRef",
+    "BasisOverrideInput",
     "EventKind",
     "EventLedger",
     "LedgerEvent",

@@ -120,7 +120,7 @@ def test_find_identity_keys_catches_identity_wallet_and_client_keys() -> None:
 
 def test_build_tool_handlers_ships_describe_scaffold() -> None:
     handlers = build_tool_handlers()
-    assert set(handlers) == {"describe", "decode_onchain_events"}
+    assert set(handlers) == {"describe", "decode_onchain_events", "compute_cost_basis"}
     out = handlers["describe"]({})
     assert out["status"] == "scaffold"
     assert list(out["plannedTools"]) == list(PLANNED_TOOLS)
@@ -143,7 +143,7 @@ def test_route_lists_tools_with_contract_version() -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["contractVersion"] == ACCOUNTING_CONTRACT_VERSION
-    assert body["tools"] == ["decode_onchain_events", "describe"]
+    assert body["tools"] == ["compute_cost_basis", "decode_onchain_events", "describe"]
 
 
 def test_route_describe_echoes_contract_version_and_disclaimer() -> None:
@@ -202,6 +202,42 @@ def test_route_decode_normalizes_a_swap() -> None:
 
 def test_route_decode_invalid_body_400() -> None:
     resp = _client().post("/api/accounting/tools/decode_onchain_events", json={"transactions": []})
+    assert resp.status_code == 400
+
+
+def test_route_compute_cost_basis_fifo() -> None:
+    body = {
+        "events": [
+            {
+                "event_id": "b1",
+                "account_ref": "a",
+                "kind": "acquire",
+                "timestamp": 1,
+                "legs": [
+                    {"asset": {"asset_id": "a"}, "direction": "in", "amount": "1", "usd_value": "10"}
+                ],
+            },
+            {
+                "event_id": "s1",
+                "account_ref": "a",
+                "kind": "dispose",
+                "timestamp": 2,
+                "legs": [
+                    {"asset": {"asset_id": "a"}, "direction": "out", "amount": "1", "usd_value": "30"}
+                ],
+            },
+        ]
+    }
+    resp = _client().post("/api/accounting/tools/compute_cost_basis", json=body)
+    assert resp.status_code == 200
+    out = resp.json()
+    assert out["method"] == "fifo"
+    assert out["disposals"][0]["realized_gain_usd"] == "20"
+    assert out["totals"]["realized_gain_usd"] == "20"
+
+
+def test_route_compute_cost_basis_invalid_body_400() -> None:
+    resp = _client().post("/api/accounting/tools/compute_cost_basis", json={"events": []})
     assert resp.status_code == 400
 
 
