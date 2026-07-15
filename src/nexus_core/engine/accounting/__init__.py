@@ -34,6 +34,12 @@ from .models import (
     MovementInput,
     RawTransactionInput,
 )
+from .pnl import (
+    PnlBucket,
+    PnlReport,
+    PnlYear,
+    onchain_pnl_report,
+)
 from .price_historian import (
     DefiLlamaPriceSource,
     JupiterPriceSource,
@@ -61,6 +67,9 @@ __all__ = [
     "LedgerEvent",
     "LedgerLeg",
     "MovementInput",
+    "PnlBucket",
+    "PnlReport",
+    "PnlYear",
     "PriceHistorian",
     "PricePoint",
     "PriceQuery",
@@ -72,5 +81,6 @@ __all__ = [
     "compute_cost_basis",
     "decode_transaction",
     "decode_transactions",
+    "onchain_pnl_report",
     "resolve_category",
 ]
