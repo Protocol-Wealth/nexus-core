@@ -69,7 +69,9 @@ class PriceSource(Protocol):
 
     name: str
 
-    def historical_prices(self, coins: list[str], timestamp: int) -> dict[str, PricePoint]: ...
+    def historical_prices(self, coins: list[str], timestamp: int) -> dict[str, PricePoint]:
+        """Return a ``{coin: PricePoint}`` map for the coins this source can price."""
+        ...
 
 
 def _to_decimal(value: float) -> Decimal:

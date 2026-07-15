@@ -32,6 +32,10 @@ _BASE_URL = "https://coins.llama.fi"
 _DEFAULT_TIMEOUT = 15.0
 #: How far around the requested timestamp DefiLlama may search for a price.
 _DEFAULT_SEARCH_WIDTH = "4h"
+#: Coins are joined into the request PATH, so a large batch would blow past
+#: upstream/proxy URL-length limits and fail the whole fetch. Chunk so each URL
+#: stays small (100 * ~52 chars ~= 5 KB path), and one bad batch can't gap the rest.
+_MAX_COINS_PER_REQUEST = 100
 
 
 @dataclass(frozen=True)
@@ -130,17 +134,28 @@ class DefiLlamaPriceClient:
         wanted = [c for c in dict.fromkeys(coins) if c]
         if not wanted:
             return {}
-        joined = ",".join(wanted)
+        out: dict[str, CoinPrice] = {}
+        for start in range(0, len(wanted), _MAX_COINS_PER_REQUEST):
+            batch = wanted[start : start + _MAX_COINS_PER_REQUEST]
+            out.update(self._fetch_batch(batch, int(timestamp), search_width))
+        return out
+
+    def _fetch_batch(
+        self, coins: list[str], timestamp: int, search_width: str
+    ) -> dict[str, CoinPrice]:
+        """One DefiLlama call for a bounded batch. Degrades to ``{}`` on failure,
+        so a single bad batch never gaps the coins in the other batches."""
+        joined = ",".join(coins)
         try:
             payload = fetch_json(
-                f"{_BASE_URL}/prices/historical/{int(timestamp)}/{joined}",
+                f"{_BASE_URL}/prices/historical/{timestamp}/{joined}",
                 params={"searchWidth": search_width},
                 headers={"Accept": "application/json"},
                 client=self._http_client,
                 timeout=self._timeout,
             )
         except (httpx.HTTPError, ValueError) as exc:
-            logger.debug("DefiLlama coins historical fetch failed: %s", exc)
+            logger.debug("DefiLlama coins historical batch fetch failed: %s", exc)
             return {}
         return _parse_coins(payload)
 

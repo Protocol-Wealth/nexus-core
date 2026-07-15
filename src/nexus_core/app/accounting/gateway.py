@@ -24,6 +24,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from ...disclaimers import TERSE
@@ -90,7 +91,10 @@ def build_accounting_router(*, price_historian: PriceHistorian | None = None) ->
             return _error(404, f"unknown tool '{tool_id}'; available: {', '.join(available)}")
 
         try:
-            payload = handler(body)
+            # Handlers do blocking sync I/O (the DefiLlama/Jupiter oracle chain).
+            # Offload to the threadpool so a slow price lookup never stalls the
+            # ASGI event loop for unrelated requests on this worker.
+            payload = await run_in_threadpool(handler, body)
         except AccountingInputError as exc:
             return _error(400, exc.public_message)
         except Exception:  # defensive: never return a traceback from the public gateway

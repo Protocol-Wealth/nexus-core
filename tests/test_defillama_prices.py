@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from urllib.parse import unquote
 
 import httpx
 
@@ -79,3 +80,43 @@ def test_historical_prices_skips_fetch_on_empty_input() -> None:
         raise AssertionError("should not fetch for an empty coin list")
 
     assert _client(handler).historical_prices([], 1) == {}
+
+
+def test_historical_prices_chunks_large_batches() -> None:
+    # A 150-coin request must split into <=100-coin URLs, and every coin resolves.
+    batch_sizes: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        coin_segment = unquote(request.url.path).rsplit("/", 1)[-1]
+        keys = coin_segment.split(",")
+        batch_sizes.append(len(keys))
+        return httpx.Response(
+            200, json={"coins": {k: {"price": 1.0, "timestamp": 1} for k in keys}}
+        )
+
+    coins = [f"ethereum:0x{i:040x}" for i in range(150)]
+    out = _client(handler).historical_prices(coins, 1)
+
+    assert len(out) == 150
+    assert len(batch_sizes) == 2  # 100 + 50
+    assert max(batch_sizes) <= 100
+
+
+def test_one_bad_batch_does_not_gap_the_others() -> None:
+    # The first batch 500s; the second must still resolve its coins.
+    seen: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(1)
+        if len(seen) == 1:
+            return httpx.Response(500)
+        coin_segment = unquote(request.url.path).rsplit("/", 1)[-1]
+        keys = coin_segment.split(",")
+        return httpx.Response(
+            200, json={"coins": {k: {"price": 2.0, "timestamp": 1} for k in keys}}
+        )
+
+    coins = [f"ethereum:0x{i:040x}" for i in range(150)]
+    out = _client(handler).historical_prices(coins, 1)
+
+    assert len(out) == 50  # only the second (good) batch resolved
