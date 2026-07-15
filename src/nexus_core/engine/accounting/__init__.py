@@ -3,11 +3,19 @@
 """Onchain-accounting engine (epic nexus-core#248).
 
 Cost-basis, decoding, price-history, and realized-PnL math over a de-identified
-event ledger. P1 ships the multi-oracle price historian; P2 the event decoder.
+event ledger. P1 the price historian, P2 the event decoder, P3 the FIFO
+cost-basis engine.
 """
 
 from __future__ import annotations
 
+from .cost_basis import (
+    CostBasisResult,
+    CostBasisTotals,
+    CostLot,
+    DisposalRecord,
+    compute_cost_basis,
+)
 from .event_decoder import (
     PROTOCOL_CATEGORIES,
     classify_kind,
@@ -16,7 +24,9 @@ from .event_decoder import (
     resolve_category,
 )
 from .models import (
+    AsOfPriceInput,
     AssetRef,
+    BasisOverrideInput,
     EventKind,
     EventLedger,
     LedgerEvent,
@@ -37,8 +47,14 @@ from .price_historian import (
 
 __all__ = [
     "PROTOCOL_CATEGORIES",
+    "AsOfPriceInput",
     "AssetRef",
+    "BasisOverrideInput",
+    "CostBasisResult",
+    "CostBasisTotals",
+    "CostLot",
     "DefiLlamaPriceSource",
+    "DisposalRecord",
     "EventKind",
     "EventLedger",
     "JupiterPriceSource",
@@ -53,6 +69,7 @@ __all__ = [
     "RawTransactionInput",
     "build_default_historian",
     "classify_kind",
+    "compute_cost_basis",
     "decode_transaction",
     "decode_transactions",
     "resolve_category",

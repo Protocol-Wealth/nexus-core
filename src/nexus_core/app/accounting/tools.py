@@ -2,12 +2,13 @@
 # Copyright 2026 Protocol Wealth, LLC and contributors.
 """Onchain-accounting tool handlers.
 
-Always ships ``describe`` + ``decode_onchain_events``; adds ``price_history``
-when a :class:`PriceHistorian` is injected. Roadmap (epic nexus-core#248):
+Always ships ``describe`` + ``decode_onchain_events`` + ``compute_cost_basis``;
+adds ``price_history`` when a :class:`PriceHistorian` is injected. Roadmap
+(epic nexus-core#248):
 
 - ``price_history`` (P1) — multi-oracle historical prices. **DONE**
 - ``decode_onchain_events`` (P2) — raw tx/logs to a normalized event ledger. **DONE**
-- ``compute_cost_basis`` (P3) — FIFO lot tracking over the ledger.
+- ``compute_cost_basis`` (P3) — FIFO lot tracking over the ledger. **DONE**
 - ``onchain_pnl_report`` (P4) — realized PnL / disposition tracking.
 
 Handlers are pure ``dict -> dict`` callables, dispatched by the gateway.
@@ -20,8 +21,20 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from ...engine.accounting import PriceHistorian, PriceQuery, PriceResult, decode_transactions
-from .contract import AccountingInputError, DecodeRequest, EventLedger, PriceHistoryRequest
+from ...engine.accounting import (
+    PriceHistorian,
+    PriceQuery,
+    PriceResult,
+    compute_cost_basis,
+    decode_transactions,
+)
+from .contract import (
+    AccountingInputError,
+    CostBasisRequest,
+    DecodeRequest,
+    EventLedger,
+    PriceHistoryRequest,
+)
 
 #: A tool handler: takes a validated JSON-object body, returns a JSON-able dict.
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
@@ -57,6 +70,22 @@ def _decode_onchain_events(body: dict[str, Any]) -> dict[str, Any]:
         counts[event.kind.value] = counts.get(event.kind.value, 0) + 1
     payload: dict[str, Any] = ledger.model_dump(mode="json")
     payload["eventCountsByKind"] = counts
+    return payload
+
+
+def _compute_cost_basis(body: dict[str, Any]) -> dict[str, Any]:
+    """FIFO cost basis + realized/unrealized PnL over a priced ledger. Pure; no I/O."""
+    try:
+        request = CostBasisRequest.model_validate(body)
+    except ValidationError as exc:
+        raise AccountingInputError("invalid compute_cost_basis request body") from exc
+    result = compute_cost_basis(
+        request.events,
+        overrides=request.overrides,
+        as_of_prices=request.as_of_prices,
+        method=request.method,
+    )
+    payload: dict[str, Any] = result.model_dump(mode="json")
     return payload
 
 
@@ -99,6 +128,7 @@ def build_tool_handlers(*, price_historian: PriceHistorian | None = None) -> dic
     handlers: dict[str, ToolHandler] = {
         "describe": _describe,
         "decode_onchain_events": _decode_onchain_events,
+        "compute_cost_basis": _compute_cost_basis,
     }
     if price_historian is not None:
         handlers["price_history"] = _make_price_history_handler(price_historian)

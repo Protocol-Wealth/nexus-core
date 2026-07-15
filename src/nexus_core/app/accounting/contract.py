@@ -22,12 +22,14 @@ rules and protocol specs. No AGPL code (e.g. Rotki) is copied.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ...engine.accounting.models import (
+    AsOfPriceInput,
     AssetRef,
+    BasisOverrideInput,
     EventKind,
     EventLedger,
     LedgerEvent,
@@ -160,11 +162,30 @@ class DecodeRequest(BaseModel):
     transactions: list[RawTransactionInput] = Field(min_length=1, max_length=2000)
 
 
+# --- compute_cost_basis tool input (P3) --------------------------------------
+
+
+class CostBasisRequest(BaseModel):
+    """Input to the ``compute_cost_basis`` tool: a priced event ledger, opening-
+    basis overrides for transferred-in positions, and optional as-of prices for
+    unrealized PnL. FIFO only in v1."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    events: list[LedgerEvent] = Field(min_length=1, max_length=5000)
+    overrides: list[BasisOverrideInput] = Field(default_factory=list, max_length=1000)
+    as_of_prices: list[AsOfPriceInput] = Field(default_factory=list, max_length=2000)
+    method: Literal["fifo"] = "fifo"
+
+
 __all__ = [
     "ACCOUNTING_CONTRACT_VERSION",
     "IDENTITY_KEYS",
     "AccountingInputError",
+    "AsOfPriceInput",
     "AssetRef",
+    "BasisOverrideInput",
+    "CostBasisRequest",
     "DecodeRequest",
     "EventKind",
     "EventLedger",
