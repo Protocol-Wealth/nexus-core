@@ -189,6 +189,40 @@ class EventLedger(BaseModel):
     events: list[LedgerEvent] = Field(default_factory=list)
 
 
+# --- price_history tool input (P1) -------------------------------------------
+#
+# A coin id is DefiLlama-style: ``{chain}:{address}`` (EVM), ``solana:{mint}``,
+# or ``coingecko:{id}`` — all public asset identity, no client linkage.
+
+
+class PriceQueryInput(BaseModel):
+    """One coin's USD price at one unix-seconds timestamp."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    coin: str = Field(min_length=1, max_length=256)
+    timestamp: int = Field(ge=0, description="unix seconds, UTC")
+
+
+class PriceOverrideInput(BaseModel):
+    """A caller-supplied known price for a (coin, timestamp) the oracles miss."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    coin: str = Field(min_length=1, max_length=256)
+    timestamp: int = Field(ge=0)
+    price_usd: Decimal = Field(ge=0)
+
+
+class PriceHistoryRequest(BaseModel):
+    """Input to the ``price_history`` tool."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    queries: list[PriceQueryInput] = Field(min_length=1, max_length=500)
+    overrides: list[PriceOverrideInput] = Field(default_factory=list, max_length=500)
+
+
 __all__ = [
     "ACCOUNTING_CONTRACT_VERSION",
     "IDENTITY_KEYS",
@@ -198,5 +232,8 @@ __all__ = [
     "EventLedger",
     "LedgerEvent",
     "LedgerLeg",
+    "PriceHistoryRequest",
+    "PriceOverrideInput",
+    "PriceQueryInput",
     "find_identity_keys",
 ]

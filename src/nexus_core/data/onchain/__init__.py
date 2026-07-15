@@ -29,6 +29,7 @@ future richer direct-RPC readers (``pip install nexus-core[onchain]``):
 
 from .debank import DeBankClient, WalletToken, is_evm_address
 from .defillama import DefiLlamaClient, DefiProtocol
+from .defillama_prices import CoinPrice, DefiLlamaPriceClient
 from .jupiter import JupiterClient, JupiterPrice, is_solana_mint
 from .merkl import MerklClient, RewardOpportunity
 from .slipstream import SlipstreamClient
@@ -38,8 +39,10 @@ from .vaultsfyi import Vault, VaultsFyiClient, chain_alias, is_supported_chain
 
 __all__ = [
     "CHAIN_IDS",
+    "CoinPrice",
     "DeBankClient",
     "DefiLlamaClient",
+    "DefiLlamaPriceClient",
     "DefiProtocol",
     "JupiterClient",
     "JupiterPrice",

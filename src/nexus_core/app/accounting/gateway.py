@@ -24,9 +24,11 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from ...disclaimers import TERSE
+from ...engine.accounting import PriceHistorian
 from .contract import (
     ACCOUNTING_CONTRACT_VERSION,
     AccountingInputError,
@@ -42,14 +44,15 @@ def _error(status_code: int, message: str) -> PlainTextResponse:
     return PlainTextResponse(message, status_code=status_code, headers={"Cache-Control": "no-store"})
 
 
-def build_accounting_router() -> APIRouter:
+def build_accounting_router(*, price_historian: PriceHistorian | None = None) -> APIRouter:
     """Build the accounting tool-gateway router.
 
-    Phase 0 registers only the ``describe`` scaffold tool; the router takes no
-    data dependencies yet. Later phases inject a price provider etc.
+    ``describe`` is always available; ``price_history`` (P1) is registered when a
+    :class:`PriceHistorian` is injected (production wires the DefiLlama + Jupiter
+    oracle chain). Later phases inject further dependencies.
     """
     router = APIRouter(tags=["accounting"])
-    handlers = build_tool_handlers()
+    handlers = build_tool_handlers(price_historian=price_historian)
     available = sorted(handlers)
 
     @router.get("/api/accounting/tools", summary="Accounting tools + contract version")
@@ -88,7 +91,10 @@ def build_accounting_router() -> APIRouter:
             return _error(404, f"unknown tool '{tool_id}'; available: {', '.join(available)}")
 
         try:
-            payload = handler(body)
+            # Handlers do blocking sync I/O (the DefiLlama/Jupiter oracle chain).
+            # Offload to the threadpool so a slow price lookup never stalls the
+            # ASGI event loop for unrelated requests on this worker.
+            payload = await run_in_threadpool(handler, body)
         except AccountingInputError as exc:
             return _error(400, exc.public_message)
         except Exception:  # defensive: never return a traceback from the public gateway
