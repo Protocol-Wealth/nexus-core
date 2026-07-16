@@ -404,26 +404,35 @@ def test_route_compute_cost_basis_rejects_a_derived_total_outside_the_envelope()
     response = _client().post(
         "/api/accounting/tools/compute_cost_basis",
         json={
-            "events": [
-                {
-                    "event_id": f"acquisition-{index}",
-                    "account_ref": "account-opaque",
-                    "kind": "acquire",
-                    "timestamp": index + 1,
-                    "legs": [
+            "events": [],
+            "report_window": {
+                "start_at": 10,
+                "end_at": 11,
+                "opening_state": {
+                    "schema_version": "2.0.0",
+                    "basis_method": "fifo",
+                    "basis_method_version": "2.0.0",
+                    "snapshot_complete": True,
+                    "state_ref": "derived-total-overflow",
+                    "as_of": 9,
+                    "source": "private_event_ledger",
+                    "last_verified": "2026-07-16",
+                    "lots": [
                         {
+                            "lot_ref": f"opening-lot-{index}",
+                            "account_ref": "account-opaque",
                             "asset": {"asset_id": f"asset-{index}"},
-                            "direction": "in",
-                            "amount": "1",
-                            "usd_value": maximum_operand,
-                            "price_source": "caller_price",
-                            "price_as_of": index + 1,
+                            "quantity": "1",
+                            "cost_basis_usd": maximum_operand,
+                            "acquired_at": 1,
+                            "basis_source": "replayed_history",
+                            "basis_price_source": "historian",
+                            "basis_price_as_of": 1,
                         }
+                        for index in range(2)
                     ],
-                }
-                for index in range(2)
-            ],
-            "report_window": {"start_at": 1, "end_at": 3, "full_history": True},
+                },
+            },
         },
     )
 
