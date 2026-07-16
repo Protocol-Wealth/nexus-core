@@ -348,6 +348,21 @@ def test_route_compute_cost_basis_invalid_body_400() -> None:
     assert resp.status_code == 400
 
 
+def test_route_quiet_period_requests_are_valid() -> None:
+    body = {
+        "events": [],
+        "report_window": {"start_at": 1, "end_at": 2, "full_history": True},
+    }
+
+    cost_basis = _client().post("/api/accounting/tools/compute_cost_basis", json=body)
+    assert cost_basis.status_code == 200
+    assert cost_basis.json()["replay"]["in_period_event_count"] == 0
+
+    pnl = _client().post("/api/accounting/tools/onchain_pnl_report", json=body)
+    assert pnl.status_code == 200
+    assert pnl.json()["summary"]["disposal_count"] == 0
+
+
 def test_route_onchain_pnl_report() -> None:
     body = {
         "events": [

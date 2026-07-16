@@ -13,7 +13,7 @@ CIO/IC/CCO methodology approval.
 
 | Check | Result |
 |-------|--------|
-| accounting engine, PnL, decoder, historian, and non-route gateway tests | `66 passed, 19 deselected` |
+| accounting engine, PnL, decoder, historian, and non-route gateway tests | `68 passed, 20 deselected` |
 | focused accounting package coverage | `87%` overall; `cost_basis.py` `89%` |
 | `ruff check src/ tests/` | passed |
 | `mypy --strict src/nexus_core/` | passed; 181 source files |
@@ -26,8 +26,8 @@ below. GitHub CI is therefore authoritative for the complete route suite and
 repository coverage floor. The focused fixtures include account isolation,
 same-owner and chained transfers, unknown basis, fee allocation and fee-asset
 handling, calendar/leap-year holding terms, half-open period replay, opening
-state adjacency/order, lineage, raw-address rejection, and structured
-completeness failures.
+state adjacency/order, quiet periods, excluded post-period ordering, lineage,
+raw-address rejection, and structured completeness failures.
 
 ## 2026-07-15 ET — onchain accounting P0-P4 closeout
 

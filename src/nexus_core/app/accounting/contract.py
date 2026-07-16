@@ -22,9 +22,9 @@ rules and protocol specs. No AGPL code (e.g. Rotki) is copied.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ...engine.accounting.models import (
     AsOfPriceInput,
@@ -184,11 +184,17 @@ class CostBasisRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    events: list[LedgerEvent] = Field(min_length=1, max_length=5000)
+    events: list[LedgerEvent] = Field(max_length=5000)
     overrides: list[BasisOverrideInput] = Field(default_factory=list, max_length=1000)
     as_of_prices: list[AsOfPriceInput] = Field(default_factory=list, max_length=2000)
     report_window: ReportWindowInput | None = None
     method: Literal["fifo"] = "fifo"
+
+    @model_validator(mode="after")
+    def validate_quiet_period(self) -> Self:
+        if not self.events and self.report_window is None:
+            raise ValueError("events must not be empty without a report_window")
+        return self
 
 
 # --- onchain_pnl_report tool input (P4) --------------------------------------
@@ -200,10 +206,16 @@ class PnlReportRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    events: list[LedgerEvent] = Field(min_length=1, max_length=5000)
+    events: list[LedgerEvent] = Field(max_length=5000)
     overrides: list[BasisOverrideInput] = Field(default_factory=list, max_length=1000)
     report_window: ReportWindowInput | None = None
     method: Literal["fifo"] = "fifo"
+
+    @model_validator(mode="after")
+    def validate_quiet_period(self) -> Self:
+        if not self.events and self.report_window is None:
+            raise ValueError("events must not be empty without a report_window")
+        return self
 
 
 __all__ = [

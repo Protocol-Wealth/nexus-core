@@ -516,6 +516,61 @@ def test_full_history_replay_uses_half_open_end_boundary() -> None:
     assert result.replay.post_period_excluded_count == 2
 
 
+def test_post_period_events_do_not_require_replay_sequence() -> None:
+    result = compute_cost_basis(
+        [
+            _ev("acq", EventKind.acquire, 1, [_leg("asset", "in", "1", "10")]),
+            _ev("future-a", EventKind.acquire, 20, [_leg("asset", "in", "1", "20")]),
+            _ev("future-b", EventKind.acquire, 20, [_leg("asset", "in", "1", "30")]),
+        ],
+        report_window=_window(1, 10),
+    )
+
+    assert result.replay.replayed_event_count == 1
+    assert result.replay.post_period_excluded_count == 2
+    assert result.open_lots[0].quantity == Decimal("1")
+
+
+def test_quiet_opening_state_period_returns_open_lots() -> None:
+    opening = OpeningStateInput(
+        schema_version="1.0.0",
+        state_ref="quiet-opening",
+        as_of=9,
+        source="private_event_ledger",
+        last_verified=date(2026, 7, 16),
+        lots=[
+            OpeningLotInput(
+                lot_ref="quiet-lot",
+                account_ref="acct-a",
+                asset=AssetRef(asset_id="asset"),
+                quantity=Decimal("2"),
+                unit_cost_usd=Decimal("10"),
+                acquired_at=1,
+                basis_source="replayed_history",
+                basis_price_source="historian",
+                basis_price_as_of=1,
+            )
+        ],
+    )
+    result = compute_cost_basis(
+        [],
+        as_of_prices=[
+            AsOfPriceInput(
+                asset_id="asset",
+                unit_price_usd=Decimal("15"),
+                source="historian",
+                as_of=20,
+            )
+        ],
+        report_window=ReportWindowInput(start_at=10, end_at=20, opening_state=opening),
+    )
+
+    assert result.replay.in_period_event_count == 0
+    assert result.disposals == []
+    assert result.open_lots[0].quantity == Decimal("2")
+    assert result.open_lots[0].market_value_usd == Decimal("30")
+
+
 def test_report_window_must_be_non_empty() -> None:
     with pytest.raises(ValueError, match="greater than start_at"):
         _window(10, 10)

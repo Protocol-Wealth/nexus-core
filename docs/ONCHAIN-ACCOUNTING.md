@@ -87,11 +87,16 @@ adjacent periods:
    basis, acquisition date/order, and provenance. Events before the period are
    rejected in this mode to prevent double replay.
 
-Events sharing a timestamp require unique `sequence` values. Opening lots sharing
-account, asset, and acquisition time require unique `acquisition_sequence`
-values. Event IDs, opening lot refs, override refs, override targets, and as-of
-price assets are validated for uniqueness. Replaying identical inputs is
-deterministic.
+A bounded request may contain an empty `events` list. This represents a quiet
+period and still returns opening lots, closing valuation, completeness, and a
+zero-disposition PnL report. Legacy all-event requests still require an event.
+
+Replayed events sharing a timestamp require unique `sequence` values. Excluded
+post-period events do not participate in replay-order validation. Opening lots
+sharing account, asset, and acquisition time require unique
+`acquisition_sequence` values. Event IDs, opening lot refs, override refs,
+override targets, and as-of price assets are validated for uniqueness. Replaying
+identical inputs is deterministic.
 
 As-of prices are closing valuations, not replayed events. A price timestamped
 exactly at `end_at` is accepted; a price after `end_at` is rejected.

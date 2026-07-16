@@ -376,7 +376,11 @@ def _validate_inputs(
         if event.event_id in event_by_id:
             raise ValueError(f"duplicate event_id: {event.event_id}")
         event_by_id[event.event_id] = event
-        by_timestamp.setdefault(event.timestamp, []).append(event)
+        # Sequence values exist only to make replay order deterministic. Events
+        # outside a bounded report are counted as excluded input, not replayed,
+        # so their relative order cannot affect this calculation.
+        if report_window is None or event.timestamp < report_window.end_at:
+            by_timestamp.setdefault(event.timestamp, []).append(event)
         if event.kind in (EventKind.transfer_in, EventKind.transfer_out) and event.transfer_ref:
             key = (event.transfer_ref, event.kind)
             if key in transfer_directions:

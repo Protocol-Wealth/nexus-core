@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Added explicit fee allocation/payment semantics. USD costs adjust acquisition
   basis or disposition proceeds once; a digital-asset fee leg is recorded as its
   own account-scoped disposal.
+- Added quiet-period replay so a bounded request with no events can still return
+  opening lots, closing valuation, completeness, and a zero-disposition report.
 - Reject supported-chain raw wallet shapes in account references and reject
   contradictory standalone fee-event metadata.
 
@@ -37,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   more-than-one-year anniversary rule. Future-dated acquisition overrides,
   duplicate refs, orphan overrides, and ambiguous equal-timestamp order now fail
   validation.
+- Limited equal-timestamp sequence validation to replayed events; excluded
+  post-period events cannot invalidate the current report.
 - Corrected `describe` from `status: scaffold` to `status: available` while
   retaining `plannedTools` as a compatibility alias. Native MCP registration
   remains separate issue #259; the public demo profile is unchanged.
