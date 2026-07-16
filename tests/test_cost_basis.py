@@ -246,6 +246,39 @@ def test_same_owner_transfer_preserves_lot_basis_date_and_lineage() -> None:
     assert result.completeness.statement_ready is False  # governance review remains required
 
 
+def test_unmatched_same_owner_transfer_makes_closing_inventory_totals_unknown() -> None:
+    result = compute_cost_basis(
+        [
+            _ev("acq", EventKind.acquire, 1, [_leg("asset", "in", "1", "10")]),
+            _ev(
+                "move-out",
+                EventKind.transfer_out,
+                2,
+                [_leg("asset", "out", "1")],
+                transfer_ref="transfer-1",
+                transfer_treatment=TransferTreatment.same_owner,
+            ),
+        ],
+        as_of_prices=[
+            AsOfPriceInput(
+                asset_id="asset",
+                unit_price_usd=Decimal("20"),
+                source="closing_price",
+                as_of=3,
+            )
+        ],
+        report_window=_window(1, 4),
+    )
+
+    assert result.open_lots == []
+    assert result.totals.open_cost_basis_usd is None
+    assert result.totals.open_market_value_usd is None
+    assert result.totals.open_unrealized_pnl_usd is None
+    assert result.totals.realized_gain_usd == Decimal("0")
+    assert result.coverage.unresolved_transfer_count == 1
+    assert "unmatched_transfer_out" in {gap.code for gap in result.completeness.gaps}
+
+
 def test_chained_same_owner_transfer_preserves_root_lot_lineage() -> None:
     events = [
         _ev("acq", EventKind.acquire, 1, [_leg("asset", "in", "1", "10")]),
@@ -457,7 +490,7 @@ def test_same_owner_transfer_override_requires_original_date_and_provenance() ->
     assert "unconfirmed_single_lot_override" in codes
     assert result.disposals[0].acquired_at is None
     assert result.disposals[0].complete is False
-    assert result.totals.realized_gain_usd is None
+    assert result.totals.realized_gain_usd == Decimal("20")
 
     with pytest.raises(ValueError, match="cannot follow"):
         compute_cost_basis(

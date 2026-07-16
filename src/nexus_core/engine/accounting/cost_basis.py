@@ -1725,13 +1725,18 @@ def compute_cost_basis(
                 warnings=warnings,
             )
 
+    has_unmatched_transfer_inventory = False
     for transfer_ref, fragments in pending_transfers.items():
         if any(fragment.quantity > 0 for fragment in fragments):
+            has_unmatched_transfer_inventory = True
             counts.unresolved_transfer_keys.add(transfer_ref)
             _gap(
                 gaps,
                 "unmatched_transfer_out",
-                f"same-owner transfer_ref {transfer_ref} has no complete destination match",
+                (
+                    f"same-owner transfer_ref {transfer_ref} has no complete destination match; "
+                    "closing inventory totals are unknown"
+                ),
             )
 
     if report_window is not None:
@@ -1773,12 +1778,22 @@ def compute_cost_basis(
             )
 
     totals = CostBasisTotals(
-        open_cost_basis_usd=_sum_opt([lot.cost_basis_usd for lot in open_lots]),
-        open_market_value_usd=_sum_opt([lot.market_value_usd for lot in open_lots]),
-        open_unrealized_pnl_usd=_sum_opt([lot.unrealized_pnl_usd for lot in open_lots]),
-        realized_gain_usd=_sum_opt(
-            [disposal.realized_gain_usd if disposal.complete else None for disposal in disposals]
+        open_cost_basis_usd=(
+            None
+            if has_unmatched_transfer_inventory
+            else _sum_opt([lot.cost_basis_usd for lot in open_lots])
         ),
+        open_market_value_usd=(
+            None
+            if has_unmatched_transfer_inventory
+            else _sum_opt([lot.market_value_usd for lot in open_lots])
+        ),
+        open_unrealized_pnl_usd=(
+            None
+            if has_unmatched_transfer_inventory
+            else _sum_opt([lot.unrealized_pnl_usd for lot in open_lots])
+        ),
+        realized_gain_usd=_sum_opt([disposal.realized_gain_usd for disposal in disposals]),
     )
     accounts = (
         {event.account_ref for event in replayed_events}

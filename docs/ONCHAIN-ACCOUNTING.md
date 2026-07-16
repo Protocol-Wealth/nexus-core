@@ -82,6 +82,12 @@ asserts same ownership and supplies original basis/date. External, unknown, and
 unmatched transfers remain explicit completeness gaps. A market value observed
 on transfer never becomes original basis automatically.
 
+If a bounded report ends after a linked same-owner transfer-out but before the
+matching transfer-in, the engine records the unmatched transfer gap and returns
+all closing-inventory totals as `null`. The in-transit fragments are not assigned
+back to the source account or fabricated into a destination account, and their
+basis is never misreported as zero.
+
 ## Fees
 
 `fee_usd` is no longer ignored. A nonzero fee requires:
@@ -159,6 +165,13 @@ opaque event, account, and asset references. Unknown basis or proceeds stays
 attest that closing inventory valuations are present or suitable for a particular
 client deliverable; the private statement composer applies section-specific
 realized-PnL and closing-valuation gates.
+
+Realized-PnL aggregates include a disposal whenever its proceeds and basis are
+numerically known, even if missing provenance or acquisition-date facts keep the
+record incomplete. Such a record still increments `incomplete_count`; without a
+known acquisition date its gain is excluded from both the short- and long-term
+subtotals. A disposal with unknown proceeds or basis remains excluded from every
+numeric aggregate rather than being treated as zero.
 
 The holding-period calculation uses UTC calendar dates. Counting begins after the
 acquisition date and includes the disposition date; a disposition is long term

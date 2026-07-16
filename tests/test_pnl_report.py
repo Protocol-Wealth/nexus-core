@@ -10,6 +10,7 @@ from typing import Literal
 
 from nexus_core.engine.accounting import (
     AssetRef,
+    BasisOverrideInput,
     EventKind,
     LedgerEvent,
     LedgerLeg,
@@ -116,6 +117,41 @@ def test_report_excludes_incomplete_disposals_and_counts_them() -> None:
     assert report.summary.incomplete_count == 1
     assert report.summary.complete is False
     assert any("basis unknown" in w for w in report.warnings)
+
+
+def test_report_keeps_known_numbers_when_only_completeness_metadata_is_missing() -> None:
+    events = [
+        LedgerEvent(
+            event_id="transfer",
+            account_ref="acct-1",
+            kind=EventKind.transfer_in,
+            timestamp=_ACQ,
+            transfer_ref="transfer-1",
+            transfer_treatment=TransferTreatment.same_owner,
+            legs=[_leg("a", "in", "1", "100")],
+        ),
+        _ev("dispose", EventKind.dispose, _DISP_SHORT, [_leg("a", "out", "1", "100")]),
+    ]
+
+    report = onchain_pnl_report(
+        events,
+        overrides=[BasisOverrideInput(event_id="transfer", cost_basis_usd=Decimal("80"))],
+        report_window=ReportWindowInput(
+            start_at=_ACQ,
+            end_at=_DISP_SHORT + 1,
+            full_history=True,
+        ),
+    )
+
+    assert report.dispositions[0].realized_gain_usd == Decimal("20")
+    assert report.dispositions[0].complete is False
+    assert report.summary.realized_gain_usd == Decimal("20")
+    assert report.summary.proceeds_usd == Decimal("100")
+    assert report.summary.cost_basis_usd == Decimal("80")
+    assert report.summary.short_term_gain_usd == Decimal("0")
+    assert report.summary.long_term_gain_usd == Decimal("0")
+    assert report.summary.incomplete_count == 1
+    assert report.summary.complete is False
 
 
 def test_unmatched_transfer_market_value_cannot_make_statement_complete() -> None:

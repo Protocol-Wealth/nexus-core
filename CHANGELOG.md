@@ -57,6 +57,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   only movements are fee legs decode as standalone fee events.
 - Count unresolved transfers by reference (including unmatched inbound and fully
   paired source shortfalls) and emit specific missing-reference/treatment gaps.
+  When a report ends with same-owner fragments still in transit, return closing
+  inventory totals as unknown instead of a false numeric zero.
+- Include numerically known disposal basis, proceeds, and gains in PnL aggregates
+  even when missing provenance or acquisition-date facts keep the disposal
+  incomplete; unknown-term gains remain outside short/long subtotals.
 - Corrected `describe` from `status: scaffold` to `status: available` while
   retaining `plannedTools` as a compatibility alias. Native MCP registration
   remains separate issue #259; the public demo profile is unchanged.

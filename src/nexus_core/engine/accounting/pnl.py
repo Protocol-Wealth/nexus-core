@@ -96,13 +96,13 @@ def _aggregate(
     cost_basis_values: list[Decimal] = []
     incomplete = 0
     for disposal in disposals:
+        if not disposal.complete:
+            incomplete += 1
         if (
-            not disposal.complete
-            or disposal.realized_gain_usd is None
+            disposal.realized_gain_usd is None
             or disposal.proceeds_usd is None
             or disposal.cost_basis_usd is None
         ):
-            incomplete += 1
             continue
         realized_values.append(disposal.realized_gain_usd)
         proceeds_values.append(disposal.proceeds_usd)
