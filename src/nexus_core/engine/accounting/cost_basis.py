@@ -805,7 +805,6 @@ def _add_acquisition_lots(
         basis_source = "override"
         basis_override_ref = override.override_ref or override.event_id
         basis_last_verified = override.last_verified
-        basis_evidence_source = override.source
         price_source = None
         price_as_of = None
         if acquired_at is None:
@@ -854,7 +853,6 @@ def _add_acquisition_lots(
         basis_override_ref = None
         basis_last_verified = None
         price_source, price_as_of = _price_provenance(outs)
-        basis_evidence_source = None
     else:
         leg_values = [_leg_usd(leg) for leg in in_legs]
         if fee_addition:
@@ -871,7 +869,6 @@ def _add_acquisition_lots(
         basis_source = "income_market" if event.kind == EventKind.claim else "market"
         basis_override_ref = None
         basis_last_verified = None
-        basis_evidence_source = None
         price_source = None
         price_as_of = None
 
@@ -886,7 +883,7 @@ def _add_acquisition_lots(
             message = f"acquisition basis unknown for {leg.asset.asset_id} ({event.event_id})"
             warnings.append(message)
             _gap(gaps, "unknown_basis", message, event=event, asset_id=leg.asset.asset_id)
-        leg_evidence_source = basis_evidence_source if override is not None else None
+        leg_evidence_source = override.source if override is not None else None
         if basis_total is not None and (
             (leg_price_source is None or leg_price_as_of is None)
             and (leg_evidence_source is None or basis_last_verified is None)
