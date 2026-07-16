@@ -301,15 +301,14 @@ gracefully to `None` / empty / `503` when its key is absent.
 
 Prioritized. Top item first.
 
-**Accounting semantics and replay hardening — open issue #260.** Deployed
-contract `0.2.0` scopes FIFO books by account, handles linked same-owner
-transfers and explicit fees, conserves authoritative basis across snapshot
-boundaries, uses calendar terms, supports full-history/method-pinned
-opening-state replay, and returns deterministic root lineage plus structured
-completeness. Keep private
-cost-basis and realized-PnL statement composition disabled until `pw-api`
-consumer compatibility and CIO/IC/CCO methodology review; the engine enforces
-that gate through `statement_ready=false` while review remains pending.
+**Accounting statement consumer — open `pw-api#789`.** Nexus technical issue
+#260 is complete and deployed contract `0.2.0` now scopes FIFO books by account,
+handles linked same-owner transfers and explicit fees, conserves authoritative
+basis across snapshot boundaries, supports method-pinned replay, and returns
+deterministic lineage plus structured completeness. Keep private cost-basis and
+realized-PnL statement composition disabled until `pw-api` consumer
+compatibility and CIO/IC/CCO methodology review; the engine enforces that gate
+through `statement_ready=false` while review remains pending.
 
 **Native MCP accounting adapter — open issue #259 (completes #248).** Reuse the
 deployed accounting handlers in the native MCP full profile with the same

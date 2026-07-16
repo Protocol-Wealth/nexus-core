@@ -43,10 +43,11 @@ accounting handlers are **not yet registered in native MCP**; issue
 [#259](https://github.com/Protocol-Wealth/nexus-core/issues/259) tracks that
 full-profile adapter, while the hosted demo MCP profile stays unchanged. This is
 calculation substrate, not an end-to-end client statement or tax-return system.
-Issue [#260](https://github.com/Protocol-Wealth/nexus-core/issues/260) tracks the
-remaining release gate. The code keeps `statement_ready=false` while methodology
-review is pending; private `pw-api` compatibility and CIO/IC/CCO approval remain
-required before statement composition is enabled.
+Technical issue [#260](https://github.com/Protocol-Wealth/nexus-core/issues/260)
+is complete. The private consumer epic
+[`pw-api#789`](https://github.com/Protocol-Wealth/pw-api/issues/789) tracks
+contract compatibility and the CIO/IC/CCO approval gate. The engine keeps
+`statement_ready=false` until methodology review is recorded.
 
 The current options substrate includes the MBOUM equity option expiration/chain
 provider, batch collar screens, and a collar-book realistic-fill layer. The

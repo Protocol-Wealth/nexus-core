@@ -33,9 +33,10 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   remaining-basis conservation, bounded method-pinned replay, root lineage, and
   structured completeness. P0-P4 remain calculation
   primitives, not proof that a client statement workflow or tax return is
-  complete; #260 still blocks statement wiring pending `pw-api` compatibility
-  and CIO/IC/CCO methodology review, and the engine forces
-  `statement_ready=false` until that review is recorded.
+  complete. Technical issue #260 is closed; private statement wiring remains
+  blocked in `pw-api#789` pending consumer compatibility and CIO/IC/CCO
+  methodology review. The engine forces `statement_ready=false` until that
+  review is recorded.
 - **Earlier planning update:** 2026-07-08 — `main` completes planning
   assumption provenance (#198). Built-in federal tax, IRMAA, education vehicle,
   simplified state conversion/state-tax, ACA reference, cash-flow,
@@ -124,10 +125,11 @@ produce a tax return, or create a books-and-records workflow. Those private
 consumer responsibilities remain in `pw-api`/PWOS. Native MCP registration is a
 separate unfinished transport adapter tracked by #259; production currently runs
 the demo MCP profile, so its public tool list is intentionally unchanged. Issue
-#260's code hardening is deployed in accounting contract `0.2.0`. Its consumer
-and governance gates remain open: `pw-api` must pass contract compatibility and
-methodology version `2.0.0` remains `pending_governance_review`, so private
-statement composition must remain disabled.
+#260's code hardening is deployed in accounting contract `0.2.0`, and that
+technical issue is closed. Consumer and governance gates remain open in
+`pw-api#789`: `pw-api` must pass contract compatibility and methodology version
+`2.0.0` remains `pending_governance_review`, so private statement composition
+must remain disabled.
 
 ## Hybrid planning boundary
 
@@ -559,11 +561,10 @@ Outstanding and future work is tracked in GitHub Issues:
 - **#259 native MCP accounting registration** — adapt the existing handlers into
   the full MCP profile with the same PII scan, contract/disclaimer envelope, and
   no change to the hosted demo profile.
-- **#260 accounting semantics/replay hardening** — deployed contract `0.2.0`
-  implements the account/transfer/fee, calendar-term, report-window/opening-state,
-  deterministic replay, lineage, and completeness work. The cost-basis and
-  realized-PnL statement phases remain blocked until `pw-api` consumer
-  compatibility and CIO/IC/CCO methodology review.
+- **pw-api#789 accounting statement consumer** — consume deployed contract
+  `0.2.0`, pass the authenticated compatibility fixture, build the private
+  statement sections, and record CIO/IC/CCO methodology approval before
+  enablement. Nexus technical issue #260 is complete.
 - **#197 public-safe planning/report analytics extraction** — decide what generic,
   PII-free analytics should move from private PWOS producer work into nexus-core
   versus staying in advisor workflow code. Existing planning-bridge wrappers

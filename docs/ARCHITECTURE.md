@@ -231,10 +231,10 @@ authoritative basis conservation, method-pinned opening snapshots, replay-safe
 lineage, and structured completeness. Unit-only legacy opening lots remain
 calculable but explicitly incomplete. Private custodian ingestion,
 wallet-to-client mapping, statement construction, tax-return preparation,
-approval, release, and retention remain outside this repo. Issue #260 continues
-to block private statement composition until the `pw-api` consumer passes its
-compatibility gate and the methodology is CIO/IC/CCO-reviewed; the engine
-reports `statement_ready=false` while that review is pending.
+approval, release, and retention remain outside this repo. Technical issue #260
+is complete; private consumer epic `pw-api#789` blocks statement composition
+until compatibility passes and the methodology is CIO/IC/CCO-reviewed. The
+engine reports `statement_ready=false` while that review is pending.
 
 ## Planning Engine
 

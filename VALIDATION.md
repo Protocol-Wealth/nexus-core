@@ -3,31 +3,51 @@
 Records the latest validation for the `nexus_core.app` HTTP API, MCP transport,
 data providers, and public documentation/status surface.
 
-## 2026-07-16 ET — accounting contract 0.2.0 source gate (#260)
+## 2026-07-16 ET — accounting contract 0.2.0 release closeout (#260)
 
-The `feat/onchain-accounting-contract-v2` source branch was validated before
-publication. This is source evidence only: contract `0.2.0` has not been merged
-or deployed, the authenticated live service remains contract `0.1.0`, and
-client-statement use remains blocked on pw-api compatibility work plus
-CIO/IC/CCO methodology approval.
+PR #262 merged reviewed source head
+`a142da610f48a2e82b89f3c4eaa12d1eda2519a5` as commit `70bd5d5` and deployed
+that byte-identical tree to Cloud Run revision `nexus-core-00069-6m7` at 100%
+traffic. Contract `0.2.0` is deployed; private client-statement use remains
+blocked in `pw-api#789` on consumer compatibility plus CIO/IC/CCO methodology
+approval, and the engine continues to return `statement_ready=false`.
 
-| Check | Result |
-|-------|--------|
-| accounting engine, PnL, decoder, historian, and non-route gateway tests | `68 passed, 20 deselected` |
-| focused accounting package coverage | `87%` overall; `cost_basis.py` `89%` |
-| `ruff check src/ tests/` | passed |
-| `mypy --strict src/nexus_core/` | passed; 181 source files |
-| `ruff format --check` on all 12 changed Python files | passed |
-| no-dependency, no-isolation wheel build | passed; `nexus_core-0.1.0-py3-none-any.whl` |
-| accounting FastAPI route tests | bounded at 120 seconds; local TestClient/AnyIO harness produced no result |
+| Check | Evidence | Result |
+|-------|----------|--------|
+| focused accounting engine, PnL, and decoder tests | local exact head | `90 passed` |
+| non-route accounting gateway tests | local exact head | `15 passed, 23 deselected` |
+| ruff + strict mypy + full pytest/coverage | Actions run `29518197955` | passed |
+| SPDX headers | Actions run `29518199275` | passed |
+| license compliance | Actions run `29518198242` | passed |
+| CodeQL | Actions runs `29518190163`, `29518190175` | passed |
+| exact-head standalone Codex review | source head `a142da6` | no major issues; all inline threads resolved |
+| `git diff --check` | local exact head | clean |
 
-The route timeout matches the WSL/sandbox thread-dispatch caveat documented
-below. GitHub CI is therefore authoritative for the complete route suite and
-repository coverage floor. The focused fixtures include account isolation,
-same-owner and chained transfers, unknown basis, fee allocation and fee-asset
-handling, calendar/leap-year holding terms, half-open period replay, opening
-state adjacency/order, quiet periods, excluded post-period ordering, lineage,
-raw-address rejection, and structured completeness failures.
+The local full suite and FastAPI `TestClient` route harness hit the documented
+WSL/AnyIO hang, so exact-head GitHub CI is authoritative for the complete route
+suite and repository coverage floor. Focused stress evidence also covered
+50,000 allocation cases, 20,000 lot-conservation cases, 10,000 multiplication
+cases plus dual-model validation, 200 cross-Decimal-context replay cases, and
+extreme-exponent handler checks.
+
+Cloud Run reports revision `nexus-core-00069-6m7` Ready and serving 100% traffic.
+The deployed image digest is
+`sha256:781fcf198e9862723dced409a81958c36cbdadcf6b3ec558c71da9a130b30555`.
+The service configuration remains `NEXUS_PUBLIC_MCP_PROFILE=demo` plus
+`NEXUS_ACCESS_MODE=restricted`, with VPC, Cloud SQL, scaling, resources, and
+secret bindings preserved.
+
+| Live check | Result |
+|------------|--------|
+| `GET https://nexusmcp.site/health` | `200` — `{"status":"ok","service":"nexus-core","version":"0.1.0"}` |
+| direct Cloud Run `GET /health` | `200` — same health body |
+| unauthenticated `GET https://nexusmcp.site/api/accounting/tools` | `401` — `{"error":"unauthorized","error_description":"Nexus API key required"}` |
+
+No production service-key value was read or extracted, so an authenticated
+contract `0.2.0` handshake and consumer fixture were not run during this
+closeout. That compatibility check remains in `pw-api#789`. Technical issue #260
+is closed; native MCP registration remains separate issue #259, and the hosted
+demo profile remains unchanged.
 
 ## 2026-07-15 ET — onchain accounting P0-P4 closeout
 
