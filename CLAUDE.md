@@ -3,7 +3,7 @@
 > Repo: `Protocol-Wealth/nexus-core` · License: Apache 2.0 · Patent Pending: USPTO #64/034,229 · OIN member.
 > Open-source extraction of the [Protocol Wealth research engine](https://nexusmcp.site); nothing in this repo is client-specific or proprietary to PW.
 
-**Current state (2026-07-16 ET — accounting v2 deployed; private use gated):**
+**Current state (2026-07-16 ET — accounting v2 deployed; full-profile MCP adapter in source; private use gated):**
 - **Live deployment:** commit `70bd5d5` is on `origin/main`; Cloud Run revision
   `nexus-core-00069-6m7` is Ready and serves 100% traffic. Custom-domain and
   direct Cloud Run `/health` returned `200`, while unauthenticated
@@ -28,11 +28,14 @@
   closed. Calculation completeness is not a closing-valuation or deliverable
   attestation; the private composer applies section-specific gates. See
   `docs/ONCHAIN-ACCOUNTING.md`.
-- **Transport boundary:** accounting is REST-only today. The handlers are not in
-  native MCP `tools/list`; issue #259 tracks reuse through a full-profile MCP
-  adapter. Accounting v2 corrects the REST `describe` status while retaining
-  `plannedTools` as a compatibility alias. Production stays on
-  `NEXUS_PUBLIC_MCP_PROFILE=demo`, whose public tool set must remain unchanged.
+- **Transport boundary:** current source reuses the accounting handler registry
+  and configured REST historian to register `price_history`,
+  `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report` in
+  native MCP full mode. It preserves recursive identity rejection, contract and
+  disclaimer envelopes, and stable `ToolError` mapping. Accounting's internal
+  `describe` is omitted; the native top-level `describe` reports the accounting
+  category and contract `0.2.0`. Production stays on
+  `NEXUS_PUBLIC_MCP_PROFILE=demo`, whose public tool set remains unchanged.
 - **Private boundary:** P0-P4 are calculation substrate, not statement readiness.
   Custodian ingestion, wallet/client linkage, statement assembly/rendering,
   advisor review, release, tax-return preparation, and books-and-records retention

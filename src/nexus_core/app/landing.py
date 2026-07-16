@@ -66,9 +66,10 @@ _PAGE = """\
   <p class="lede">
     A regime-adaptive financial analysis engine, exposed as a public API and as
     Model Context Protocol (MCP) tools. Market data, macro signals, options,
-    DeFi analytics, and PII-free planning math. Native MCP can run as a public
-    demo endpoint; production REST/JSON calculation paths can require a service
-    API key. Remote MCP clients may complete transparent OAuth with no login.
+    DeFi analytics, and PII-free planning and onchain accounting math. Native
+    MCP can run as a public demo endpoint; production REST/JSON calculation
+    paths can require a service API key. Remote MCP clients may complete
+    transparent OAuth with no login.
   </p>
 
   <div class="grid">
@@ -121,8 +122,8 @@ curl -X POST https://nexusmcp.site/api/planning/tools/glide_path \\
     REST/JSON calculation endpoints require a trusted service key. This
     deployment contains no client data, no account surfaces, no suitability
     logic, no report production workflow, and no advisory workflow state — those
-    live in Protocol Wealth's closed systems. Planning endpoints accept
-    de-identified inputs only.
+    live in Protocol Wealth's closed systems. Planning and accounting endpoints
+    accept de-identified inputs only.
   </p>
 
   <footer>
@@ -195,8 +196,9 @@ def render_landing_markdown(*, mcp_enabled: bool) -> str:
         "# Nexus Core\n\n"
         "A regime-adaptive financial analysis engine, exposed as a public API and as "
         "Model Context Protocol (MCP) tools. Market data, macro signals, options, DeFi "
-        "analytics, and PII-free planning math. Native MCP can run as a public demo "
-        "endpoint; production REST/JSON calculation paths can require a service API key. "
+        "analytics, and PII-free planning and onchain accounting math. Native MCP can "
+        "run as a public demo endpoint; production REST/JSON calculation paths can "
+        "require a service API key. "
         "Remote MCP clients may complete transparent OAuth with no login.\n\n"
         "## Start here\n\n"
         "- API documentation (interactive OpenAPI / Swagger): https://nexusmcp.site/docs\n"

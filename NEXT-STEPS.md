@@ -9,13 +9,13 @@
 
 ## Current pointer (2026-07-16 ET)
 
-- `d528389` is deployed on `nexus-core-00068-5pf` at 100% traffic.
-- Onchain accounting P0-P4 is available through restricted REST only. Issue #259
-  owns native MCP full-profile registration; the hosted demo profile stays
-  unchanged.
-- Contract `0.2.0` source implements #260's account/transfer/fee, calendar-term,
+- `70bd5d5` is deployed on `nexus-core-00069-6m7` at 100% traffic.
+- Onchain accounting contract `0.2.0` is live through restricted REST. Current
+  source registers the same four calculation handlers in native MCP full mode;
+  the hosted demo profile stays unchanged.
+- Contract `0.2.0` implements #260's account/transfer/fee, calendar-term,
   period-replay, lineage, and completeness hardening. Statement wiring remains
-  blocked pending merge/deploy verification and CIO/IC/CCO methodology review.
+  blocked pending `pw-api` compatibility and CIO/IC/CCO methodology review.
 - The accounting engine is de-identified calculation substrate. Private
   custodian ingestion, wallet/client linkage, statement assembly, advisor review,
   tax-return preparation, release, and retention remain outside this repo.

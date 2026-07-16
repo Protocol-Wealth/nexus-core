@@ -23,9 +23,10 @@ _BODY = """\
 > Educational and informational use only — not advice.
 > Operated by Protocol Wealth, LLC (SEC-registered RIA, CRD #335298). Apache-2.0.
 
-Nexus Core gives an AI client regime-aware market, macro, options, DeFi, and
-PII-free retirement-planning analysis. Every response is read-only and carries
-an educational, not-advice disclaimer. It holds no client data and no PII.
+Nexus Core gives an AI client regime-aware market, macro, options, DeFi,
+PII-free retirement-planning analysis, and de-identified onchain accounting
+math. Every response is read-only and carries an educational, not-advice
+disclaimer. It holds no client data and no PII.
 
 Two ways to call it:
 - **MCP (recommended for AI clients):** connect to `https://nexusmcp.site/mcp`
@@ -61,12 +62,17 @@ pair (`BTC-USD`); crypto *options* use a Deribit code (`BTC`, `ETH`, `SOL`).
 - **Crypto options** (`crypto_option_instruments`, `crypto_option_ticker`) — Deribit BTC/ETH/SOL/XRP/TRX/AVAX.
 - **DeFi** (`defi_protocols`, `defi_protocol`, `defi_chains`) — DefiLlama TVL.
 - **Planning** (`monte_carlo_decumulation`, `solve_goal`, `analyze_goals`, `project_cash_flow`, `cashflow_planning_bridge`, `cash_reserve_analysis`, `budget_pacing_projection`, `education_funding`, `education_vehicle_rules`, `income_layering`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `historical_blend`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `inherited_ira_analysis`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `risk_profile_score`, `fire`, `risk_metrics`, `performance_analysis`, `rebalance`, `irmaa_headroom`, `analyze_roth_conversion`, `sequence_conversions`, `build_planning_report`) — 34 PII-free retirement/planning math tools. De-identified inputs only (age and optional birth year where the tax policy requires it, never date of birth); `project_cash_flow` can optionally model taxable/traditional/Roth planning buckets and an `ltcShock` healthcare-cost stress, `income_layering` stacks earned income, Social Security, pensions/annuities, RMDs, tax-aware withdrawals, optional state-tax layers, and optional spouse/survivor modeling, `inherited_ira_analysis` compares 10-year inherited IRA beneficiary distribution strategies from numeric assumptions only and is not a separate annual RMD compliance calculator, `risk_profile_score` maps fixed questionnaire answers to the optimizer-compatible `riskProfile` enum, `performance_analysis` computes TWR, MWR/XIRR, fee drag, and benchmark-relative return deltas from numeric series only, `historical_blend` builds hypothetical index-blend history from public asset-class proxy returns, Monte Carlo tools can path-fund opaque goals by priority and emit a same-seed with/without-LTC-shock impact block (`ltcShock` is not combined with `guardrails` in S12 v1), `build_planning_report` supports the default custom assembler plus `preset: "wealth_roadmap"` for the PW Wealth Roadmap structured report, and bridge tools consume derived monthly-close aggregates, not raw transactions.
+- **Accounting** (`price_history`, `decode_onchain_events`, `compute_cost_basis`, `onchain_pnl_report`) — four de-identified pricing, event-ledger, account-scoped FIFO, and realized-PnL calculations in native MCP full mode. The hosted demo profile excludes them; restricted REST exposes the same handlers under contract `0.2.0`.
 - **Meta** (`health`, `describe`) — upstream status + the tool catalog/symbology.
 
 ## Planning over REST (pwplan-core contract v0.1.0)
 - Handshake: `GET https://nexusmcp.site/api/planning/tools` → `{ "contractVersion": "0.1.0", "tools": [...] }`. Confirm `contractVersion` before sending work.
 - Invoke: `POST https://nexusmcp.site/api/planning/tools/{tool_id}` with a JSON body. Every success echoes `contractVersion`. Errors are plain text (400 invalid, 404 unknown tool, 422 infeasible). Legacy `/mcp/tools` aliases remain for older clients.
 - PII-free by construction: send `age`, never date of birth; no name/email/SSN/address (rejected 400).
+
+## Onchain accounting over REST (contract v0.2.0)
+- Handshake: `GET https://nexusmcp.site/api/accounting/tools`; invoke with `POST https://nexusmcp.site/api/accounting/tools/{tool_id}`. Production requires the trusted service-key path.
+- Send de-identified public-chain/market facts and opaque references only. Identity-shaped keys and raw wallet-address fields fail closed; private ingestion, client linkage, statement release, and tax-return preparation remain outside nexus-core.
 
 ## Usage rules for agents
 - Read-only, side-effect-free. Rate limit 60 requests/min per IP (`/health` and `/mcp` exempt).

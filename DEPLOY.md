@@ -68,8 +68,8 @@ server hosting the FastAPI application from `nexus_core.app:create_app`:
 | `GET /api/benchmarks/series?days=` | On-demand benchmark returns (CoinGecko) |
 | `GET /api/benchmarks/history?days=` | Benchmark returns from persisted daily snapshots |
 | `GET /api/usage` | Provider usage / quota report |
-| `POST /mcp` | Model Context Protocol endpoint |
-| `GET /api/planning/tools`, `POST /api/planning/tools/{tool_id}` | PII-free planning REST gateway (27 current-source tools, contractVersion `0.1.0`) |
+| `POST /mcp` | Model Context Protocol endpoint; full profile includes planning plus four accounting calculation tools, while hosted demo excludes both groups |
+| `GET /api/planning/tools`, `POST /api/planning/tools/{tool_id}` | PII-free planning REST gateway (34 current-source tools, contractVersion `0.1.0`) |
 | `GET /api/accounting/tools` | De-identified accounting tool discovery and contract-version handshake |
 | `POST /api/accounting/tools/{tool_id}` | Deployed accounting contract `0.2.0`: pricing, decoding, account-scoped FIFO/replay, and PnL tools |
 | `GET /mcp/tools`, `POST /mcp/tools/{tool_id}` | Legacy planning REST gateway aliases |
@@ -101,7 +101,7 @@ runs without any of them, degrading each integration gracefully to
 | `THEGRAPH_API_KEY` | Enables `/api/lp/*` Uniswap V3 analytics | yes |
 | `DATABASE_URL` | Cloud SQL persistence; powers `/api/benchmarks/history` and `/health/db` (`503` when unset) | yes |
 | `MCP_OAUTH_SIGNING_KEY` | Enables stateless transparent OAuth for remote `/mcp`; omit locally to keep `/mcp` open | yes in hosted deploy |
-| `NEXUS_PUBLIC_MCP_PROFILE` | `full` (default) or `demo`; demo registers only closed-world native MCP tools | no |
+| `NEXUS_PUBLIC_MCP_PROFILE` | `full` (default) or `demo`; full includes the de-identified planning and accounting adapters, while demo registers only closed-world native MCP tools | no |
 | `NEXUS_ACCESS_MODE` | `public` (default) or `restricted`; restricted gates `/api/*` and planning JSON gateway paths | no |
 | `NEXUS_API_KEYS` | Comma-separated raw service keys or `sha256:<hex>` digests accepted in restricted mode | yes when restricted |
 | `NEXUS_RATE_LIMIT_PER_MIN` | Per-IP request budget (default `60`) | no |

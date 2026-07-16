@@ -58,7 +58,7 @@ from ..data.onchain import (
 )
 from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..disclaimers import FULL as _FULL_DISCLAIMER
-from ..engine.accounting import build_default_historian
+from ..engine.accounting import PriceHistorian, build_default_historian
 from ..engine.regime import RegimeEngine
 from .access_gate import NexusAccessGate
 from .accounting import build_accounting_router
@@ -170,11 +170,19 @@ def build_market_provider() -> CachedMarketData:
 
 
 def _try_build_mcp_app(
-    engine: RegimeEngine, market: MarketDataProvider, macro: MacroDataProvider
+    engine: RegimeEngine,
+    market: MarketDataProvider,
+    macro: MacroDataProvider,
+    price_historian: PriceHistorian,
 ) -> Any:
     """Build the MCP-over-HTTP sub-app, or return ``None`` if unavailable."""
     try:
-        return build_mcp_app(engine, market, macro)
+        return build_mcp_app(
+            engine,
+            market,
+            macro,
+            price_historian=price_historian,
+        )
     except Exception as exc:  # fastmcp missing, or transport build failure
         logger.warning("MCP HTTP transport unavailable (%s); serving REST API only", exc)
         return None
@@ -196,6 +204,7 @@ def create_app(
     market: MarketDataProvider | None = None,
     macro: MacroDataProvider | None = None,
     engine: RegimeEngine | None = None,
+    price_historian: PriceHistorian | None = None,
     enable_mcp: bool = True,
 ) -> FastAPI:
     """Build and return the nexus-core FastAPI application.
@@ -205,6 +214,8 @@ def create_app(
             configured sources. Inject a fake for hermetic tests.
         macro: Macro data provider. Defaults to a FRED provider.
         engine: Regime engine. Defaults to one wired from ``market`` + ``macro``.
+        price_historian: Onchain accounting price resolver. One instance is
+            shared by the restricted REST gateway and native MCP full profile.
         enable_mcp: Whether to mount the MCP-over-HTTP transport. Set ``False``
             in tests that only exercise the REST API.
     """
@@ -214,10 +225,12 @@ def create_app(
         macro = FredMacroData()
     if engine is None:
         engine = RegimeEngine(market_data=market, macro_data=macro)
+    if price_historian is None:
+        price_historian = build_default_historian()
 
     # The MCP sub-app must be built before the FastAPI app so its lifespan can
     # be adopted at construction time.
-    mcp_app = _try_build_mcp_app(engine, market, macro) if enable_mcp else None
+    mcp_app = _try_build_mcp_app(engine, market, macro, price_historian) if enable_mcp else None
     lifespan = mcp_app.lifespan if mcp_app is not None else None
 
     app = FastAPI(
@@ -302,7 +315,7 @@ def create_app(
     # Onchain-accounting tool gateway (epic #248). PII-free; the price historian
     # (DefiLlama coins + Jupiter) backs the price_history tool. Mounted before
     # the /mcp transport like the planning gateway.
-    app.include_router(build_accounting_router(price_historian=build_default_historian()))
+    app.include_router(build_accounting_router(price_historian=price_historian))
     # Transparent OAuth for the MCP transport (claude.ai connector handshake).
     # These endpoints are public; the gate above protects only the /mcp transport.
     app.include_router(build_oauth_router())

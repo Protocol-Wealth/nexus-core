@@ -20,6 +20,27 @@ are complete. A CIO/IC/CCO methodology review is required before a consumer may
 use this output in a client statement. Code review or passing CI does not satisfy
 that governance requirement.
 
+## Transport Profiles
+
+Restricted REST exposes contract discovery plus all handlers at
+`/api/accounting/tools`. Native MCP full mode reuses the same handler registry
+for `price_history`, `decode_onchain_events`, `compute_cost_basis`, and
+`onchain_pnl_report`. The HTTP application injects the same configured price
+historian into REST and MCP, so pricing readiness cannot diverge by transport.
+
+Native MCP keeps its existing top-level `describe` tool. Accounting's internal
+`describe` handler is not registered under a second or colliding name; the
+top-level response reports an `accounting` category and accounting contract
+`0.2.0`. The adapter runs the same recursive identity-key scan, maps sanitized
+input failures to MCP `ToolError`, and adds the same contract/disclaimer envelope
+as REST.
+
+The hosted service runs `NEXUS_PUBLIC_MCP_PROFILE=demo`. MCP demo construction
+returns before the accounting registry or historian is attached to MCP, so none
+of the accounting tools are publicly exposed there. Full-profile registration
+remains read-only and does not move identity, private ingestion, persistence,
+approvals, or statement release into this repository.
+
 ## Numeric Envelope
 
 All wire-level numeric values are finite decimal strings. Direct quantities and

@@ -43,6 +43,8 @@ def test_llms_txt_served() -> None:
     assert "BTC-USD" in body  # symbology trap documented
     assert "analyze_goals" in body
     assert "build_planning_report" in body
+    assert "onchain_pnl_report" in body
+    assert "contract v0.2.0" in body
 
 
 def test_security_txt_rfc9116() -> None:
@@ -102,6 +104,7 @@ def test_mcp_server_card_is_profile_aware(monkeypatch: pytest.MonkeyPatch) -> No
     demo_instr = demo["instructions"].lower()
     assert "demo profile" in demo_instr
     assert "no live-vendor" in demo_instr
+    assert "accounting tools" in demo_instr
 
     # full profile advertises the full tool domains
     monkeypatch.setenv("NEXUS_PUBLIC_MCP_PROFILE", "full")
@@ -110,6 +113,7 @@ def test_mcp_server_card_is_profile_aware(monkeypatch: pytest.MonkeyPatch) -> No
     full_instr = full["instructions"].lower()
     assert "full profile" in full_instr
     assert "regime" in full_instr and "market" in full_instr
+    assert "onchain accounting" in full_instr
 
 
 def test_api_catalog_rfc9727() -> None:

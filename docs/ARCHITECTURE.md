@@ -50,11 +50,11 @@ app/             FastAPI application factory + routers
   wallet.py chain.py vaults.py lp.py benchmarks.py snapshots.py
   access_gate.py service-key middleware for hosted REST/JSON paths
   ratelimit.py   in-process per-IP sliding-window limiter
-  mcp_mount.py   mounts the FastMCP transport at /mcp
+  mcp_mount.py   mounts FastMCP at /mcp; adapts planning/accounting handlers
   mcp_oauth.py   transparent OAuth 2.1 / PKCE shim for remote MCP clients
 mcp/server/      build_server() — the MCP tool surface (regime, score, market,
-                 economic, DefiLlama TVL, options, planning); core registry
-                 ships no account auth of its own; accounting adapter is #259
+                 economic, DefiLlama TVL, options) plus generic deployment-tool
+                 categories; core registry ships no account auth of its own
 ```
 
 The market provider is assembled as a cached composite: yfinance (keyless
@@ -95,10 +95,12 @@ FastAPI router  ── REST ──▶  engine + data clients ──▶ JSON (Cac
 Where a capability is registered on both transports, REST and MCP call the
 **same** engine and provider instances; `/api/score` and the MCP `score_asset`
 tool share one scoring-context builder and framework, so they return identical
-scores. Accounting P0-P4 is currently registered only on restricted REST; #259
-tracks the native full-profile adapter. Per-route `Cache-Control` headers are the
-single source of truth for cache lifetime (regime ~15 min, quotes 5 min, history
-and FRED series 1 hr); Cloudflare is set to respect origin.
+scores. Accounting uses the same handler registry and configured historian on
+restricted REST and native MCP full mode. Demo mode returns before accounting
+registration, so hosted public MCP remains closed-world. Per-route
+`Cache-Control` headers are the single source of truth for cache lifetime
+(regime ~15 min, quotes 5 min, history and FRED series 1 hr); Cloudflare is set
+to respect origin.
 
 ## REST Endpoints
 
@@ -117,7 +119,7 @@ and FRED series 1 hr); Cloudflare is set to respect origin.
 | Vaults | `/api/vaults`, `/api/vaults/chains` (vaults.fyi v2) |
 | LP | `/api/lp/chains`, `/api/lp/uniswap-v3/{chain}/positions?owner=`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics`, `/api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` (ethereum, base, optimism, polygon); `/api/lp/aerodrome/{token_id}/analytics` (Base Slipstream, on-chain RPC) |
 | Solana | `/api/solana/price/{mint}`, `/api/solana/prices?mints=` (Jupiter v3 SPL token USD prices, keyless) |
-| Accounting gateway | `GET /api/accounting/tools`, `POST /api/accounting/tools/{tool_id}` (deployed contract `0.2.0` on Cloud Run revision `nexus-core-00069-6m7`; restricted REST only) |
+| Accounting gateway | `GET /api/accounting/tools`, `POST /api/accounting/tools/{tool_id}` (deployed contract `0.2.0` on Cloud Run revision `nexus-core-00069-6m7`; same four calculation handlers also register in native MCP full mode in current source) |
 | Benchmarks | `/api/benchmarks`, `/api/benchmarks/series?days=`, `/api/benchmarks/history?days=` |
 | Usage | `/api/usage` (provider quota report) |
 | MCP | `/mcp` (MCP-over-HTTP, FastMCP) |
@@ -223,8 +225,14 @@ price/basis values as unknown, and attaches canonical disclaimers.
 
 The deployed transport is `GET /api/accounting/tools` plus
 `POST /api/accounting/tools/{tool_id}`, protected by the hosted REST service-key
-gate. Accounting is not in native MCP yet; #259 will adapt the same handler
-registry into the full profile without changing the production demo profile.
+gate. Current source also adapts the same handler registry into native MCP full
+mode. `create_app()` injects one configured price historian into both transports;
+the adapter applies the same recursive identity scan, contract/disclaimer
+envelope, and stable input-error mapping. The MCP server retains its top-level
+`describe` tool and reports the four accounting calculation tools under an
+`accounting` category; it does not register accounting's internal `describe`.
+Demo mode registers none of these tools, so the production demo profile is
+unchanged.
 Deployed contract `0.2.0` adds account-scoped FIFO, explicit transfer and
 fee treatment, calendar holding periods, full-history/opening-state report replay,
 authoritative basis conservation, method-pinned opening snapshots, replay-safe

@@ -6,13 +6,13 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
 [AUDIT.md](AUDIT.md).
 
 - **Last docs closeout:** 2026-07-16 ET — accounting contract `0.2.0` is merged
-  and deployed. It implements #260's account, transfer, fee, exact-basis,
-  method-pinned replay, lineage, and completeness hardening but remains held
-  from private statement use pending `pw-api` consumer compatibility and
-  CIO/IC/CCO methodology review. Restricted REST is
-  live, native MCP registration remains open in #259, and private ingestion,
-  wallet/client linkage, statement assembly, review, and retention remain in
-  `pw-api`/PWOS rather than this public engine.
+  and deployed. Current source completes #259's native MCP adapter by reusing
+  the same four accounting calculation handlers and configured price historian
+  in the full profile. The production service remains on the demo profile, so
+  its public MCP tool list is unchanged. Private statement use remains held
+  pending `pw-api` consumer compatibility and CIO/IC/CCO methodology review;
+  ingestion, wallet/client linkage, statement assembly, review, and retention
+  remain in `pw-api`/PWOS rather than this public engine.
 - **Last live verified:** 2026-07-16 ET — commit `70bd5d5` is on `origin/main`;
   Cloud Run revision `nexus-core-00069-6m7` is Ready and serves 100% traffic.
   Custom-domain and direct Cloud Run `/health` returned `200`; unauthenticated
@@ -23,12 +23,15 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   `NEXUS_PUBLIC_MCP_PROFILE=demo` and `NEXUS_ACCESS_MODE=restricted`.
 - **Current accounting source:** P0-P4 are merged through PRs #254-#258 and the
   #260 hardening is merged through PR #262. Deployed accounting contract `0.2.0`
-  contains `describe`,
-  `price_history`, `decode_onchain_events`, `compute_cost_basis`, and
-  `onchain_pnl_report`. These handlers are not in native MCP `tools/list` yet;
-  #259 owns a full-profile-only adapter and the requirement to keep the hosted
-  demo profile unchanged. Accounting v2 corrects the REST `describe` status while
-  retaining `plannedTools` as a compatibility alias. It adds account-scoped lots,
+  contains `describe`, `price_history`, `decode_onchain_events`,
+  `compute_cost_basis`, and `onchain_pnl_report`. The #259 adapter registers the
+  four calculation handlers in native MCP full mode, with the same recursive
+  identity scan, contract/disclaimer envelope, and price historian as REST. It
+  deliberately omits the internal accounting `describe` to preserve the MCP
+  server's top-level discovery tool, which now reports the accounting category
+  and contract version. Demo mode returns before accounting registration and is
+  unchanged. Accounting v2 retains `plannedTools` as a REST compatibility alias.
+  It adds account-scoped lots,
   explicit same-owner transfers and fee allocation, calendar terms, exact
   remaining-basis conservation, bounded method-pinned replay, root lineage, and
   structured completeness. P0-P4 remain calculation
@@ -122,9 +125,9 @@ P0-P4 provide a multi-source price historian, event classification, FIFO lot and
 cost-basis math, and realized-PnL aggregation. They do not ingest custodian files,
 map wallets to people, persist client records, assemble or release statements,
 produce a tax return, or create a books-and-records workflow. Those private
-consumer responsibilities remain in `pw-api`/PWOS. Native MCP registration is a
-separate unfinished transport adapter tracked by #259; production currently runs
-the demo MCP profile, so its public tool list is intentionally unchanged. Issue
+consumer responsibilities remain in `pw-api`/PWOS. Current source exposes the
+same four calculation handlers through native MCP full mode; production runs the
+demo MCP profile, so its public tool list is intentionally unchanged. Issue
 #260's code hardening is deployed in accounting contract `0.2.0`, and that
 technical issue is closed. Consumer and governance gates remain open in
 `pw-api#789`: `pw-api` must pass contract compatibility and methodology version
@@ -338,10 +341,11 @@ callers — same handlers, contractVersion `0.1.0`. Legacy `/mcp/tools/{id}`
 aliases remain. The composite Roth/IRMAA case contract is
 `PLANNING_CONTRACT_VERSION = 1.1.0`; the gateway envelope remains `0.1.0`.
 
-Accounting is different today: its P0-P4 handlers are deployed through the
-restricted REST gateway only and are absent from native MCP `tools/list`. Issue
-#259 tracks full-profile MCP registration; the production demo profile must not
-gain these tools.
+Accounting uses the same P0-P4 handler registry on restricted REST and native MCP
+full mode. Native registration includes `price_history`,
+`decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report`; it omits
+the accounting registry's internal `describe` because the MCP server owns that
+name. The production demo profile does not gain these tools.
 
 ## Code layout
 
@@ -354,7 +358,7 @@ gain these tools.
 | Data — derivatives | `data/derivatives` (Deribit) |
 | Data — persistence | `data/db.py` + `data/snapshots.py` (asyncpg) |
 | Engine | `engine/regime` (RegimeEngine), `engine/scoring/emf` (8-check) + `engine/scoring/framework` (`ScoreExplanation` / `as_of` replay), `engine/pricing` (Black-Scholes), `engine/lp/uniswap_v3.py` (CLMM tick math, `get_amounts_for_liquidity`, exact IL, fee APR), `engine/accounting` (price history, event decoding, FIFO lots/cost basis, realized PnL), `engine/benchmarks.py` (base-100 + buy-and-hold) |
-| App — accounting | `app/accounting/{contract,gateway,tools}.py` (restricted REST contract and dispatch; not native MCP yet) |
+| App — accounting | `app/accounting/{contract,gateway,tools}.py` (shared handler registry for restricted REST and native MCP full mode) |
 | Jobs | `jobs/daily_snapshot.py` |
 | CLI | `nexus-core {serve \| mcp \| snapshot}` |
 
@@ -439,6 +443,15 @@ key is absent.
 
 ## Recent work
 
+- **Native MCP accounting adapter implemented (2026-07-16 ET)** — issue #259
+  reuses `app/accounting/tools.py::build_tool_handlers` to register the four
+  public calculation handlers in full mode. The adapter preserves recursive
+  identity rejection, stable `ToolError` mapping, contract `0.2.0`, canonical
+  disclaimers, and the same configured historian used by REST. Top-level MCP
+  `describe` reports an `accounting` category without registering accounting's
+  internal `describe`; demo mode is unchanged. This is a source capability, not
+  evidence that the current hosted demo exposes accounting or that private
+  statement composition is enabled.
 - **Onchain accounting v2 hardening deployed (2026-07-16 ET)** — PR #262
   shipped account-scoped lots, explicit transfer/fee/event treatment, bounded
   method-pinned replay, exact basis conservation, lineage, and structured
@@ -449,8 +462,8 @@ key is absent.
   shipped the separate accounting contract/gateway, multi-oracle historical
   pricing, de-identified event decoder, FIFO lots/cost basis, and realized-PnL
   rollup. Commit `d528389` is live on revision `nexus-core-00068-5pf` through
-  restricted REST. Native MCP registration remains #259, and private
-  ingestion/client statement production remains outside nexus-core.
+  restricted REST. Private ingestion/client statement production remains
+  outside nexus-core.
 - **Docs/status reconciliation (2026-07-01)** — verified live `/health`, `/mcp/tools`,
   OpenAPI, OAuth metadata, `/llms.txt`, GitHub issues, and local `main`; reconciled
   docs around the then-current 23 planning tools, public PII-free planning,
@@ -556,11 +569,9 @@ key is absent.
 
 Outstanding and future work is tracked in GitHub Issues:
 
-- **#248 onchain accounting epic** — P0-P4 are deployed on restricted REST; the
-  epic remains open only for its promised native MCP portion.
-- **#259 native MCP accounting registration** — adapt the existing handlers into
-  the full MCP profile with the same PII scan, contract/disclaimer envelope, and
-  no change to the hosted demo profile.
+- **#248 onchain accounting epic** — P0-P4 are deployed on restricted REST and
+  P5 native MCP full-profile registration is implemented in current source;
+  private statement production remains outside the epic and outside nexus-core.
 - **pw-api#789 accounting statement consumer** — consume deployed contract
   `0.2.0`, pass the authenticated compatibility fixture, build the private
   statement sections, and record CIO/IC/CCO methodology approval before

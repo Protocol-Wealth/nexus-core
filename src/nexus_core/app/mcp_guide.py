@@ -170,12 +170,14 @@ nexus-core mcp        # MCP server over stdio</code></pre>
   }}
 }}</code></pre>
   <div class="note">
-    The local stdio server and the hosted <code>/mcp</code> endpoint expose the
-    <strong>same tool set</strong>. External integrations that need a key (e.g.
-    FRED for macro precision) degrade gracefully when the key is absent.
+    The local stdio server defaults to the <strong>full profile</strong>. The
+    hosted <code>/mcp</code> endpoint currently uses the closed-world demo
+    profile, so its tool list is intentionally smaller. Call
+    <code>tools/list</code> after connecting; external integrations that need a
+    key (e.g. FRED for macro precision) degrade gracefully when the key is absent.
   </div>
 
-  <h2>What you get — the tools</h2>
+  <h2>Full-profile tools</h2>
   <table>
     <tr><th>Area</th><th>Tools</th></tr>
     <tr><td>Regime</td><td>current macro regime classification + raw signal readings</td></tr>
@@ -186,6 +188,7 @@ nexus-core mcp        # MCP server over stdio</code></pre>
     <tr><td>Crypto options</td><td>Deribit instruments + IV/Greeks (BTC, ETH, SOL, XRP, TRX, AVAX)</td></tr>
     <tr><td>DeFi</td><td>DefiLlama TVL by protocol and chain</td></tr>
     <tr><td>Planning</td><td>34 PII-free tools: Monte Carlo, goal funding, deterministic cash flow, healthcare/LTC stress, education, income layering, inherited IRA analysis, risk profile scoring, allocation optimization, performance math, Roth/IRMAA, report assembly</td></tr>
+    <tr><td>Accounting</td><td>four de-identified tools: historical pricing, public-chain event decoding, account-scoped FIFO cost basis, and realized-PnL reporting</td></tr>
   </table>
   <p>
     Everything is read-only, public, and educational — no side effects, no

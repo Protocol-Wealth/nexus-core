@@ -37,12 +37,17 @@ accounting contract `0.2.0`, with account-scoped FIFO, explicit
 transfer/fee/event treatment, bounded replay,
 calendar holding periods, exact total-basis conservation, method-pinned opening
 snapshots, replay-safe lineage, and structured completeness; see
-[the accounting contract guide](docs/ONCHAIN-ACCOUNTING.md). The source change
-was released through PR #262. These
-accounting handlers are **not yet registered in native MCP**; issue
-[#259](https://github.com/Protocol-Wealth/nexus-core/issues/259) tracks that
-full-profile adapter, while the hosted demo MCP profile stays unchanged. This is
-calculation substrate, not an end-to-end client statement or tax-return system.
+[the accounting contract guide](docs/ONCHAIN-ACCOUNTING.md). The contract change
+was released through PR #262. Current source also reuses the same handler
+registry and configured price historian to register `price_history`,
+`decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report` in the
+native MCP **full** profile (issue
+[#259](https://github.com/Protocol-Wealth/nexus-core/issues/259)). The internal
+accounting `describe` handler is not duplicated; native discovery reports the
+four tools and contract `0.2.0` through the existing top-level `describe` tool.
+The hosted production service remains on the demo MCP profile, where accounting
+tools are intentionally absent. This is calculation substrate, not an end-to-end
+client statement or tax-return system.
 Technical issue [#260](https://github.com/Protocol-Wealth/nexus-core/issues/260)
 is complete. The private consumer epic
 [`pw-api#789`](https://github.com/Protocol-Wealth/pw-api/issues/789) tracks
@@ -99,9 +104,9 @@ private ingestion.
 | `GET /mcp-guide` · `GET /llms.txt` | MCP client setup guide · agent site map (llmstxt.org) |
 | `GET /.well-known/security.txt` | RFC 9116 disclosure pointer |
 | `GET /api/usage` | Provider usage / quota report |
-| `POST /mcp` | Model Context Protocol over HTTP (FastMCP, also stdio). In full mode, `tools/list` = research tools + `health`/`describe`/`get_quotes` + 34 planning tools; in demo mode, only closed-world demo tools are registered. All tools are read-only |
+| `POST /mcp` | Model Context Protocol over HTTP (FastMCP, also stdio). In full mode, `tools/list` = research tools + `health`/`describe`/`get_quotes` + 34 planning tools + four accounting tools; in demo mode, only closed-world demo tools are registered. All tools are read-only |
 | `GET /api/planning/tools` · `POST /api/planning/tools/{id}` | Planning JSON gateway (pw-api / pwplan-core contractVersion `0.1.0`, PII-free). Legacy `/mcp/tools` aliases remain for compatibility |
-| `GET /api/accounting/tools` · `POST /api/accounting/tools/{id}` | Restricted REST accounting gateway (deployed contractVersion `0.2.0` on Cloud Run revision `nexus-core-00069-6m7`): `describe`, `price_history`, `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report`. Not yet registered in native MCP; see #259 |
+| `GET /api/accounting/tools` · `POST /api/accounting/tools/{id}` | Restricted REST accounting gateway (deployed contractVersion `0.2.0` on Cloud Run revision `nexus-core-00069-6m7`): `describe`, `price_history`, `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report`. Current source registers the four calculation handlers (not the colliding internal `describe`) in native MCP full mode; hosted demo remains unchanged |
 
 ### Regime & Scoring
 
@@ -161,7 +166,7 @@ private ingestion.
 | `GET /api/solana/price/{mint}` | Solana SPL token USD price (Jupiter, keyless) |
 | `GET /api/solana/prices?mints=` | Batch Solana SPL token USD prices (Jupiter, keyless) |
 | `GET /api/accounting/tools` | Accounting contract/tool discovery for de-identified onchain analysis |
-| `POST /api/accounting/tools/{tool_id}` | Historical pricing, event decoding, FIFO cost basis, and realized-PnL calculations over opaque references; restricted REST only |
+| `POST /api/accounting/tools/{tool_id}` | Historical pricing, event decoding, FIFO cost basis, and realized-PnL calculations over opaque references; restricted REST plus native MCP full profile in current source |
 
 ### LP Analytics (Uniswap V3 + Aerodrome Slipstream)
 

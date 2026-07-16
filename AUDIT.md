@@ -31,10 +31,10 @@ The public deployment has:
 | Market/economic data | `data/market/`, `data/macro/` | Quotes, history, FRED/BEA/EIA/Treasury-style macro adapters |
 | Options | `engine/pricing/`, `app/options.py` | Black-Scholes overlays + Deribit crypto options; educational only |
 | On-chain/DeFi | `data/onchain/`, `app/{wallet,chain,vaults,lp,solana}.py` | Public wallet/chain/vault/LP/Solana data |
-| Onchain accounting | `engine/accounting/`, `app/accounting/` | Deployed contract `0.2.0` adds account-scoped/replay-safe accounting and remains restricted REST only |
+| Onchain accounting | `engine/accounting/`, `app/accounting/` | Deployed contract `0.2.0` on restricted REST; current source reuses its four calculation handlers in native MCP full mode |
 | Benchmarks/history | `engine/benchmarks.py`, `data/snapshots.py` | Daily benchmark snapshots via private Cloud SQL |
 | Planning math | `engine/planning/`, `app/planning/` | 34 PII-free tools via native MCP and the primary `/api/planning/tools` REST gateway; `/mcp/tools` is a legacy alias |
-| MCP transport | `mcp/server/`, `app/mcp_mount.py` | Read-only full/demo profiles; accounting is not registered yet (#259) |
+| MCP transport | `mcp/server/`, `app/mcp_mount.py` | Read-only full/demo profiles; full includes four accounting calculation tools, hosted demo excludes them |
 | Transparent MCP OAuth | `app/mcp_oauth.py` | Anonymous OAuth 2.1 / PKCE compatibility flow for remote MCP clients |
 | Disclosure/security metadata | `app/{disclosure,well_known,llms_txt}.py` | AI disclosure card, security.txt, llms.txt |
 
@@ -65,9 +65,9 @@ The hosted native MCP transport uses `NEXUS_PUBLIC_MCP_PROFILE=demo` and may
 require a bearer token when `MCP_OAUTH_SIGNING_KEY` is configured because remote
 MCP clients expect OAuth 2.1 + PKCE + Dynamic Client Registration. That flow is
 transparent and anonymous: any valid client can register and obtain public demo
-scope, with no login or privilege escalation. The accounting handlers are absent
-from native MCP today; #259 will add them to the full profile only, not the hosted
-demo profile.
+scope, with no login or privilege escalation. Current source registers the four
+accounting calculation handlers in native MCP full mode only. They remain absent
+from the hosted demo profile.
 
 ## Persistence
 
