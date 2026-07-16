@@ -7,6 +7,12 @@ market/macro/options/DeFi, planning, and de-identified onchain-accounting REST
 analytics, with no client data, account surfaces, suitability logic, or advisory
 workflow state.
 
+Last verified 2026-07-16 ET: commit `70bd5d5`, Cloud Run revision
+`nexus-core-00069-6m7`, 100% traffic. Custom-domain and direct health checks
+returned HTTP 200; anonymous accounting discovery returned the expected
+service-key HTTP 401. No production service-key value was read, so an
+authenticated v2 version handshake was not rerun during this closeout.
+
 ## Current Boundary
 
 `nexus-core` is an Apache-2.0 analytical engine. It is not the Protocol Wealth
@@ -25,7 +31,7 @@ The public deployment has:
 | Market/economic data | `data/market/`, `data/macro/` | Quotes, history, FRED/BEA/EIA/Treasury-style macro adapters |
 | Options | `engine/pricing/`, `app/options.py` | Black-Scholes overlays + Deribit crypto options; educational only |
 | On-chain/DeFi | `data/onchain/`, `app/{wallet,chain,vaults,lp,solana}.py` | Public wallet/chain/vault/LP/Solana data |
-| Onchain accounting | `engine/accounting/`, `app/accounting/` | Last verified deployment contract `0.1.0`; current source contract `0.2.0` adds account-scoped/replay-safe accounting and remains restricted REST only |
+| Onchain accounting | `engine/accounting/`, `app/accounting/` | Deployed contract `0.2.0` adds account-scoped/replay-safe accounting and remains restricted REST only |
 | Benchmarks/history | `engine/benchmarks.py`, `data/snapshots.py` | Daily benchmark snapshots via private Cloud SQL |
 | Planning math | `engine/planning/`, `app/planning/` | 34 PII-free tools via native MCP and the primary `/api/planning/tools` REST gateway; `/mcp/tools` is a legacy alias |
 | MCP transport | `mcp/server/`, `app/mcp_mount.py` | Read-only full/demo profiles; accounting is not registered yet (#259) |
@@ -41,9 +47,10 @@ records, custodian/client transaction ingestion, wallet-to-client mappings,
 statement/report-production workflows, tax-return preparation, artifact receipts,
 or private PWOS workflow state. Those belong in closed Protocol Wealth systems
 or consumer repos. The public-safe accounting math does not change that boundary.
-Contract `0.2.0` source implements #260's account/transfer/fee, period-replay, and
-lineage semantics, but statement wiring remains blocked until deploy verification
-and CIO/IC/CCO methodology review. The engine forces `statement_ready=false`
+Deployed contract `0.2.0` implements #260's account/transfer/fee, period-replay,
+and lineage semantics. Technical issue #260 is complete, but private statement
+wiring remains blocked in `pw-api#789` until consumer compatibility and
+CIO/IC/CCO methodology review pass. The engine forces `statement_ready=false`
 while review is pending.
 
 ## Auth And OAuth

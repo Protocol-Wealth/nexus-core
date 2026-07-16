@@ -71,7 +71,7 @@ server hosting the FastAPI application from `nexus_core.app:create_app`:
 | `POST /mcp` | Model Context Protocol endpoint |
 | `GET /api/planning/tools`, `POST /api/planning/tools/{tool_id}` | PII-free planning REST gateway (27 current-source tools, contractVersion `0.1.0`) |
 | `GET /api/accounting/tools` | De-identified accounting tool discovery and contract-version handshake |
-| `POST /api/accounting/tools/{tool_id}` | Accounting contract `0.2.0` in current source: pricing, decoding, account-scoped FIFO/replay, and PnL tools |
+| `POST /api/accounting/tools/{tool_id}` | Deployed accounting contract `0.2.0`: pricing, decoding, account-scoped FIFO/replay, and PnL tools |
 | `GET /mcp/tools`, `POST /mcp/tools/{tool_id}` | Legacy planning REST gateway aliases |
 
 There is **no client data** and **no public write endpoint** — the daily snapshot

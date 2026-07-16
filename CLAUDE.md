@@ -3,19 +3,22 @@
 > Repo: `Protocol-Wealth/nexus-core` · License: Apache 2.0 · Patent Pending: USPTO #64/034,229 · OIN member.
 > Open-source extraction of the [Protocol Wealth research engine](https://nexusmcp.site); nothing in this repo is client-specific or proprietary to PW.
 
-**Current state (2026-07-16 ET — accounting v2 hardening in source; live remains v1):**
-- **Live deployment:** commit `d528389` is on `origin/main`; Cloud Run revision
-  `nexus-core-00068-5pf` is Ready and serves 100% traffic. Live `/health`
-  returned `200`, while unauthenticated `/api/accounting/tools` returned the
-  expected service-key `401` under `NEXUS_ACCESS_MODE=restricted`.
-- **Live accounting contract `0.1.0`:** P0-P4 are merged through PRs #254-#258. The
+**Current state (2026-07-16 ET — accounting v2 deployed; private use gated):**
+- **Live deployment:** commit `70bd5d5` is on `origin/main`; Cloud Run revision
+  `nexus-core-00069-6m7` is Ready and serves 100% traffic. Custom-domain and
+  direct Cloud Run `/health` returned `200`, while unauthenticated
+  `/api/accounting/tools` returned the expected service-key `401` under
+  `NEXUS_ACCESS_MODE=restricted`.
+- **Deployed accounting contract `0.2.0`:** P0-P4 are merged through PRs
+  #254-#258 and the #260 hardening is merged through PR #262. The
   REST gateway exposes `describe`, `price_history`, `decode_onchain_events`,
   `compute_cost_basis`, and `onchain_pnl_report`. Inputs are de-identified
   public-chain/market facts with opaque references; identity-shaped keys fail
   closed, unknown price/basis stays explicit, and accounting/tax disclaimers are
-  canonical. Current source advances the contract to `0.2.0`; it must be merged
-  and deployed before the live handshake changes.
-- **Accounting methodology `2.0.0`:** current source scopes FIFO by account,
+  canonical. The deployed image was built from the reviewed merge tree. No
+  production service-key value was read during closeout, so an authenticated v2
+  version handshake was not rerun.
+- **Accounting methodology `2.0.0`:** the deployed contract scopes FIFO by account,
   handles explicitly linked same-owner transfers without gain, allocates fees
   once plus any separate fee-asset disposal, uses calendar holding periods,
   conserves authoritative basis/fee totals across partial lots and transfers,
@@ -33,11 +36,14 @@
 - **Private boundary:** P0-P4 are calculation substrate, not statement readiness.
   Custodian ingestion, wallet/client linkage, statement assembly/rendering,
   advisor review, release, tax-return preparation, and books-and-records retention
-  remain in the private `pw-api`/PWOS plane. Issue #260 code hardening is in
-  current source, but its CIO/IC/CCO methodology review remains pending and the
-  engine therefore forces `statement_ready=false`.
-- **Validation:** CI run `29451408938` passed ruff, strict mypy, and pytest with
-  coverage; SPDX, license-compliance, and both CodeQL checks also passed.
+  remain in the private `pw-api`/PWOS plane. Issue #260 is closed as technically
+  complete; `pw-api#789` owns consumer compatibility and the still-pending
+  CIO/IC/CCO methodology enablement gate. The engine therefore continues to
+  force `statement_ready=false`.
+- **Validation:** exact source-head CI run `29518197955` passed ruff, strict
+  mypy, and pytest with coverage; SPDX, license-compliance, and both CodeQL
+  checks also passed. Standalone Codex accepted exact head `a142da6`, and all
+  inline review threads were addressed and resolved before merge.
 
 **Historical snapshot (2026-07-10 ET — public agent-discovery + Markdown negotiation):**
 - **Deployed:** Cloud Run revision `nexus-core-00064-fqx` serves 100% traffic on
