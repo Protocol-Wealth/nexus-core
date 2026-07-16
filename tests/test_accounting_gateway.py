@@ -473,7 +473,7 @@ def test_route_compute_cost_basis_rejects_blank_price_provenance_400() -> None:
     resp = _client().post("/api/accounting/tools/compute_cost_basis", json=body)
 
     assert resp.status_code == 400
-    assert "must not be blank" in resp.text
+    assert "invalid compute_cost_basis request body" in resp.text
 
 
 def test_route_quiet_period_requests_are_valid() -> None:
