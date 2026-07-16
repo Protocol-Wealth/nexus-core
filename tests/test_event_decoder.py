@@ -162,6 +162,27 @@ def test_fee_movement_does_not_change_principal_classification() -> None:
     assert event.legs[1].role == "fee"
 
 
+def test_fee_only_transaction_decodes_as_fee_event() -> None:
+    event = decode_transaction(
+        _tx(
+            [
+                MovementInput(
+                    asset=AssetRef(asset_id="eth:eth"),
+                    direction="out",
+                    amount=Decimal("0.001"),
+                    role="fee",
+                )
+            ],
+            tx_ref="fee-transaction",
+        )
+    )
+
+    assert event.kind == EventKind.fee
+    assert event.transfer_ref is None
+    assert event.transfer_treatment is None
+    assert event.legs[0].role == "fee"
+
+
 def test_decode_unknown_protocol_multi_asset_is_other_not_dropped() -> None:
     ev = decode_transaction(
         _tx([_mv("eth:a", "out", "1"), _mv("eth:b", "in", "1")], protocol_hint="mystery-protocol")

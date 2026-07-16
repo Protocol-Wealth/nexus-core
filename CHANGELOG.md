@@ -53,7 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   overrides, embedded raw EVM addresses, and decoder event-ID collisions. Raw
   transaction chain context is authoritative and normalized; explicit movement
   chains must match, while missing movement chains inherit it. Required lineage
-  and provenance strings reject whitespace-only values.
+  and provenance strings reject whitespace-only values. Raw transactions whose
+  only movements are fee legs decode as standalone fee events.
 - Count unresolved transfers by reference (including unmatched inbound and fully
   paired source shortfalls) and emit specific missing-reference/treatment gaps.
 - Corrected `describe` from `status: scaffold` to `status: available` while

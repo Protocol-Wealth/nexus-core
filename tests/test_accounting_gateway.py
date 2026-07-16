@@ -244,6 +244,32 @@ def test_describe_lists_optional_price_history_only_when_registered() -> None:
     assert "price_history" in handlers["describe"]({})["tools"]
 
 
+def test_decode_handler_classifies_fee_only_transaction() -> None:
+    out = build_tool_handlers()["decode_onchain_events"](
+        {
+            "transactions": [
+                {
+                    "account_ref": "account-opaque",
+                    "chain": "ethereum",
+                    "timestamp": 1,
+                    "tx_ref": "fee-transaction",
+                    "movements": [
+                        {
+                            "asset": {"asset_id": "eth:eth"},
+                            "direction": "out",
+                            "amount": "0.001",
+                            "role": "fee",
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+
+    assert out["events"][0]["kind"] == "fee"
+    assert out["eventCountsByKind"] == {"fee": 1}
+
+
 # --- HTTP gateway tests ------------------------------------------------------
 
 

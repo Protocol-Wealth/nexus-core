@@ -156,7 +156,11 @@ def decode_transaction(tx: RawTransactionInput) -> LedgerEvent:
     principal = [movement for movement in tx.movements if movement.role == "principal"]
     in_count = sum(1 for movement in principal if movement.direction == "in")
     out_count = sum(1 for movement in principal if movement.direction == "out")
-    kind = classify_kind(resolve_category(tx.protocol_hint), in_count, out_count, tx.method)
+    kind = (
+        EventKind.fee
+        if not principal
+        else classify_kind(resolve_category(tx.protocol_hint), in_count, out_count, tx.method)
+    )
 
     legs = [
         LedgerLeg(
