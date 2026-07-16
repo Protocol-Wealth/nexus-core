@@ -152,6 +152,13 @@ def test_exact_decimal_sum_rejects_unbounded_alignment_before_arithmetic() -> No
         exact_decimal_sum((Decimal("1"), Decimal("1e-100000000")))
 
 
+def test_exact_decimal_sum_rejects_a_derived_total_outside_the_envelope() -> None:
+    maximum_operand = Decimal("9" * 128)
+
+    with pytest.raises(ValueError, match="magnitude exceeds"):
+        exact_decimal_sum((maximum_operand, maximum_operand))
+
+
 def test_event_ledger_rejects_raw_wallet_as_opaque_account_ref() -> None:
     bad = {
         "events": [
@@ -366,6 +373,62 @@ def test_route_decode_rejects_fallback_event_id_collision_400() -> None:
 
     assert resp.status_code == 400
     assert "duplicate event_id" in resp.text
+
+
+def test_route_decode_rejects_transfer_metadata_on_a_non_transfer_400() -> None:
+    response = _client().post(
+        "/api/accounting/tools/decode_onchain_events",
+        json={
+            "transactions": [
+                {
+                    "account_ref": "account-opaque",
+                    "chain": "ethereum",
+                    "timestamp": 1,
+                    "movements": [
+                        {"asset": {"asset_id": "eth:a"}, "direction": "out", "amount": "1"},
+                        {"asset": {"asset_id": "eth:b"}, "direction": "in", "amount": "1"},
+                    ],
+                    "transfer_ref": "transfer-1",
+                    "transfer_treatment": "same_owner",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 400
+    assert "transfer metadata is only valid" in response.text
+
+
+def test_route_compute_cost_basis_rejects_a_derived_total_outside_the_envelope() -> None:
+    maximum_operand = "9" * 128
+    response = _client().post(
+        "/api/accounting/tools/compute_cost_basis",
+        json={
+            "events": [
+                {
+                    "event_id": f"acquisition-{index}",
+                    "account_ref": "account-opaque",
+                    "kind": "acquire",
+                    "timestamp": index + 1,
+                    "legs": [
+                        {
+                            "asset": {"asset_id": f"asset-{index}"},
+                            "direction": "in",
+                            "amount": "1",
+                            "usd_value": maximum_operand,
+                            "price_source": "caller_price",
+                            "price_as_of": index + 1,
+                        }
+                    ],
+                }
+                for index in range(2)
+            ],
+            "report_window": {"start_at": 1, "end_at": 3, "full_history": True},
+        },
+    )
+
+    assert response.status_code == 400
+    assert "magnitude exceeds" in response.text
 
 
 def test_route_compute_cost_basis_fifo() -> None:
