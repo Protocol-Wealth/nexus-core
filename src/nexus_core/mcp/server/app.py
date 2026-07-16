@@ -145,6 +145,8 @@ def build_server(
     filters: list[ResponseFilter] | None = None,
     disclaimer: str | None = None,
     extra_tools: Sequence[tuple[str, str, Callable[..., str]]] | None = None,
+    extra_tool_categories: dict[str, Sequence[str]] | None = None,
+    contract_versions: dict[str, str] | None = None,
     tool_profile: str = "full",
 ) -> Any:
     """Build a FastMCP server with regime + scoring tools.
@@ -168,7 +170,12 @@ def build_server(
             fn)`` triples where ``fn`` is a JSON-string-returning callable.
             Kept generic so the library scaffold stays decoupled from any
             specific tool layer — the deployment wires its own tools (e.g. the
-            planning gateway) in through here.
+            planning and accounting gateways) in through here.
+        extra_tool_categories: Optional native ``describe`` category-to-tool
+            mapping for ``extra_tools``. Unlisted tools appear under ``other``;
+            names that are not registered fail construction.
+        contract_versions: Optional additional contract versions exposed by the
+            top-level ``describe`` response.
         tool_profile: ``"full"`` registers the complete tool set. ``"demo"``
             registers only closed-world demo tools that do not call live vendor
             providers; use this for the public open-source MCP endpoint when
@@ -191,6 +198,23 @@ def build_server(
         "Past performance is not indicative of future results. Consult a "
         "qualified advisor before making investment decisions."
     )
+    extra_tools = tuple(extra_tools or ())
+    ordered_extra_names = [name for name, _description, _fn in extra_tools]
+    registered_extra_names = {name for name, _description, _fn in extra_tools}
+    if extra_tool_categories is None:
+        described_extra_categories = {"planning": ordered_extra_names}
+    else:
+        described_extra_categories = {
+            category: list(names) for category, names in extra_tool_categories.items()
+        }
+        described_names = {name for names in described_extra_categories.values() for name in names}
+        unknown_descriptions = described_names - registered_extra_names
+        if unknown_descriptions:
+            unknown = ", ".join(sorted(unknown_descriptions))
+            raise ValueError(f"extra tool categories reference unregistered tools: {unknown}")
+        uncategorized = registered_extra_names - described_names
+        if uncategorized:
+            described_extra_categories["other"] = sorted(uncategorized)
 
     # --------------------------- Regime tools ---------------------------
 
@@ -293,7 +317,7 @@ def build_server(
     # so this scaffold never imports a specific deployment's tool layer. All are
     # read-only educational tools.
     if not demo_profile:
-        for tool_name, tool_description, tool_fn in extra_tools or ():
+        for tool_name, tool_description, tool_fn in extra_tools:
             mcp.tool(tool_fn, name=tool_name, description=tool_description, annotations=_RO_OPEN)
 
     @mcp.tool(annotations=_RO_CLOSED)
@@ -337,6 +361,9 @@ def build_server(
         """Self-orientation: the tool catalog by category, symbology rules, and the
         planning contract version. Read this to learn how to address assets — the
         same coin uses different ids per tool (see ``symbology``)."""
+        described_contract_versions = (
+            {} if demo_profile else {"planning": "0.1.0", **(contract_versions or {})}
+        )
         categories = (
             {
                 "options": ["option_price", "collar_book"],
@@ -375,7 +402,7 @@ def build_server(
                     "crypto_options_scenario",
                 ],
                 "defi": ["defi_protocols", "defi_protocol", "defi_chains"],
-                "planning": [name for name, _d, _f in (extra_tools or ())],
+                **described_extra_categories,
                 "meta": ["health", "describe"],
             }
         )
@@ -394,6 +421,7 @@ def build_server(
                     "fred_series": "FRED series id, e.g. DGS10, DFII10, DTWEXBGS",
                 },
                 "planning_contract_version": "0.1.0",
+                "contract_versions": described_contract_versions,
             },
             filters,
             disclaimer,

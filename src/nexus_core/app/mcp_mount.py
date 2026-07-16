@@ -18,17 +18,28 @@ from ..data.derivatives import DeribitClient, MboumOptionsClient
 from ..data.onchain import DefiLlamaClient
 from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..disclaimers import MC_DISCLAIMER, TERSE
+from ..engine.accounting import PriceHistorian, build_default_historian
 from ..engine.regime import RegimeEngine
 from ..mcp.server import build_server
+from .accounting.contract import (
+    ACCOUNTING_CONTRACT_VERSION,
+    AccountingInputError,
+)
+from .accounting.contract import (
+    find_identity_keys as find_accounting_identity_keys,
+)
+from .accounting.tools import build_tool_handlers as build_accounting_tool_handlers
 from .planning.contract import (
     CONTRACT_VERSION as PLANNING_CONTRACT_VERSION,
 )
 from .planning.contract import (
     PlanningInfeasibleError,
     PlanningInputError,
-    find_identity_keys,
 )
-from .planning.tools import build_tool_handlers
+from .planning.contract import (
+    find_identity_keys as find_planning_identity_keys,
+)
+from .planning.tools import build_tool_handlers as build_planning_tool_handlers
 from .scoring import build_scoring_context, build_scoring_framework
 
 #: One-line native-MCP descriptions for the planning tools. The full request
@@ -271,6 +282,32 @@ _PLANNING_TOOL_DESCRIPTIONS = {
     ),
 }
 
+#: Native-MCP descriptions for the four public accounting handlers. Accounting's
+#: internal ``describe`` handler is intentionally omitted: the MCP server already
+#: owns the top-level ``describe`` name and reports this category there.
+_ACCOUNTING_TOOL_DESCRIPTIONS = {
+    "price_history": (
+        "Resolve historical USD prices through the configured oracle chain plus "
+        "caller-supplied overrides. Uncovered observations remain explicit null "
+        "gaps. Pass a de-identified accounting request object in `body`."
+    ),
+    "decode_onchain_events": (
+        "Normalize de-identified public-chain transaction movements into the "
+        "versioned onchain accounting event ledger. Pass the request object in "
+        "`body`; opaque account and transaction references only."
+    ),
+    "compute_cost_basis": (
+        "Compute account-scoped FIFO lots, dispositions, transfer and fee treatment, "
+        "closing valuation, lineage, and structured completeness over a de-identified "
+        "event ledger. Pass the request object in `body`."
+    ),
+    "onchain_pnl_report": (
+        "Aggregate realized onchain dispositions by year and holding term over the "
+        "account-scoped FIFO engine. Tax-awareness recordkeeping only, not tax advice "
+        "or a tax return. Pass the de-identified request object in `body`."
+    ),
+}
+
 
 def _build_planning_mcp_tools(
     market: MarketDataProvider, regime_engine: RegimeEngine
@@ -285,7 +322,7 @@ def _build_planning_mcp_tools(
     """
     from fastmcp.exceptions import ToolError
 
-    handlers = build_tool_handlers(market=market, regime_engine=regime_engine)
+    handlers = build_planning_tool_handlers(market=market, regime_engine=regime_engine)
     specs: list[tuple[str, str, Callable[[dict[str, Any]], str]]] = []
 
     def _adapt(
@@ -294,7 +331,7 @@ def _build_planning_mcp_tools(
         def _run(body: dict[str, Any]) -> str:
             if not isinstance(body, dict):
                 raise ToolError("request body must be a JSON object")
-            offenders = find_identity_keys(body)
+            offenders = find_planning_identity_keys(body)
             if offenders:
                 raise ToolError(
                     "identity fields are not accepted by this PII-free engine: "
@@ -316,10 +353,50 @@ def _build_planning_mcp_tools(
     return specs
 
 
+def _build_accounting_mcp_tools(
+    price_historian: PriceHistorian,
+) -> list[tuple[str, str, Callable[[dict[str, Any]], str]]]:
+    """Adapt the REST accounting handlers into native-MCP full-profile tools."""
+    from fastmcp.exceptions import ToolError
+
+    handlers = build_accounting_tool_handlers(price_historian=price_historian)
+    specs: list[tuple[str, str, Callable[[dict[str, Any]], str]]] = []
+
+    def _adapt(
+        handler: Callable[[dict[str, Any]], dict[str, Any]],
+    ) -> Callable[[dict[str, Any]], str]:
+        def _run(body: dict[str, Any]) -> str:
+            if not isinstance(body, dict):
+                raise ToolError("request body must be a JSON object")
+            offenders = find_accounting_identity_keys(body)
+            if offenders:
+                raise ToolError(
+                    "identity fields are not accepted by this PII-free engine: "
+                    f"{', '.join(sorted(set(offenders)))}. "
+                    "Accounting uses opaque references and public onchain facts; remove any "
+                    "name/contact/id/wallet-address fields."
+                )
+            try:
+                payload = handler(body)
+            except AccountingInputError as exc:
+                raise ToolError(exc.public_message) from exc
+            payload.setdefault("contractVersion", ACCOUNTING_CONTRACT_VERSION)
+            payload.setdefault("disclaimer", TERSE)
+            return json.dumps(payload, indent=2)
+
+        return _run
+
+    for tool_id, description in _ACCOUNTING_TOOL_DESCRIPTIONS.items():
+        specs.append((tool_id, description, _adapt(handlers[tool_id])))
+    return specs
+
+
 def build_configured_server(
     regime_engine: RegimeEngine,
     market: MarketDataProvider,
     macro: MacroDataProvider,
+    *,
+    price_historian: PriceHistorian | None = None,
 ) -> Any:
     """Build the configured nexus-core MCP server (shared by HTTP + stdio).
 
@@ -339,11 +416,12 @@ def build_configured_server(
     portfolio_xray, optimize_allocation, risk_profile_score, fire, risk_metrics,
     performance_analysis, rebalance, the
     composite Roth/IRMAA trio analyze_roth_conversion, sequence_conversions,
-    irmaa_headroom, plus build_planning_report) — the same handlers the REST
-    planning gateway serves, so the MCP transport and ``POST /mcp/tools/{id}``
-    stay in lock-step. When ``NEXUS_PUBLIC_MCP_PROFILE=demo``, the native MCP
-    transport registers only closed-world demo tools that do not call live
-    vendors; production REST/JSON callers should use the gated HTTP routes.
+    irmaa_headroom, plus build_planning_report), and the four accounting
+    calculation tools (price_history, decode_onchain_events, compute_cost_basis,
+    onchain_pnl_report). Planning and accounting both reuse their REST handler
+    registries. When ``NEXUS_PUBLIC_MCP_PROFILE=demo``, the native MCP transport
+    registers only closed-world demo tools that do not call live vendors;
+    production REST/JSON callers should use the gated HTTP routes.
 
     Both transports build from here so the stdio server (``nexus-core mcp``,
     for Claude Desktop) and the HTTP server (``/mcp``) expose an identical set
@@ -353,6 +431,8 @@ def build_configured_server(
         regime_engine: Configured regime engine.
         market: Market data provider (scoring context + market/options tools).
         macro: Macro data provider (FRED economic-series tool).
+        price_historian: Accounting price resolver. The HTTP app injects the
+            same instance used by its restricted REST accounting gateway.
 
     Raises:
         ImportError: If ``fastmcp`` is not installed (``build_server`` guards).
@@ -360,6 +440,10 @@ def build_configured_server(
     profile = os.environ.get("NEXUS_PUBLIC_MCP_PROFILE", "full").strip().lower() or "full"
     if profile == "demo":
         return build_server(name="nexus-core", disclaimer=TERSE, tool_profile="demo")
+
+    historian = price_historian or build_default_historian()
+    planning_tools = _build_planning_mcp_tools(market, regime_engine)
+    accounting_tools = _build_accounting_mcp_tools(historian)
 
     return build_server(
         name="nexus-core",
@@ -374,7 +458,12 @@ def build_configured_server(
         mboum_options=MboumOptionsClient(),
         defillama=DefiLlamaClient(),
         disclaimer=TERSE,
-        extra_tools=_build_planning_mcp_tools(market, regime_engine),
+        extra_tools=[*planning_tools, *accounting_tools],
+        extra_tool_categories={
+            "planning": [name for name, _description, _fn in planning_tools],
+            "accounting": [name for name, _description, _fn in accounting_tools],
+        },
+        contract_versions={"accounting": ACCOUNTING_CONTRACT_VERSION},
         tool_profile="full",
     )
 
@@ -383,6 +472,8 @@ def build_mcp_app(
     regime_engine: RegimeEngine,
     market: MarketDataProvider,
     macro: MacroDataProvider,
+    *,
+    price_historian: PriceHistorian | None = None,
 ) -> Any:
     """Return a Starlette ASGI app exposing the nexus-core MCP server over HTTP.
 
@@ -393,7 +484,12 @@ def build_mcp_app(
     Raises:
         ImportError: If ``fastmcp`` is not installed (``build_server`` guards).
     """
-    return build_configured_server(regime_engine, market, macro).http_app(path="/")
+    return build_configured_server(
+        regime_engine,
+        market,
+        macro,
+        price_historian=price_historian,
+    ).http_app(path="/")
 
 
 __all__ = ["build_configured_server", "build_mcp_app"]

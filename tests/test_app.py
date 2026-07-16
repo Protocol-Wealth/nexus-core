@@ -10,12 +10,15 @@ stub providers, exercising the real classification pipeline against fixed data.
 from __future__ import annotations
 
 import pytest
+from fastapi import APIRouter
 from fastapi.testclient import TestClient
 
+import nexus_core.app.main as app_main
 from nexus_core.app import create_app
 from nexus_core.app.landing import render_landing
 from nexus_core.app.mcp_guide import render_mcp_guide
 from nexus_core.data.providers import PriceBar, Quote
+from nexus_core.engine.accounting import PriceHistorian
 
 
 class _FakeMarket:
@@ -130,6 +133,14 @@ def test_mcp_guide_documents_pwplan_core_integration() -> None:
         assert tool_id in html, tool_id
     assert '"contractVersion": "0.1.0"' in html  # version handshake documented
     assert "retirementAge" in html  # the MC contract delta is called out
+
+
+def test_mcp_guide_distinguishes_full_and_hosted_demo_accounting() -> None:
+    html = render_mcp_guide()
+    assert "local stdio server defaults to the <strong>full profile</strong>" in html
+    assert "closed-world demo" in html
+    assert "<td>Accounting</td>" in html
+    assert "realized-PnL reporting" in html
 
 
 def test_landing_advertises_guide_when_mcp_enabled() -> None:
@@ -284,6 +295,35 @@ def test_mcp_transport_mounted() -> None:
     app = create_app(market=_FakeMarket(), macro=_FakeMacro(), enable_mcp=True)
     mounted = {getattr(route, "path", None) for route in app.routes}
     assert "/mcp" in mounted
+
+
+def test_rest_and_mcp_receive_same_price_historian(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, PriceHistorian] = {}
+
+    def fake_mcp_app(
+        _engine: object,
+        _market: object,
+        _macro: object,
+        price_historian: PriceHistorian,
+    ) -> None:
+        seen["mcp"] = price_historian
+
+    def fake_accounting_router(*, price_historian: PriceHistorian) -> APIRouter:
+        seen["rest"] = price_historian
+        return APIRouter()
+
+    monkeypatch.setattr(app_main, "_try_build_mcp_app", fake_mcp_app)
+    monkeypatch.setattr(app_main, "build_accounting_router", fake_accounting_router)
+    historian = PriceHistorian([])
+
+    app_main.create_app(
+        market=_FakeMarket(),
+        macro=_FakeMacro(),
+        price_historian=historian,
+        enable_mcp=True,
+    )
+
+    assert seen == {"mcp": historian, "rest": historian}
 
 
 def test_cache_control_headers() -> None:

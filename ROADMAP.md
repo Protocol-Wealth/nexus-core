@@ -25,9 +25,9 @@ surface at commit `70bd5d5`, Cloud Run revision `nexus-core-00069-6m7`. The
 `0.2.0` accounting gateway exposes historical pricing, de-identified event
 decoding, account-scoped FIFO cost basis/replay, and realized-PnL aggregation.
 It is calculation substrate only: private ingestion, client linkage, statement
-production, review, and retention remain in the private stack. Native MCP
-registration is not yet shipped and is tracked in #259; the hosted demo MCP tool
-set remains unchanged.
+production, review, and retention remain in the private stack. Current source
+completes #259 by registering the same four calculation handlers in native MCP
+full mode; the hosted demo MCP tool set remains unchanged.
 Accounting contract `0.2.0` implements #260's FIFO/PnL semantics, exact
 remaining-basis conservation, method-pinned replay, and root-lineage hardening.
 Statement wiring remains blocked until the private `pw-api` consumer passes its
@@ -219,7 +219,8 @@ gracefully to `None` / empty / `503` when its key is absent.
   (`onchain_pnl_report`). Unknown prices and basis remain explicit rather than
   fabricated as zero; identity-shaped keys fail closed; canonical accounting/tax
   disclaimers are attached. Contract `0.2.0` is deployed through restricted REST
-  on `nexus-core-00069-6m7`; not yet registered in native MCP.
+  on `nexus-core-00069-6m7`; current source also registers the four calculation
+  handlers in native MCP full mode while excluding them from demo mode.
 - **`GET /api/wallet/{address}`** — anonymous EVM wallet balance (DeBank).
 - **`GET /api/chain/chains`, `/api/chain/balance/{chain}/{address}`,
   `/api/chain/native/{address}`** — multi-chain native balances via Tatum
@@ -309,14 +310,6 @@ deterministic lineage plus structured completeness. Keep private cost-basis and
 realized-PnL statement composition disabled until `pw-api` consumer
 compatibility and CIO/IC/CCO methodology review; the engine enforces that gate
 through `statement_ready=false` while review remains pending.
-
-**Native MCP accounting adapter — open issue #259 (completes #248).** Reuse the
-deployed accounting handlers in the native MCP full profile with the same
-recursive identity-key rejection, contract-version echo, canonical disclaimers,
-and price historian. Do not register accounting tools in the hosted demo profile
-and do not create a parallel implementation. This transport follow-up does not
-move private ingestion, client linkage, statement assembly, or tax-return work
-into nexus-core.
 
 **Public-safe planning/report analytics extraction — open issue #197.** Decide
 which generic, PII-free analytics from private PWOS producer work belong in

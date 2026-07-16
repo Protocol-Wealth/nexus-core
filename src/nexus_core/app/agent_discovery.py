@@ -34,10 +34,10 @@ _PROVIDER = {
 #: only option/collar/health/describe).
 _SERVER_DESCRIPTION = (
     "Regime-adaptive financial-analysis engine: macro-regime classification, market "
-    "and economic data, options analytics, and de-identified planning math. Public "
-    "educational endpoint, informational only: no advice, no trade execution, and no "
-    "client data. The tools this transport actually exposes are given in the "
-    "instructions field and by tools/list."
+    "and economic data, options analytics, and de-identified planning and onchain "
+    "accounting math. Public educational endpoint, informational only: no advice, no "
+    "trade execution, and no client data. The tools this transport actually exposes "
+    "are given in the instructions field and by tools/list."
 )
 
 _POLICY = {
@@ -101,13 +101,13 @@ def render_mcp_server_card() -> dict[str, Any]:
             "Demo profile — closed-world tools only: option pricing and collar "
             "worksheets (Black-Scholes, illustration only) plus server health and "
             "self-description. No live-vendor regime, market-data, economic-data, or "
-            "planning tools are exposed on this transport."
+            "planning or accounting tools are exposed on this transport."
         )
     else:
         tool_summary = (
             "Full profile: macro-regime classification and signals, market quotes and "
             "history, FRED economic series, options analytics (illustration only), and "
-            "de-identified planning illustrations."
+            "de-identified planning and onchain accounting calculations."
         )
     return {
         "protocolVersion": _mcp_protocol_version(),

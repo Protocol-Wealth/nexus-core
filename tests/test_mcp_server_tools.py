@@ -9,14 +9,20 @@ register when their providers are supplied. Skipped if ``fastmcp`` is absent.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
+from collections.abc import Callable, Sequence
+from decimal import Decimal
 
 import pytest
 
 pytest.importorskip("fastmcp")
 
+from nexus_core.app.accounting.contract import ACCOUNTING_CONTRACT_VERSION  # noqa: E402
 from nexus_core.data.derivatives import OptionInstrument, OptionTicker  # noqa: E402
 from nexus_core.data.providers import PriceBar, Quote  # noqa: E402
+from nexus_core.disclaimers import TAX_AWARENESS, TERSE  # noqa: E402
+from nexus_core.engine.accounting import PriceHistorian, PricePoint  # noqa: E402
 from nexus_core.mcp.server import build_server  # noqa: E402
 
 
@@ -164,8 +170,17 @@ def test_extra_tools_register() -> None:
     def _planner(body: dict) -> str:  # type: ignore[type-arg]
         return '{"ok": true}'
 
-    server = build_server(extra_tools=[("my_planner", "desc", _planner)])
-    assert "my_planner" in _tool_names(server)
+    server = build_server(
+        extra_tools=[
+            ("second_planner", "desc", _planner),
+            ("first_planner", "desc", _planner),
+        ]
+    )
+    tools = asyncio.run(server.list_tools())
+    assert {"first_planner", "second_planner"} <= {tool.name for tool in tools}
+    describe = next(tool.fn for tool in tools if tool.name == "describe")
+    payload = json.loads(describe())
+    assert payload["categories"]["planning"] == ["second_planner", "first_planner"]
 
 
 _PLANNING_TOOL_IDS = {
@@ -206,14 +221,15 @@ _PLANNING_TOOL_IDS = {
 }
 
 
-def _configured_server() -> object:
-    # build_configured_server wires the planning tools via extra_tools.
+def _configured_server(*, price_historian: PriceHistorian | None = None) -> object:
+    # build_configured_server wires planning + accounting via extra_tools.
     from nexus_core.app.mcp_mount import build_configured_server
 
     return build_configured_server(
         regime_engine=_FakeRegime(),  # type: ignore[arg-type]
         market=_FakeMarket(),  # type: ignore[arg-type]
         macro=_FakeMacro(),  # type: ignore[arg-type]
+        price_historian=price_historian,
     )
 
 
@@ -266,9 +282,159 @@ def _call_text(server: object, tool: str, args: dict[str, object]) -> str:
     return str(result.content[0].text)
 
 
-def test_option_price_rejects_bad_inputs_preserves_bs_limits() -> None:
-    import json
+def _registered_tool_fn(server: object, tool: str) -> Callable[..., str]:
+    """Return the callable FastMCP registered without starting its AnyIO runner."""
+    tools = asyncio.run(server.list_tools())  # type: ignore[attr-defined]
+    return next(registered.fn for registered in tools if registered.name == tool)
 
+
+def _call_registered_text(server: object, tool: str, body: dict[str, object] | None = None) -> str:
+    fn = _registered_tool_fn(server, tool)
+    return str(fn() if body is None else fn(body=body))
+
+
+_ACCOUNTING_TOOL_IDS = {
+    "price_history",
+    "decode_onchain_events",
+    "compute_cost_basis",
+    "onchain_pnl_report",
+}
+
+
+class _FixedAccountingPriceSource:
+    name = "configured-test-source"
+
+    def historical_prices(self, coins: Sequence[str], timestamp: int) -> dict[str, PricePoint]:
+        return {
+            coin: PricePoint(
+                coin=coin,
+                price_usd=Decimal("42.5"),
+                as_of=timestamp,
+                source=self.name,
+            )
+            for coin in coins
+        }
+
+
+def _accounting_server() -> object:
+    return _configured_server(price_historian=PriceHistorian([_FixedAccountingPriceSource()]))
+
+
+def test_accounting_tools_register_only_in_full_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+    from nexus_core.app import mcp_mount
+
+    monkeypatch.delenv("NEXUS_PUBLIC_MCP_PROFILE", raising=False)
+    full_server = _accounting_server()
+    full_tools = {
+        tool.name: tool
+        for tool in asyncio.run(full_server.list_tools())  # type: ignore[attr-defined]
+    }
+    assert set(full_tools) >= _ACCOUNTING_TOOL_IDS
+    for tool_id in _ACCOUNTING_TOOL_IDS:
+        assert full_tools[tool_id].parameters["required"] == ["body"]
+        assert full_tools[tool_id].parameters["properties"]["body"]["type"] == "object"
+        assert full_tools[tool_id].annotations.readOnlyHint is True
+
+    monkeypatch.setenv("NEXUS_PUBLIC_MCP_PROFILE", "demo")
+    monkeypatch.setattr(
+        mcp_mount,
+        "build_default_historian",
+        lambda: pytest.fail("demo profile must not construct an accounting historian"),
+    )
+    demo_server = _configured_server()
+    demo_names = _tool_names(demo_server)
+    assert demo_names.isdisjoint(_ACCOUNTING_TOOL_IDS)
+    demo_describe = json.loads(_call_registered_text(demo_server, "describe"))
+    assert "accounting" not in demo_describe["categories"]
+    assert demo_describe["contract_versions"] == {}
+
+
+def test_accounting_discovery_uses_top_level_describe_without_collision() -> None:
+    server = _accounting_server()
+    registered_tools = asyncio.run(server.list_tools())  # type: ignore[attr-defined]
+    names = {tool.name for tool in registered_tools}
+    assert "describe" in names
+    assert sum(tool.name == "describe" for tool in registered_tools) == 1
+    assert "accounting_describe" not in names
+
+    payload = json.loads(_call_registered_text(server, "describe"))
+    assert set(payload["categories"]["accounting"]) == _ACCOUNTING_TOOL_IDS
+    assert "describe" not in payload["categories"]["accounting"]
+    assert payload["contract_versions"]["accounting"] == ACCOUNTING_CONTRACT_VERSION
+
+
+def test_accounting_mcp_representative_calls_preserve_contract_and_disclaimers() -> None:
+    price = json.loads(
+        _call_registered_text(
+            _accounting_server(),
+            "price_history",
+            {"queries": [{"coin": "asset:opaque", "timestamp": 100}]},
+        )
+    )
+    assert price["prices"][0]["priceUsd"] == "42.5"
+    assert price["prices"][0]["source"] == "configured-test-source"
+
+    decoded = json.loads(
+        _call_registered_text(
+            _accounting_server(),
+            "decode_onchain_events",
+            {
+                "transactions": [
+                    {
+                        "account_ref": "account-opaque",
+                        "chain": "ethereum",
+                        "timestamp": 100,
+                        "tx_ref": "transaction-opaque",
+                        "movements": [
+                            {
+                                "asset": {"asset_id": "asset:opaque"},
+                                "direction": "in",
+                                "amount": "1",
+                            }
+                        ],
+                    }
+                ]
+            },
+        )
+    )
+    assert decoded["events"][0]["kind"] == "transfer_in"
+
+    quiet_period = {
+        "events": [],
+        "report_window": {"start_at": 100, "end_at": 200, "full_history": True},
+    }
+    cost_basis = json.loads(
+        _call_registered_text(_accounting_server(), "compute_cost_basis", quiet_period)
+    )
+    pnl = json.loads(
+        _call_registered_text(_accounting_server(), "onchain_pnl_report", quiet_period)
+    )
+    assert cost_basis["replay"]["in_period_event_count"] == 0
+    assert pnl["summary"]["disposal_count"] == 0
+
+    for payload in (price, decoded, cost_basis, pnl):
+        assert payload["contractVersion"] == ACCOUNTING_CONTRACT_VERSION
+    assert price["disclaimer"] == TERSE
+    assert decoded["disclaimer"] == TERSE
+    assert cost_basis["disclaimer"] == TERSE
+    assert pnl["disclaimer"] == TAX_AWARENESS
+
+
+def test_accounting_mcp_rejects_identity_and_maps_input_errors() -> None:
+    from fastmcp.exceptions import ToolError
+
+    with pytest.raises(ToolError, match="identity fields are not accepted"):
+        _call_registered_text(
+            _accounting_server(),
+            "compute_cost_basis",
+            {"events": [], "metadata": {"clientId": "forbidden"}},
+        )
+
+    with pytest.raises(ToolError, match="invalid decode_onchain_events request body"):
+        _call_registered_text(_accounting_server(), "decode_onchain_events", {"transactions": []})
+
+
+def test_option_price_rejects_bad_inputs_preserves_bs_limits() -> None:
     server = build_server(market=_FakeMarket())  # type: ignore[arg-type]
     base = {"spot": 100, "strike": 90, "volatility": 0.25}
     # Rejections (fail before the fix, which returned raw intrinsic).

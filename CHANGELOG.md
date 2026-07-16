@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Native MCP accounting adapter (#259)
+
+#### Added
+
+- Registered `price_history`, `decode_onchain_events`, `compute_cost_basis`, and
+  `onchain_pnl_report` in the native MCP full profile by adapting the existing
+  accounting handler registry rather than duplicating engine logic.
+- Added an `accounting` category and contract `0.2.0` to the native top-level
+  `describe` response. Accounting's internal `describe` handler is intentionally
+  omitted to avoid a tool-name collision.
+
+#### Security and compatibility
+
+- Preserved the recursive accounting identity-key scan, stable
+  `AccountingInputError` to `ToolError` mapping, contract-version echo, and
+  canonical accounting/tax-awareness disclaimers.
+- Shared one configured price historian between the HTTP app's restricted REST
+  gateway and native MCP adapter. Stdio full mode continues to build the same
+  default historian chain.
+- Kept `NEXUS_PUBLIC_MCP_PROFILE=demo` closed-world: no accounting handler or
+  provider is attached to native MCP in demo mode, so the hosted public MCP tool
+  set is unchanged. Private ingestion, client linkage, statement assembly,
+  approval, release, and retention remain outside nexus-core.
+
 ### Onchain accounting contract v2 (#260)
 
 #### Added

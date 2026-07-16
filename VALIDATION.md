@@ -3,6 +3,33 @@
 Records the latest validation for the `nexus_core.app` HTTP API, MCP transport,
 data providers, and public documentation/status surface.
 
+## 2026-07-16 ET — native MCP accounting adapter implementation (#259)
+
+Current source adapts the existing accounting handler registry into native MCP
+full mode. No live deployment is claimed by this entry: production remains on
+Cloud Run revision `nexus-core-00069-6m7` with
+`NEXUS_PUBLIC_MCP_PROFILE=demo`, so its public MCP tool list is unchanged.
+
+| Check | Result |
+|-------|--------|
+| focused full/demo registration, discovery, four representative handler calls, PII rejection, and stable input-error mapping | `4 passed, 33 deselected` |
+| combined planning/accounting registration plus read-only annotations | `6 passed, 31 deselected` |
+| shared REST/native-MCP historian identity | `1 passed` |
+| non-route accounting contract/handler tests plus historian tests | `24 passed, 23 deselected` |
+| `ruff check src/ tests/` | passed |
+| `mypy --strict src/nexus_core/` | passed (`181` source files) |
+| `git diff --check` | clean |
+| full local `pytest -q` | could not complete: no output before the explicit 180-second timeout (exit `124`) |
+
+The focused MCP tests inspect `tools/list` and invoke the exact
+`FunctionTool.fn` callables registered by FastMCP. This avoids a known local
+WSL/AnyIO runner issue while still validating the registration boundary and
+adapter envelopes. As a control, the unchanged
+`test_planning_tool_call_echoes_contract_version` test timed out under the same
+local `server.call_tool` runner after 45 seconds (exit `124`). Exact-head GitHub
+CI remains authoritative for the complete FastMCP/pytest suite and coverage
+floor.
+
 ## 2026-07-16 ET — accounting contract 0.2.0 release closeout (#260)
 
 PR #262 merged reviewed source head
