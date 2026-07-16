@@ -165,6 +165,21 @@ class PriceHistoryRequest(BaseModel):
     queries: list[PriceQueryInput] = Field(min_length=1, max_length=500)
     overrides: list[PriceOverrideInput] = Field(default_factory=list, max_length=500)
 
+    @model_validator(mode="after")
+    def validate_override_coordinates(self) -> Self:
+        query_coordinates = {(query.coin, query.timestamp) for query in self.queries}
+        override_coordinates: set[tuple[str, int]] = set()
+        for override in self.overrides:
+            coordinate = (override.coin, override.timestamp)
+            if coordinate not in query_coordinates:
+                raise ValueError(
+                    "every price override must match a requested coin/timestamp coordinate"
+                )
+            if coordinate in override_coordinates:
+                raise ValueError("price overrides must be unique by coin/timestamp coordinate")
+            override_coordinates.add(coordinate)
+        return self
+
 
 # --- decode_onchain_events tool input (P2) -----------------------------------
 
