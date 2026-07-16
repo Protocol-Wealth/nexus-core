@@ -12,6 +12,8 @@ from nexus_core.engine.accounting import (
     EventKind,
     LedgerEvent,
     LedgerLeg,
+    ReportWindowInput,
+    TransferTreatment,
     onchain_pnl_report,
 )
 
@@ -30,6 +32,8 @@ def _leg(
         direction=direction,
         amount=Decimal(amount),
         usd_value=None if usd is None else Decimal(usd),
+        price_source=None if usd is None else "caller_price",
+        price_as_of=None if usd is None else 1,
     )
 
 
@@ -43,7 +47,14 @@ def test_report_summary_and_short_long_split() -> None:
         _ev("d1", EventKind.dispose, _DISP_SHORT, [_leg("a", "out", "1", "15")]),  # short, gain 5
         _ev("d2", EventKind.dispose, _DISP_LONG, [_leg("a", "out", "1", "25")]),  # long, gain 15
     ]
-    report = onchain_pnl_report(events)
+    report = onchain_pnl_report(
+        events,
+        report_window=ReportWindowInput(
+            start_at=_ACQ,
+            end_at=_DISP_LONG + 1,
+            full_history=True,
+        ),
+    )
 
     assert report.method == "fifo"
     assert report.summary.realized_gain_usd == Decimal("20")
@@ -54,6 +65,9 @@ def test_report_summary_and_short_long_split() -> None:
     assert report.summary.disposal_count == 2
     assert report.summary.incomplete_count == 0
     assert report.summary.complete is True
+    assert report.completeness.complete is True
+    assert report.completeness.statement_ready is False
+    assert len(report.dispositions) == 2
     assert "tax professional" in report.disclaimer
 
 
@@ -63,7 +77,14 @@ def test_report_per_year_rollup() -> None:
         _ev("d1", EventKind.dispose, _DISP_SHORT, [_leg("a", "out", "1", "15")]),
         _ev("d2", EventKind.dispose, _DISP_LONG, [_leg("a", "out", "1", "25")]),
     ]
-    report = onchain_pnl_report(events)
+    report = onchain_pnl_report(
+        events,
+        report_window=ReportWindowInput(
+            start_at=_ACQ,
+            end_at=_DISP_LONG + 1,
+            full_history=True,
+        ),
+    )
     years = {y.year: y for y in report.by_year}
     assert set(years) == {2020, 2021}
     assert years[2020].realized_gain_usd == Decimal("5")
@@ -79,9 +100,43 @@ def test_report_excludes_incomplete_disposals_and_counts_them() -> None:
         _ev("acq", EventKind.acquire, _ACQ, [_leg("a", "in", "1")]),  # no usd -> basis unknown
         _ev("d1", EventKind.dispose, _DISP_SHORT, [_leg("a", "out", "1", "10")]),
     ]
-    report = onchain_pnl_report(events)
+    report = onchain_pnl_report(
+        events,
+        report_window=ReportWindowInput(
+            start_at=_ACQ,
+            end_at=_DISP_SHORT + 1,
+            full_history=True,
+        ),
+    )
     assert report.summary.realized_gain_usd == Decimal("0")  # nothing summable
     assert report.summary.disposal_count == 1
     assert report.summary.incomplete_count == 1
     assert report.summary.complete is False
     assert any("basis unknown" in w for w in report.warnings)
+
+
+def test_unmatched_transfer_market_value_cannot_make_statement_complete() -> None:
+    events = [
+        LedgerEvent(
+            event_id="transfer",
+            account_ref="acct-1",
+            kind=EventKind.transfer_in,
+            timestamp=_ACQ,
+            transfer_ref="transfer-1",
+            transfer_treatment=TransferTreatment.same_owner,
+            legs=[_leg("a", "in", "1", "10")],
+        ),
+        _ev("dispose", EventKind.dispose, _DISP_SHORT, [_leg("a", "out", "1", "20")]),
+    ]
+    report = onchain_pnl_report(
+        events,
+        report_window=ReportWindowInput(
+            start_at=_ACQ,
+            end_at=_DISP_SHORT + 1,
+            full_history=True,
+        ),
+    )
+    assert report.summary.realized_gain_usd == Decimal("0")
+    assert report.summary.complete is False
+    assert report.completeness.complete is False
+    assert "unmatched_transfer_in" in {gap.code for gap in report.completeness.gaps}

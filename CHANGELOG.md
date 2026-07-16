@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Onchain accounting contract v2 (#260)
+
+#### Added
+
+- Added account-scoped FIFO queues, opening-lot snapshots, half-open report
+  windows, full-history assertions, deterministic same-timestamp sequencing, and
+  structured replay/coverage/completeness metadata.
+- Added opaque lot, account, acquisition/disposal event, transaction, transfer,
+  override, and price lineage to cost-basis and PnL outputs.
+- Added explicit same-owner transfer linking that preserves lot quantity, basis,
+  acquisition date, and lineage across accounts without realizing gain.
+- Added explicit fee allocation/payment semantics. USD costs adjust acquisition
+  basis or disposition proceeds once; a digital-asset fee leg is recorded as its
+  own account-scoped disposal.
+- Reject supported-chain raw wallet shapes in account references and reject
+  contradictory standalone fee-event metadata.
+
+#### Changed
+
+- Bumped the accounting gateway contract from `0.1.0` to `0.2.0`. Legacy request
+  fields and result fields remain accepted/present, while all-event requests now
+  carry a `missing_report_window` gap and cannot be statement-ready.
+- Replaced direction-only processing with a versioned event-treatment matrix.
+  Ambiguous DeFi transformations require an explicit caller-reviewed
+  `taxable_exchange` treatment; transfers with external/unknown ownership and
+  `other` events fail closed as structured gaps.
+- Changed holding-term classification to UTC calendar dates and the exact
+  more-than-one-year anniversary rule. Future-dated acquisition overrides,
+  duplicate refs, orphan overrides, and ambiguous equal-timestamp order now fail
+  validation.
+- Corrected `describe` from `status: scaffold` to `status: available` while
+  retaining `plannedTools` as a compatibility alias. Native MCP registration
+  remains separate issue #259; the public demo profile is unchanged.
+
+#### Governance
+
+- Methodology version `2.0.0` is stamped `pending_governance_review` and every
+  result keeps `statement_ready=false` until CIO/IC/CCO review is recorded. CI,
+  deployment, or code review alone does not enable private statement composition.
+- Private identity, wallet/client linkage, ingestion, statement assembly, review,
+  release, and records retention remain outside this public repository.
+
 ### Onchain accounting P0-P4 (#248)
 
 #### Added

@@ -117,7 +117,7 @@ and FRED series 1 hr); Cloudflare is set to respect origin.
 | Vaults | `/api/vaults`, `/api/vaults/chains` (vaults.fyi v2) |
 | LP | `/api/lp/chains`, `/api/lp/uniswap-v3/{chain}/positions?owner=`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics`, `/api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` (ethereum, base, optimism, polygon); `/api/lp/aerodrome/{token_id}/analytics` (Base Slipstream, on-chain RPC) |
 | Solana | `/api/solana/price/{mint}`, `/api/solana/prices?mints=` (Jupiter v3 SPL token USD prices, keyless) |
-| Accounting gateway | `GET /api/accounting/tools`, `POST /api/accounting/tools/{tool_id}` (contract `0.1.0`; restricted REST only) |
+| Accounting gateway | `GET /api/accounting/tools`, `POST /api/accounting/tools/{tool_id}` (current source contract `0.2.0`; restricted REST only; last verified deployment `0.1.0`) |
 | Benchmarks | `/api/benchmarks`, `/api/benchmarks/series?days=`, `/api/benchmarks/history?days=` |
 | Usage | `/api/usage` (provider quota report) |
 | MCP | `/mcp` (MCP-over-HTTP, FastMCP) |
@@ -225,11 +225,14 @@ The deployed transport is `GET /api/accounting/tools` plus
 `POST /api/accounting/tools/{tool_id}`, protected by the hosted REST service-key
 gate. Accounting is not in native MCP yet; #259 will adapt the same handler
 registry into the full profile without changing the production demo profile.
-Private custodian ingestion, wallet-to-client mapping, statement construction,
-tax-return preparation, approval, release, and retention remain outside this
-repo. Issue #260 blocks private statement composition until account-scoped lots,
-transfer and fee treatment, calendar holding periods, report-window replay, and
-calculation lineage are hardened and methodology-reviewed.
+Current source contract `0.2.0` adds account-scoped FIFO, explicit transfer and
+fee treatment, calendar holding periods, full-history/opening-state report replay,
+lineage, and structured completeness. Private custodian ingestion,
+wallet-to-client mapping, statement construction, tax-return preparation,
+approval, release, and retention remain outside this repo. Issue #260 continues
+to block private statement composition until this source is deployed and its
+methodology is CIO/IC/CCO-reviewed; the engine reports `statement_ready=false`
+while that review is pending.
 
 ## Planning Engine
 

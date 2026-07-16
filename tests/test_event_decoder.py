@@ -12,6 +12,7 @@ from nexus_core.engine.accounting import (
     EventKind,
     MovementInput,
     RawTransactionInput,
+    TransferTreatment,
     classify_kind,
     decode_transaction,
     decode_transactions,
@@ -20,7 +21,9 @@ from nexus_core.engine.accounting import (
 
 
 def _mv(asset_id: str, direction: Literal["in", "out"], amount: str) -> MovementInput:
-    return MovementInput(asset=AssetRef(asset_id=asset_id), direction=direction, amount=Decimal(amount))
+    return MovementInput(
+        asset=AssetRef(asset_id=asset_id), direction=direction, amount=Decimal(amount)
+    )
 
 
 def _tx(
@@ -96,7 +99,10 @@ def test_classify_no_category_movement_pattern() -> None:
 
 def test_decode_evm_uniswap_swap() -> None:
     ev = decode_transaction(
-        _tx([_mv("eth:usdc", "out", "1000"), _mv("eth:weth", "in", "0.3")], protocol_hint="uniswap_v3")
+        _tx(
+            [_mv("eth:usdc", "out", "1000"), _mv("eth:weth", "in", "0.3")],
+            protocol_hint="uniswap_v3",
+        )
     )
     assert ev.kind == EventKind.swap
     assert len(ev.legs) == 2
@@ -130,6 +136,25 @@ def test_decode_solana_jlp_deposit_is_lp_add() -> None:
 def test_decode_bitcoin_transfer_in() -> None:
     ev = decode_transaction(_tx([_mv("bitcoin:btc", "in", "0.5")], chain="bitcoin"))
     assert ev.kind == EventKind.transfer_in
+    assert ev.transfer_ref == ev.event_id
+    assert ev.transfer_treatment == TransferTreatment.unknown
+
+
+def test_fee_movement_does_not_change_principal_classification() -> None:
+    tx = _tx(
+        [
+            _mv("eth:usdc", "in", "100"),
+            MovementInput(
+                asset=AssetRef(asset_id="eth:eth"),
+                direction="out",
+                amount=Decimal("0.001"),
+                role="fee",
+            ),
+        ]
+    )
+    event = decode_transaction(tx)
+    assert event.kind == EventKind.transfer_in
+    assert event.legs[1].role == "fee"
 
 
 def test_decode_unknown_protocol_multi_asset_is_other_not_dropped() -> None:

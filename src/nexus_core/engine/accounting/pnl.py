@@ -22,12 +22,21 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
 from ...disclaimers import TAX_AWARENESS
-from .cost_basis import DisposalRecord, compute_cost_basis
-from .models import BasisOverrideInput, LedgerEvent
+from .cost_basis import (
+    CalculationAssumption,
+    CalculationCompleteness,
+    CoverageMetadata,
+    DisposalRecord,
+    MethodologyMetadata,
+    ReplayMetadata,
+    compute_cost_basis,
+)
+from .models import BasisOverrideInput, LedgerEvent, ReportWindowInput
 
 
 class PnlBucket(BaseModel):
@@ -46,6 +55,7 @@ class PnlBucket(BaseModel):
     cost_basis_usd: Decimal
     disposal_count: int
     incomplete_count: int
+    calculation_gap_count: int
     complete: bool
 
 
@@ -60,9 +70,15 @@ class PnlReport(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    method: str
+    method: Literal["fifo"]
+    methodology: MethodologyMetadata
+    replay: ReplayMetadata
+    coverage: CoverageMetadata
+    completeness: CalculationCompleteness
+    assumptions: list[CalculationAssumption]
     summary: PnlBucket
     by_year: list[PnlYear]
+    dispositions: list[DisposalRecord]
     warnings: list[str]
     disclaimer: str
 
@@ -79,7 +95,8 @@ def _aggregate(
     incomplete = 0
     for disposal in disposals:
         if (
-            disposal.realized_gain_usd is None
+            not disposal.complete
+            or disposal.realized_gain_usd is None
             or disposal.proceeds_usd is None
             or disposal.cost_basis_usd is None
         ):
@@ -99,10 +116,16 @@ def onchain_pnl_report(
     events: Sequence[LedgerEvent],
     *,
     overrides: Sequence[BasisOverrideInput] | None = None,
+    report_window: ReportWindowInput | None = None,
     method: str = "fifo",
 ) -> PnlReport:
     """Realized-PnL report: FIFO cost basis, then aggregate disposals by year."""
-    result = compute_cost_basis(events, overrides=overrides, method=method)
+    result = compute_cost_basis(
+        events,
+        overrides=overrides,
+        report_window=report_window,
+        method=method,
+    )
     disposals = result.disposals
 
     realized, short_term, long_term, proceeds, cost_basis, incomplete = _aggregate(disposals)
@@ -114,7 +137,8 @@ def onchain_pnl_report(
         cost_basis_usd=cost_basis,
         disposal_count=len(disposals),
         incomplete_count=incomplete,
-        complete=incomplete == 0,
+        calculation_gap_count=result.completeness.gap_count,
+        complete=incomplete == 0 and result.completeness.complete,
     )
 
     by_year_map: dict[int, list[DisposalRecord]] = {}
@@ -138,14 +162,21 @@ def onchain_pnl_report(
                 cost_basis_usd=cost_basis,
                 disposal_count=len(year_disposals),
                 incomplete_count=incomplete,
-                complete=incomplete == 0,
+                calculation_gap_count=result.completeness.gap_count,
+                complete=incomplete == 0 and result.completeness.complete,
             )
         )
 
     return PnlReport(
-        method=method,
+        method="fifo",
+        methodology=result.methodology,
+        replay=result.replay,
+        coverage=result.coverage,
+        completeness=result.completeness,
+        assumptions=result.assumptions,
         summary=summary,
         by_year=by_year,
+        dispositions=disposals,
         warnings=result.warnings,
         disclaimer=TAX_AWARENESS,
     )

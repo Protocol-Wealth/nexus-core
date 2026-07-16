@@ -70,14 +70,16 @@ server hosting the FastAPI application from `nexus_core.app:create_app`:
 | `GET /api/usage` | Provider usage / quota report |
 | `POST /mcp` | Model Context Protocol endpoint |
 | `GET /api/planning/tools`, `POST /api/planning/tools/{tool_id}` | PII-free planning REST gateway (27 current-source tools, contractVersion `0.1.0`) |
+| `GET /api/accounting/tools` | De-identified accounting tool discovery and contract-version handshake |
+| `POST /api/accounting/tools/{tool_id}` | Accounting contract `0.2.0` in current source: pricing, decoding, account-scoped FIFO/replay, and PnL tools |
 | `GET /mcp/tools`, `POST /mcp/tools/{tool_id}` | Legacy planning REST gateway aliases |
 
 There is **no client data** and **no public write endpoint** — the daily snapshot
 runs as a Cloud Run Job, not an HTTP route. The hosted `/mcp` transport can use
 transparent OAuth for remote MCP client compatibility; it does not add user login
-or privileged scopes. In restricted mode, `/api/*`, `/api/planning/tools/*`, and
-legacy `/mcp/tools/*` require a Nexus API key supplied by trusted service
-callers such as `pw-api`. See [`AUDIT.md`](AUDIT.md).
+or privileged scopes. In restricted mode, `/api/*`, `/api/planning/tools/*`,
+`/api/accounting/tools/*`, and legacy `/mcp/tools/*` require a Nexus API key
+supplied by trusted service callers such as `pw-api`. See [`AUDIT.md`](AUDIT.md).
 
 ## Configuration
 

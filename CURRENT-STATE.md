@@ -5,11 +5,14 @@ verification. For the architectural overview see [README.md](README.md); for
 deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
 [AUDIT.md](AUDIT.md).
 
-- **Last docs closeout:** 2026-07-15 ET — root docs now record the deployed P0-P4
-  onchain-accounting substrate and its actual transport boundary: restricted
-  REST is live, native MCP registration remains open in #259, and private
-  ingestion, wallet/client linkage, statement assembly, review, and retention
-  remain in `pw-api`/PWOS rather than this public engine.
+- **Last docs closeout:** 2026-07-16 ET — root docs distinguish accounting
+  contract `0.2.0` source from the still-live `0.1.0` deployment. The v2 source
+  implements #260's account, transfer, fee, period-replay, lineage, and
+  completeness hardening but remains held from statement use pending deployment,
+  consumer compatibility, and CIO/IC/CCO methodology review. Restricted REST is
+  live, native MCP registration remains open in #259, and private ingestion,
+  wallet/client linkage, statement assembly, review, and retention remain in
+  `pw-api`/PWOS rather than this public engine.
 - **Last live verified:** 2026-07-15 ET / 2026-07-16 UTC — commit `d528389` is on
   `origin/main`; Cloud Run revision `nexus-core-00068-5pf` is Ready and serves
   100% traffic. Live `/health` returned `200`; unauthenticated
@@ -19,14 +22,18 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   expected short-term/tax-year rollup and disclaimer. The deployed service still
   sets `NEXUS_PUBLIC_MCP_PROFILE=demo` and `NEXUS_ACCESS_MODE=restricted`.
 - **Current accounting source:** P0-P4 are merged through PRs #254-#258. The
-  accounting contract is `0.1.0`; the REST registry contains `describe`,
+  deployed accounting contract remains `0.1.0`; current source advances it to
+  `0.2.0`. The REST registry contains `describe`,
   `price_history`, `decode_onchain_events`, `compute_cost_basis`, and
   `onchain_pnl_report`. These handlers are not in native MCP `tools/list` yet;
-  #259 owns a full-profile-only adapter, correction of the `describe` handler's
-  stale `status: scaffold` / `plannedTools` metadata, and the requirement to keep
-  the hosted demo profile unchanged. P0-P4 are calculation primitives, not proof
-  that a client statement workflow or tax return is complete; #260 blocks
-  statement wiring pending accounting-semantics and replay hardening.
+  #259 owns a full-profile-only adapter and the requirement to keep the hosted
+  demo profile unchanged. Accounting v2 corrects the REST `describe` status while
+  retaining `plannedTools` as a compatibility alias. It adds account-scoped lots,
+  explicit same-owner transfers and fee allocation, calendar terms, bounded
+  replay, lineage, and structured completeness. P0-P4 remain calculation
+  primitives, not proof that a client statement workflow or tax return is
+  complete; #260 still blocks statement wiring pending CIO/IC/CCO methodology
+  review, and source forces `statement_ready=false` until that review is recorded.
 - **Earlier planning update:** 2026-07-08 — `main` completes planning
   assumption provenance (#198). Built-in federal tax, IRMAA, education vehicle,
   simplified state conversion/state-tax, ACA reference, cash-flow,
@@ -115,8 +122,9 @@ produce a tax return, or create a books-and-records workflow. Those private
 consumer responsibilities remain in `pw-api`/PWOS. Native MCP registration is a
 separate unfinished transport adapter tracked by #259; production currently runs
 the demo MCP profile, so its public tool list is intentionally unchanged. Issue
-#260 separately blocks statement use until account isolation, transfer and fee
-treatment, calendar holding periods, period replay, and lineage are hardened.
+#260's code hardening is represented in accounting contract `0.2.0` source. Its
+governance gate remains open: methodology version `2.0.0` is marked
+`pending_governance_review`, so private statement composition must remain disabled.
 
 ## Hybrid planning boundary
 
@@ -252,7 +260,7 @@ Crypto option underliers: **BTC, ETH** are coin-settled (inverse, queried as `cu
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/analytics` | The Graph + RPC (Tatum) + Merkl | `THEGRAPH_API_KEY`, `TATUM_API_KEY` (uncollected fees); USD prices are required query params |
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` | same + hold-strategy benchmark returns over a window | `THEGRAPH_API_KEY`, `TATUM_API_KEY`; USD prices are required query params |
 | `GET /api/lp/aerodrome/{token_id}/analytics` | Aerodrome Slipstream on **Base**, read on-chain via Tatum RPC (no subgraph) | `TATUM_API_KEY`; USD prices required. `data_mode: onchain_rpc` — value/in-range/amounts/uncollected fees only; IL, fee APR, AERO gauge APR null/zero |
-| `GET /api/accounting/tools` | accounting contract `0.1.0` + REST handler discovery | `NEXUS_API_KEYS` in hosted restricted mode |
+| `GET /api/accounting/tools` | current source accounting contract `0.2.0` + REST handler discovery; last verified deployment `0.1.0` | `NEXUS_API_KEYS` in hosted restricted mode |
 | `POST /api/accounting/tools/{tool_id}` | historical pricing, event decoding, FIFO cost basis, and realized-PnL aggregation over de-identified facts | `NEXUS_API_KEYS` in hosted restricted mode |
 
 Uniswap V3 analytics computes value, in-range status, **exact** impermanent-loss-vs-HODL,
@@ -542,10 +550,11 @@ Outstanding and future work is tracked in GitHub Issues:
 - **#259 native MCP accounting registration** — adapt the existing handlers into
   the full MCP profile with the same PII scan, contract/disclaimer envelope, and
   no change to the hosted demo profile.
-- **#260 accounting semantics/replay hardening** — blocks the cost-basis and
-  realized-PnL statement phases until account-scoped lots, transfer/fee treatment,
-  calendar holding periods, report windows/opening state, deterministic replay,
-  and calculation lineage are complete and methodology-reviewed.
+- **#260 accounting semantics/replay hardening** — contract `0.2.0` source now
+  implements the account/transfer/fee, calendar-term, report-window/opening-state,
+  deterministic replay, lineage, and completeness work. The cost-basis and
+  realized-PnL statement phases remain blocked until merge/deploy verification and
+  CIO/IC/CCO methodology review.
 - **#197 public-safe planning/report analytics extraction** — decide what generic,
   PII-free analytics should move from private PWOS producer work into nexus-core
   versus staying in advisor workflow code. Existing planning-bridge wrappers

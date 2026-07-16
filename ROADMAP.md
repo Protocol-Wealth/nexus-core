@@ -27,8 +27,9 @@ decoding, FIFO cost basis, and realized-PnL aggregation. It is calculation
 substrate only: private ingestion, client linkage, statement production, review,
 and retention remain in the private stack. Native MCP registration is not yet
 shipped and is tracked in #259; the hosted demo MCP tool set remains unchanged.
-Issue #260 separately blocks statement wiring until the current FIFO/PnL
-semantics and replay model are hardened.
+Accounting contract `0.2.0` in current source implements #260's FIFO/PnL
+semantics and replay hardening. Statement wiring remains blocked until that source
+is merged/deployed and its methodology receives CIO/IC/CCO review.
 
 Current source also corrects the Monte Carlo `student_t` return model so its
 fat-tailed draw is scaled to the caller-supplied covariance matrix. Student-t
@@ -298,12 +299,13 @@ gracefully to `None` / empty / `503` when its key is absent.
 
 Prioritized. Top item first.
 
-**Accounting semantics and replay hardening — open issue #260.** Block statement
-wiring until FIFO books are account-scoped; transfers and fees have approved,
-fail-closed treatment; holding periods use calendar rules; requests carry a
-versioned report window/opening state; and outputs preserve deterministic lineage
-and structured completeness. Obtain methodology review before enabling the
-private consumer's cost-basis or realized-PnL statement phases.
+**Accounting semantics and replay hardening — open issue #260.** Contract `0.2.0`
+source now scopes FIFO books by account, handles linked same-owner transfers and
+explicit fees, uses calendar terms, supports full-history/opening-state replay,
+and returns deterministic lineage plus structured completeness. Keep private
+cost-basis and realized-PnL statement composition disabled until merge/deploy
+verification and CIO/IC/CCO methodology review; source enforces that gate through
+`statement_ready=false` while review remains pending.
 
 **Native MCP accounting adapter — open issue #259 (completes #248).** Reuse the
 deployed accounting handlers in the native MCP full profile with the same

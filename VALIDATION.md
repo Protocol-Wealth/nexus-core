@@ -3,6 +3,32 @@
 Records the latest validation for the `nexus_core.app` HTTP API, MCP transport,
 data providers, and public documentation/status surface.
 
+## 2026-07-16 ET — accounting contract 0.2.0 source gate (#260)
+
+The `feat/onchain-accounting-contract-v2` source branch was validated before
+publication. This is source evidence only: contract `0.2.0` has not been merged
+or deployed, the authenticated live service remains contract `0.1.0`, and
+client-statement use remains blocked on pw-api compatibility work plus
+CIO/IC/CCO methodology approval.
+
+| Check | Result |
+|-------|--------|
+| accounting engine, PnL, decoder, historian, and non-route gateway tests | `66 passed, 19 deselected` |
+| focused accounting package coverage | `87%` overall; `cost_basis.py` `89%` |
+| `ruff check src/ tests/` | passed |
+| `mypy --strict src/nexus_core/` | passed; 181 source files |
+| `ruff format --check` on all 12 changed Python files | passed |
+| no-dependency, no-isolation wheel build | passed; `nexus_core-0.1.0-py3-none-any.whl` |
+| accounting FastAPI route tests | bounded at 120 seconds; local TestClient/AnyIO harness produced no result |
+
+The route timeout matches the WSL/sandbox thread-dispatch caveat documented
+below. GitHub CI is therefore authoritative for the complete route suite and
+repository coverage floor. The focused fixtures include account isolation,
+same-owner and chained transfers, unknown basis, fee allocation and fee-asset
+handling, calendar/leap-year holding terms, half-open period replay, opening
+state adjacency/order, lineage, raw-address rejection, and structured
+completeness failures.
+
 ## 2026-07-15 ET — onchain accounting P0-P4 closeout
 
 Commit `d528389` (PR #258, completing the P0-P4 source sequence from PRs
