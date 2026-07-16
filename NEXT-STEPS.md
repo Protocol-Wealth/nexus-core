@@ -1,27 +1,27 @@
-# NEXT-STEPS.md — nexus-core
+# Archived contributor next-steps — nexus-core
 
-A hand-off for new contributors (interns). Read this with
-[`CLAUDE.md`](CLAUDE.md) (operating rules + invariants), [`README.md`](README.md)
-(architecture), [`CURRENT-STATE.md`](CURRENT-STATE.md) (as-built inventory), and
-[`ROADMAP.md`](ROADMAP.md) (what's live vs next). This file is the **prioritized
-to-do list**; keep it current as you finish items.
+> **Historical reference, not a prioritized backlog.** This file preserves the
+> detailed 2026-07-07 contributor handoff. Current work is owned by
+> [ROADMAP.md](ROADMAP.md) and GitHub Issues; deployed truth is in
+> [CURRENT-STATE.md](CURRENT-STATE.md), and checks are recorded in
+> [VALIDATION.md](VALIDATION.md). Read [`CLAUDE.md`](CLAUDE.md) for operating
+> rules. Where the material below differs, those current sources win.
 
-_Last updated: 2026-07-07. Live deployment was last verified on 2026-07-01 at
-[nexusmcp.site](https://nexusmcp.site); current local work includes the Slice
-0/1/2 cash-flow planning bridge updates, a local collar-book executable-fill
-layer, an optional REST/JSON service-key gate, and the Student-t Monte Carlo
-covariance-scaling correction plus the RMD start-age policy kernel shared by
-`rmd`, `tax_aware_withdrawal`, and the Roth composite. Current branch also
-centralizes federal tax/IRMAA reference-table lookup behind a version-stamped
-provider registry and adds Monte Carlo report diagnostics for Wealth Roadmap
-output quality, plus S1 education funding tools and S8 multi-account
-waterfall / Monte Carlo goal-schedule support, S2 income layering, and the
-current S3 historical-blend exhibit plus the current S7 illustrative state-tax
-layer, current S9 household/survivor modeling, and the current S6 PW Wealth
-Roadmap report preset, current S5 risk-profile scoring, and current S4
-performance analysis. Live endpoints were not re-smoked._
+## Current pointer (2026-07-15 ET)
 
-## Orient yourself in 5 minutes
+- `d528389` is deployed on `nexus-core-00068-5pf` at 100% traffic.
+- Onchain accounting P0-P4 is available through restricted REST only. Issue #259
+  owns native MCP full-profile registration; the hosted demo profile stays
+  unchanged.
+- Issue #260 blocks statement wiring pending account/transfer/fee, calendar-term,
+  period-replay, lineage, and methodology hardening.
+- The accounting engine is de-identified calculation substrate. Private
+  custodian ingestion, wallet/client linkage, statement assembly, advisor review,
+  tax-return preparation, release, and retention remain outside this repo.
+
+## Archived 2026-07-07 contributor material
+
+### Orient yourself in 5 minutes
 
 - **What this is:** the open, read-only public surface of the Protocol Wealth
   research engine — a REST API + an MCP server with no client data. Native MCP

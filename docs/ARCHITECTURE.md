@@ -2,9 +2,10 @@
 
 Nexus Core is a public, read-only, regime-adaptive financial-analysis and
 DeFi/market-data engine. Python 3.12, FastAPI + FastMCP, synchronous `httpx`,
-`asyncpg`. It carries no client data; no account or API key is required. The
-hosted MCP transport may use transparent OAuth for remote-client compatibility,
-but every endpoint remains public and read-only.
+`asyncpg`. It carries no client data. Local/public-mode REST can run without a
+service credential; the hosted deployment service-key gates `/api/*` and the
+planning/accounting JSON gateways. Hosted native MCP remains a transparent-OAuth
+public demo profile. Every surface is read-only.
 
 ## Layering
 
@@ -34,6 +35,8 @@ engine/          pure computation over provider data
   pricing/       Black-Scholes + options overlays
   lp/            uniswap_v3 — pure CLMM math (tick math, exact IL, fee APR),
                  protocol-agnostic and reused across chains
+  accounting/    historical pricing, event decoding, FIFO lots/cost basis,
+                 realized-PnL aggregation over de-identified facts
   benchmarks.py  base-100 hold-strategy return series + compositions
     │
     ▼
@@ -43,13 +46,15 @@ app/             FastAPI application factory + routers
   scoring.py     /api/score (shares context builder with MCP score_asset)
   layers.py      /api/layer/{ticker} + /api/layers (shares the layer view with MCP classify_layer)
   options.py     options pricing + overlays + Deribit crypto options
+  accounting/    contract + restricted REST gateway + handler registry
   wallet.py chain.py vaults.py lp.py benchmarks.py snapshots.py
+  access_gate.py service-key middleware for hosted REST/JSON paths
   ratelimit.py   in-process per-IP sliding-window limiter
   mcp_mount.py   mounts the FastMCP transport at /mcp
   mcp_oauth.py   transparent OAuth 2.1 / PKCE shim for remote MCP clients
 mcp/server/      build_server() — the MCP tool surface (regime, score, market,
                  economic, DefiLlama TVL, options, planning); core registry
-                 ships no account auth of its own
+                 ships no account auth of its own; accounting adapter is #259
 ```
 
 The market provider is assembled as a cached composite: yfinance (keyless
@@ -74,21 +79,26 @@ Cloudflare (nexusmcp.site)        methods rule (GET/POST/OPTIONS only),
     ▼
 Cloud Run (nexus-core)
     │
-    ├─ CORS middleware (outermost)
+    ├─ SecurityHeadersMiddleware    outermost response headers
+    ├─ CORS middleware              wraps preflight/error responses
     ├─ RateLimitMiddleware        per-IP sliding window; /health + /mcp exempt;
     │                             client key resolved spoofing-resistantly
     │                             (CF-Connecting-IP, else rightmost XFF, else peer)
+    ├─ NexusAccessGate            hosted `/api/*` service-key boundary
+    ├─ MCPAuthGate               transparent-OAuth gate for native `/mcp` only
     ▼
 FastAPI router  ── REST ──▶  engine + data clients ──▶ JSON (Cache-Control set per route)
        │
        └──── /mcp ────▶  FastMCP transport ──▶ same engine + data clients
 ```
 
-REST and MCP call the **same** engine and provider instances; `/api/score` and
-the MCP `score_asset` tool share one scoring-context builder and framework, so
-they return identical scores. Per-route `Cache-Control` headers are the single
-source of truth for cache lifetime (regime ~15 min, quotes 5 min, history and
-FRED series 1 hr); Cloudflare is set to respect origin.
+Where a capability is registered on both transports, REST and MCP call the
+**same** engine and provider instances; `/api/score` and the MCP `score_asset`
+tool share one scoring-context builder and framework, so they return identical
+scores. Accounting P0-P4 is currently registered only on restricted REST; #259
+tracks the native full-profile adapter. Per-route `Cache-Control` headers are the
+single source of truth for cache lifetime (regime ~15 min, quotes 5 min, history
+and FRED series 1 hr); Cloudflare is set to respect origin.
 
 ## REST Endpoints
 
@@ -107,10 +117,11 @@ FRED series 1 hr); Cloudflare is set to respect origin.
 | Vaults | `/api/vaults`, `/api/vaults/chains` (vaults.fyi v2) |
 | LP | `/api/lp/chains`, `/api/lp/uniswap-v3/{chain}/positions?owner=`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics`, `/api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` (ethereum, base, optimism, polygon); `/api/lp/aerodrome/{token_id}/analytics` (Base Slipstream, on-chain RPC) |
 | Solana | `/api/solana/price/{mint}`, `/api/solana/prices?mints=` (Jupiter v3 SPL token USD prices, keyless) |
+| Accounting gateway | `GET /api/accounting/tools`, `POST /api/accounting/tools/{tool_id}` (contract `0.1.0`; restricted REST only) |
 | Benchmarks | `/api/benchmarks`, `/api/benchmarks/series?days=`, `/api/benchmarks/history?days=` |
 | Usage | `/api/usage` (provider quota report) |
 | MCP | `/mcp` (MCP-over-HTTP, FastMCP) |
-| Planning gateway | `/mcp/tools`, `POST /mcp/tools/{tool_id}` (23 PII-free planning tools, contractVersion `0.1.0`) |
+| Planning gateway | `GET /api/planning/tools`, `POST /api/planning/tools/{tool_id}` (34 PII-free planning tools, contractVersion `0.1.0`); `/mcp/tools` is the legacy alias |
 
 ## Regime Engine
 
@@ -201,17 +212,34 @@ add valuation/IL/fee analytics when prices are supplied. Arbitrum is not
 supported: its published subgraph ID uses a schema incompatible with the V3 shape
 this client decodes.
 
+## Onchain Accounting Engine
+
+`engine/accounting/` contains the public-safe P0-P4 calculation substrate:
+multi-source historical price resolution, deterministic event classification,
+FIFO lot/cost-basis math, and realized-PnL aggregation. The separate
+`app/accounting/` contract uses opaque references, recursively rejects
+identity-shaped keys, validates request shapes with pydantic, preserves unknown
+price/basis values as unknown, and attaches canonical disclaimers.
+
+The deployed transport is `GET /api/accounting/tools` plus
+`POST /api/accounting/tools/{tool_id}`, protected by the hosted REST service-key
+gate. Accounting is not in native MCP yet; #259 will adapt the same handler
+registry into the full profile without changing the production demo profile.
+Private custodian ingestion, wallet-to-client mapping, statement construction,
+tax-return preparation, approval, release, and retention remain outside this
+repo. Issue #260 blocks private statement composition until account-scoped lots,
+transfer and fee treatment, calendar holding periods, report-window replay, and
+calculation lineage are hardened and methodology-reviewed.
+
 ## Planning Engine
 
 `engine/planning/` holds pure, PII-free planning primitives exposed through both
-native MCP and the REST planning gateway. The live handler registry has 23 tools:
-Monte Carlo decumulation (including spend schedules and optional Guyton-Klinger
-guardrails), goal funding, deterministic cash-flow projection, glide path,
-tax-aware withdrawals, correlations, capital-market assumptions, regime path
-generation, Roth conversion, sequence stress, RMDs, tax-bracket headroom, Social
-Security claiming, regime-conditioned SWR, portfolio x-ray, allocation
-optimization, FIRE, risk metrics, rebalancing, IRMAA headroom, composite
-Roth-conversion analysis, conversion sequencing, and report assembly.
+native MCP and the REST planning gateway. The current handler registry has 34
+tools spanning Monte Carlo and deterministic cash flow, goals and education,
+income/withdrawal/tax analysis, Social Security and inherited IRA analysis,
+historical/performance/risk context, allocation and rebalancing, Roth/IRMAA
+analysis, and report-input assembly. The authoritative current list is in
+`CURRENT-STATE.md` and the gateway discovery response.
 
 The gateway (`app/planning/gateway.py`) rejects identity-shaped keys anywhere in
 the request body and echoes `contractVersion: "0.1.0"` on success. The composite
@@ -299,10 +327,11 @@ server = build_server(
 The core MCP registry ships no account authentication, tier enforcement, audit
 logging, or PII redaction of its own. The `ResponseFilter` Protocol is the hook
 surface where adopters wire those concerns in; the filter implementations are
-entirely adopter-defined and adopter-operated. The nexus-core public deployment
-runs the registry unfiltered — all tool output is public by design — while
-`app/mcp_oauth.py` can sit in front of the `/mcp` transport to satisfy remote MCP
-OAuth handshakes without creating user accounts or private scopes.
+entirely adopter-defined and adopter-operated. The hosted nexus-core deployment
+runs the closed-world demo MCP profile without private scopes, while
+`app/mcp_oauth.py` sits in front of `/mcp` to satisfy remote MCP OAuth handshakes
+without creating user accounts. Hosted REST/JSON uses the separate service-key
+gate described above.
 
 ## Access Control and Tiering (Adopter-Supplied)
 

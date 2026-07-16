@@ -3,6 +3,39 @@
 Records the latest validation for the `nexus_core.app` HTTP API, MCP transport,
 data providers, and public documentation/status surface.
 
+## 2026-07-15 ET — onchain accounting P0-P4 closeout
+
+Commit `d528389` (PR #258, completing the P0-P4 source sequence from PRs
+#254-#258) passed the repository's GitHub gates:
+
+| Check | Evidence | Result |
+|-------|----------|--------|
+| ruff + mypy strict + pytest/coverage | Actions run `29451408938` | passed |
+| SPDX headers | Actions run `29451408943` | passed |
+| license compliance | Actions run `29451408891` | passed |
+| CodeQL | Actions runs `29451408323`, `29451407938` | passed |
+
+Cloud Run service generation 68 reports revision `nexus-core-00068-5pf` Ready
+and serving 100% traffic. The deployed image digest is
+`sha256:4f8e580ca543d884a674cbfbf8bac6d3db5d9e35617001854d0048d35b0e647e`.
+The service configuration remains `NEXUS_PUBLIC_MCP_PROFILE=demo` plus
+`NEXUS_ACCESS_MODE=restricted`.
+
+| Live check | Result |
+|------------|--------|
+| `GET https://nexusmcp.site/health` | `200` — `{"status":"ok","service":"nexus-core","version":"0.1.0"}` |
+| unauthenticated `GET https://nexusmcp.site/api/accounting/tools` | `401` — `{"error":"unauthorized","error_description":"Nexus API key required"}` |
+| service-key `GET https://nexusmcp.site/api/accounting/tools` | `200` — contract `0.1.0`; `describe`, `price_history`, `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report` discovered |
+| service-key `POST .../api/accounting/tools/onchain_pnl_report` | `200` — de-identified fixture returned realized gain `20`, the expected short-term/tax-year rollup, and the canonical disclaimer |
+
+The unauthenticated check confirms the service-key boundary; the authenticated
+catalogue and P4 fixture confirm deployed route behavior without exposing the
+key. Accounting tools are not registered in native MCP yet; #259 owns that
+adapter, and the hosted demo profile is expected to remain unchanged. No
+end-to-end private ingestion or client statement workflow was validated by this
+deployment. Issue #260 explicitly blocks statement wiring until the known
+accounting-semantics and replay gaps are closed and methodology-reviewed.
+
 ## Automated tests
 
 Docs/state closeout gate for the 2026-07-07 private-consumer-boundary update:

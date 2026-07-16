@@ -1,25 +1,30 @@
-# Next session — nexus-core handoff
+# Archived next-session handoff — nexus-core
 
-Forward-looking handoff. For the full live snapshot read [CURRENT-STATE.md](CURRENT-STATE.md);
-for change history read [CHANGELOG.md](CHANGELOG.md).
+> **Historical reference, not current state.** This file preserves an earlier
+> operator handoff and is no longer maintained as a second status source. Read
+> [CURRENT-STATE.md](CURRENT-STATE.md) for deployed truth,
+> [ROADMAP.md](ROADMAP.md) plus GitHub Issues for current work, and
+> [VALIDATION.md](VALIDATION.md) for executed checks. Where this archived material
+> differs, those sources win.
 
-## Where things stand (2026-07-01)
+## Current pointer (2026-07-15 ET)
 
-- **Deployed:** [nexusmcp.site](https://nexusmcp.site) is serving version
-  `0.1.0` (Cloudflare → Cloud Run `pwllc-prod`/`us-central1`).
-- **Health:** `/health` returns
-  `{"status":"ok","service":"nexus-core","version":"0.1.0"}`.
-- **Public tool surface:** `/mcp/tools` returns contractVersion `0.1.0` with
-  23 PII-free planning tools. `/openapi.json`, `/llms.txt`, OAuth metadata, and
-  `/mcp-guide` are live public discovery surfaces.
-- **GitHub:** no open PRs; seven open issues (#197-#203) track all current
-  outstanding/future-build lanes from the roadmap.
-- **Quality:** `ruff` + `mypy --strict` + `pytest` are CI-enforced
-  (`.github/workflows/ci.yml`, 80% coverage floor).
-- **Tooling note:** CI runs only lint/type/test + SPDX + license-scan + CodeQL — there is **no
-  deploy step**; deploys are manual (see below).
+- Commit `d528389` is deployed on Cloud Run revision
+  `nexus-core-00068-5pf` at 100% traffic.
+- Onchain accounting P0-P4 is live through restricted REST contract `0.1.0`.
+  It is calculation substrate, not a client statement or tax-return workflow.
+- Accounting is absent from native MCP; #259 tracks the full-profile adapter and
+  keeps the hosted demo profile unchanged.
+- #260 blocks statement wiring pending accounting-semantics and replay hardening.
+- Private ingestion, client linkage, statement production/review/release, and
+  books-and-records retention remain outside nexus-core.
 
-## Local source since last live smoke (2026-07-06)
+## Archived 2026-07-01/07 handoff material
+
+The remainder is retained for historical context and must not be used for current
+deployment, tool-count, PR, issue, or validation claims.
+
+### Local source since the archived live smoke (2026-07-06)
 
 - `collar_book` now supports conservative executable-fill modeling over
   caller-supplied pre-screened collar candidates. The engine plus REST/MCP
