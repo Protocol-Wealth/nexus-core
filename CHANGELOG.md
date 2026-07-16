@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Onchain accounting P0-P4 (#248)
+
+#### Added
+
+- Added a separate PII-free accounting contract and restricted REST gateway:
+  `GET /api/accounting/tools` for contract/tool discovery and
+  `POST /api/accounting/tools/{tool_id}` for versioned JSON invocation.
+- Added a multi-source historical price resolver with explicit unpriced gaps and
+  caller overrides (`price_history`), de-identified public-chain event
+  classification (`decode_onchain_events`), FIFO lots and cost-basis analysis
+  (`compute_cost_basis`), and realized-PnL summaries split by tax year and
+  short/long term (`onchain_pnl_report`).
+- Added recursive identity-key rejection, opaque account/transaction references,
+  `Decimal` money, explicit unknown basis/proceeds handling, and the canonical
+  tax-awareness disclaimer. Unknown values are excluded and counted rather than
+  silently treated as zero.
+
+#### Deployment
+
+- P0-P4 merged through PRs #254-#258 at commit `d528389` and deployed on
+  2026-07-15 ET to Cloud Run revision `nexus-core-00068-5pf` at 100% traffic.
+- The accounting handlers are currently exposed through service-key-gated REST
+  only. Native MCP full-profile registration remains open in #259; the hosted
+  demo MCP profile is intentionally unchanged.
+- This release provides public-safe calculation primitives, not private
+  custodian ingestion, wallet-to-client mapping, statement production, tax-return
+  preparation, approval, release, or books-and-records retention. Issue #260
+  blocks statement wiring pending account-scoped lots, transfer/fee treatment,
+  calendar holding periods, period replay, lineage, and methodology review.
+
 ### EMF durability-layer classification surface
 
 #### Added

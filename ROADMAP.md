@@ -20,6 +20,16 @@ public OAuth-compatible demo endpoint with only closed-world demo tools, while
 server-to-server key path. Browser apps such as PWOS and PWPortal should call
 their own BFF/API routes and never hold Nexus service keys.
 
+The P0-P4 onchain-accounting engine is now deployed on that restricted REST
+surface at commit `d528389`, Cloud Run revision `nexus-core-00068-5pf`. The
+`0.1.0` accounting gateway exposes historical pricing, de-identified event
+decoding, FIFO cost basis, and realized-PnL aggregation. It is calculation
+substrate only: private ingestion, client linkage, statement production, review,
+and retention remain in the private stack. Native MCP registration is not yet
+shipped and is tracked in #259; the hosted demo MCP tool set remains unchanged.
+Issue #260 separately blocks statement wiring until the current FIFO/PnL
+semantics and replay model are hardened.
+
 Current source also corrects the Monte Carlo `student_t` return model so its
 fat-tailed draw is scaled to the caller-supplied covariance matrix. Student-t
 results generated before this fix overstated variance by `dof / (dof - 2)`;
@@ -198,6 +208,15 @@ gracefully to `None` / empty / `503` when its key is absent.
 
 ### Onchain & DeFi
 
+- **Onchain accounting P0-P4 (#248, PRs #254-#258)** — the separate
+  `app/accounting` contract/gateway and `engine/accounting` package provide a
+  multi-oracle price historian (`price_history`), protocol-aware de-identified
+  event decoding (`decode_onchain_events`), FIFO lot/cost-basis analysis
+  (`compute_cost_basis`), and realized-PnL/year rollups
+  (`onchain_pnl_report`). Unknown prices and basis remain explicit rather than
+  fabricated as zero; identity-shaped keys fail closed; canonical accounting/tax
+  disclaimers are attached. Deployed through restricted REST on
+  `nexus-core-00068-5pf`; not yet registered in native MCP.
 - **`GET /api/wallet/{address}`** — anonymous EVM wallet balance (DeBank).
 - **`GET /api/chain/chains`, `/api/chain/balance/{chain}/{address}`,
   `/api/chain/native/{address}`** — multi-chain native balances via Tatum
@@ -279,6 +298,21 @@ gracefully to `None` / empty / `503` when its key is absent.
 
 Prioritized. Top item first.
 
+**Accounting semantics and replay hardening — open issue #260.** Block statement
+wiring until FIFO books are account-scoped; transfers and fees have approved,
+fail-closed treatment; holding periods use calendar rules; requests carry a
+versioned report window/opening state; and outputs preserve deterministic lineage
+and structured completeness. Obtain methodology review before enabling the
+private consumer's cost-basis or realized-PnL statement phases.
+
+**Native MCP accounting adapter — open issue #259 (completes #248).** Reuse the
+deployed accounting handlers in the native MCP full profile with the same
+recursive identity-key rejection, contract-version echo, canonical disclaimers,
+and price historian. Do not register accounting tools in the hosted demo profile
+and do not create a parallel implementation. This transport follow-up does not
+move private ingestion, client linkage, statement assembly, or tax-return work
+into nexus-core.
+
 **Public-safe planning/report analytics extraction — open issue #197.** Decide
 which generic, PII-free analytics from private PWOS producer work belong in
 nexus-core as educational substrate: allocation decomposition, diversification
@@ -287,10 +321,11 @@ education-reference context, source-quality signals, and report-input coverage.
 For the hybrid PW Cash Flow OS + PW Planning Lab + PW Retirement Income Lab
 direction, this also includes public-safe planning-bridge analytics that consume
 derived monthly-close values — for example cash-reserve analysis, budget pacing,
-goal-funding deltas, or retirement-income guardrail inputs. Keep raw transaction
-classification, Monarch import parsing, report production, artifact receipts,
-client context, suitability, approvals, release workflow, audit trail, and
-private workflow state out unless deliberately generalized. Slice 1 now has the
+goal-funding deltas, or retirement-income guardrail inputs. Keep private/custodian
+transaction ingestion, client-linked classification, Monarch import parsing,
+report production, artifact receipts, client context, suitability, approvals,
+release workflow, audit trail, and private workflow state out unless deliberately
+generalized. Slice 1 now has the
 pure engine functions for `cashflow_planning_bridge`, `cash_reserve_analysis`,
 and `budget_pacing_projection`; Slice 2 exposes those through the existing
 planning gateway/native MCP registry as public-safe wrappers over derived

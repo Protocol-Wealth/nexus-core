@@ -3,7 +3,32 @@
 > Repo: `Protocol-Wealth/nexus-core` · License: Apache 2.0 · Patent Pending: USPTO #64/034,229 · OIN member.
 > Open-source extraction of the [Protocol Wealth research engine](https://nexusmcp.site); nothing in this repo is client-specific or proprietary to PW.
 
-**Current state (2026-07-10 ET — public agent-discovery live + Markdown negotiation):**
+**Current state (2026-07-15 ET — onchain accounting P0-P4 deployed on restricted REST):**
+- **Live deployment:** commit `d528389` is on `origin/main`; Cloud Run revision
+  `nexus-core-00068-5pf` is Ready and serves 100% traffic. Live `/health`
+  returned `200`, while unauthenticated `/api/accounting/tools` returned the
+  expected service-key `401` under `NEXUS_ACCESS_MODE=restricted`.
+- **Accounting contract `0.1.0`:** P0-P4 are merged through PRs #254-#258. The
+  REST gateway exposes `describe`, `price_history`, `decode_onchain_events`,
+  `compute_cost_basis`, and `onchain_pnl_report`. Inputs are de-identified
+  public-chain/market facts with opaque references; identity-shaped keys fail
+  closed, unknown price/basis stays explicit, and accounting/tax disclaimers are
+  canonical.
+- **Transport boundary:** accounting is REST-only today. The handlers are not in
+  native MCP `tools/list`; issue #259 tracks reuse through a full-profile MCP
+  adapter and correction of the accounting `describe` handler's stale
+  `status: scaffold` / `plannedTools` metadata. Production stays on
+  `NEXUS_PUBLIC_MCP_PROFILE=demo`, whose public tool set must remain unchanged.
+- **Private boundary:** P0-P4 are calculation substrate, not statement readiness.
+  Custodian ingestion, wallet/client linkage, statement assembly/rendering,
+  advisor review, release, tax-return preparation, and books-and-records retention
+  remain in the private `pw-api`/PWOS plane. Issue #260 blocks statement wiring
+  until account isolation, transfers, fees, calendar holding periods, period
+  replay, lineage, and methodology review are complete.
+- **Validation:** CI run `29451408938` passed ruff, strict mypy, and pytest with
+  coverage; SPDX, license-compliance, and both CodeQL checks also passed.
+
+**Historical snapshot (2026-07-10 ET — public agent-discovery + Markdown negotiation):**
 - **Deployed:** Cloud Run revision `nexus-core-00064-fqx` serves 100% traffic on
   `nexusmcp.site` (behavior-verified). The agent-discovery well-known surfaces are
   live (`#232`): an SEP MCP Server Card at `/.well-known/mcp/server-card.json`, an
@@ -29,7 +54,7 @@
   Auth.md, Web Bot Auth, Agent Skills (that modality is AskPWBot's on pw-website),
   WebMCP, agentic commerce.
 
-**Current state (2026-07-07 ET — private consumer boundary closeout):**
+**Historical snapshot (2026-07-07 ET — private consumer boundary closeout):**
 - **Access model:** hosted Nexus is a split surface. Native `/mcp` remains a
   public OAuth-compatible demo endpoint with `NEXUS_PUBLIC_MCP_PROFILE=demo`.
   REST/JSON calculation paths (`/api/*`, `/api/planning/tools/*`, legacy
@@ -44,7 +69,7 @@
   candidate symbols, screened fields, and caller-supplied option-chain facts for
   public-safe calculation.
 
-**Current state (2026-07-06 ET / 2026-07-07 UTC — restricted REST + demo MCP deployed):**
+**Historical snapshot (2026-07-06 ET / 2026-07-07 UTC — restricted REST + demo MCP):**
 - **Live deployed:** commit `d3d0b2f` is on `origin/main`; Cloud Run revision
   `nexus-core-00061-xhs` serves 100% traffic. Hosted Nexus keeps transparent
   OAuth active for `/mcp`, runs `NEXUS_PUBLIC_MCP_PROFILE=demo`, and gates
@@ -68,14 +93,14 @@
   route suites hit a local WSL/sandbox anyio threadpool hang, so CI or a
   non-sandboxed Python environment remains the full route-harness gate.
 
-**Current state (2026-07-01 — docs/status audit):**
+**Historical snapshot (2026-07-01 — docs/status audit):**
 - **Live deployment verified:** `https://nexusmcp.site/health` returns `{"status":"ok","service":"nexus-core","version":"0.1.0"}` and `https://nexusmcp.site/mcp/tools` returns contractVersion `0.1.0` with **23 planning tool ids**: `monte_carlo_decumulation`, `analyze_goals`, `project_cash_flow`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `fire`, `risk_metrics`, `rebalance`, `build_planning_report`, `irmaa_headroom`, `analyze_roth_conversion`, and `sequence_conversions`. GitHub has **no open PRs** and seven open issues (#197-#203) tracking public-safe planning/report extraction, planning assumptions provenance, LP/indexer expansion, crypto-options follow-ups, agent analytics, governance/tooling cleanup, and equity-research gates.
 - **Dependency status:** `requirements-serve.lock` pins `pandas==2.3.3`; keep `pyproject.toml` on `pandas>=2.2,<3.0` until `alphalens-reloaded` supports pandas 3.x. Dependabot's pandas 3.x bump conflicted with the documented `[all]`/`[backtest]` installability boundary.
 
-**Current state (2026-06-24 — Guyton-Klinger dynamic withdrawals):**
+**Historical snapshot (2026-06-24 — Guyton-Klinger dynamic withdrawals):**
 - **`monte_carlo_decumulation` gained an optional `guardrails` config (Guyton-Klinger dynamic withdrawals).** When supplied, the simulation replaces the static `net_spend_by_year` draw (from the first decumulation year onward) with a path-dependent withdrawal governed by the three GK rules — the withdrawal rule (inflation raise, frozen after a down year when the rate is elevated), the capital-preservation rule (cut when the rate climbs `band` above the path's initial rate; suspended in the final `preservationFinalYears`), and the prosperity rule (raise when the rate falls `band` below). The rules run **vectorized across paths** in the existing year-loop (a `_guardrail_step` helper + a `GuardrailParams` dataclass in `engine/planning/monte_carlo.py`), so the non-guardrail path is **byte-identical** to before. The response gains `withdrawalRule` / `spendingByYear` (p10/p50/p90 realized-spend bands) / `guardrailActivity` only when `guardrails` is set. Gateway parsing + validation in `app/planning/tools.py` (`guardrails` body field). `mypy --strict` + `ruff` clean; +13 tests; full suite green. This is the engine half — the pwos chat-tool/report wiring (passing `guardrails`) is the follow-on consumer change.
 
-**Current state (2026-06-21 — goal engine reconciliation):**
+**Historical snapshot (2026-06-21 — goal engine reconciliation):**
 - **The prior dirty `goals.py` work is merged on main via PR #174, and PR #175 adds priority/shared-pool allocation.** `analyze_goals` is now the deterministic per-goal funding foundation plus the first shared-pool priority allocator. Future L1 Goal Graph work should extend this implementation rather than build beside it: persisted goal-analysis artifacts, solve-for, temporal waterfall behavior, and richer assumption/effective-input echoes belong on top of the existing tested goal logic. Keep client identity, advisor review, audit ledger, and intake conversion in pw-api/PWOS, not in nexus-core.
 
 ## What This Is

@@ -5,19 +5,29 @@ verification. For the architectural overview see [README.md](README.md); for
 deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
 [AUDIT.md](AUDIT.md).
 
-- **Last docs closeout:** 2026-07-07 ET — root docs reconciled to the private
-  consumer boundary: hosted native `/mcp` remains a public demo surface, hosted
-  REST/JSON calculation paths are service-key gated, `pw-api` owns the
-  server-to-server Nexus key, and PWOS/PWPortal browser clients should not hold
-  Nexus credentials. Cross-repo PWOS market-research import PR #993 is merged
-  and advisor-verified with `Saved 380 research rows (7c30414f)`; that raw
-  CSV/XLSX ingestion remains private PWOS/pw-api data, not nexus-core data.
-- **Last live verified:** 2026-07-06 ET / 2026-07-07 UTC — live `/health` OK;
-  hosted REST/JSON planning paths require a Nexus API key; the pw-api service
-  bearer key opened the then-current 27-tool planning contract; hosted native `/mcp` keeps
-  transparent OAuth active and exposes only the demo MCP tools
-  `option_price`, `collar_book`, `health`, and `describe`.
-- **Last local update:** 2026-07-08 — current branch completes planning
+- **Last docs closeout:** 2026-07-15 ET — root docs now record the deployed P0-P4
+  onchain-accounting substrate and its actual transport boundary: restricted
+  REST is live, native MCP registration remains open in #259, and private
+  ingestion, wallet/client linkage, statement assembly, review, and retention
+  remain in `pw-api`/PWOS rather than this public engine.
+- **Last live verified:** 2026-07-15 ET / 2026-07-16 UTC — commit `d528389` is on
+  `origin/main`; Cloud Run revision `nexus-core-00068-5pf` is Ready and serves
+  100% traffic. Live `/health` returned `200`; unauthenticated
+  `/api/accounting/tools` returned the expected service-key `401`. An
+  authenticated smoke discovered contract `0.1.0` and all five handlers, then a
+  de-identified `onchain_pnl_report` fixture returned realized gain `20` with the
+  expected short-term/tax-year rollup and disclaimer. The deployed service still
+  sets `NEXUS_PUBLIC_MCP_PROFILE=demo` and `NEXUS_ACCESS_MODE=restricted`.
+- **Current accounting source:** P0-P4 are merged through PRs #254-#258. The
+  accounting contract is `0.1.0`; the REST registry contains `describe`,
+  `price_history`, `decode_onchain_events`, `compute_cost_basis`, and
+  `onchain_pnl_report`. These handlers are not in native MCP `tools/list` yet;
+  #259 owns a full-profile-only adapter, correction of the `describe` handler's
+  stale `status: scaffold` / `plannedTools` metadata, and the requirement to keep
+  the hosted demo profile unchanged. P0-P4 are calculation primitives, not proof
+  that a client statement workflow or tax return is complete; #260 blocks
+  statement wiring pending accounting-semantics and replay hardening.
+- **Earlier planning update:** 2026-07-08 — `main` completes planning
   assumption provenance (#198). Built-in federal tax, IRMAA, education vehicle,
   simplified state conversion/state-tax, ACA reference, cash-flow,
   income-layering, inherited-IRA, and Roth/IRMAA outputs now expose source and
@@ -85,8 +95,28 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
 - **Tests:** CI-gated test suite (`pytest`)
 - **Posture:** read-only, no client data, transparent OAuth only for remote MCP
   handshakes, no public write endpoints. Hosted native `/mcp` is an
-  OAuth-compatible open-source demo endpoint; `/api/*` and the planning JSON
-  gateway are API-key gated with `NEXUS_ACCESS_MODE=restricted`.
+  OAuth-compatible open-source demo endpoint; `/api/*` and the planning and
+  accounting JSON gateways are API-key gated with
+  `NEXUS_ACCESS_MODE=restricted`.
+
+## Onchain accounting boundary
+
+The deployed accounting surface is the versioned REST gateway at
+`GET /api/accounting/tools` and `POST /api/accounting/tools/{tool_id}`. It accepts
+only de-identified public-chain/market facts and opaque account, transaction, and
+asset references. The gateway recursively rejects identity-shaped keys, uses
+`Decimal` money, reports missing prices/basis explicitly, and attaches canonical
+educational/tax-awareness disclaimers.
+
+P0-P4 provide a multi-source price historian, event classification, FIFO lot and
+cost-basis math, and realized-PnL aggregation. They do not ingest custodian files,
+map wallets to people, persist client records, assemble or release statements,
+produce a tax return, or create a books-and-records workflow. Those private
+consumer responsibilities remain in `pw-api`/PWOS. Native MCP registration is a
+separate unfinished transport adapter tracked by #259; production currently runs
+the demo MCP profile, so its public tool list is intentionally unchanged. Issue
+#260 separately blocks statement use until account isolation, transfer and fee
+treatment, calendar holding periods, period replay, and lineage are hardened.
 
 ## Hybrid planning boundary
 
@@ -135,16 +165,20 @@ and chain-derived facts to Nexus for calculation.
 
 ## Public REST surface
 
-Every REST endpoint is anonymous GET unless noted. The `/mcp` transport accepts
-POST and may require a transparent OAuth bearer token when `MCP_OAUTH_SIGNING_KEY`
-is configured; that flow has no user login and grants only public-scope access.
-External integrations degrade gracefully — when a provider key is absent the
-dependent endpoint returns `None` / empty / `503` rather than failing the service.
+The REST surface is read-only. Local/public-mode installs can call it without a
+service credential; the hosted restricted deployment requires a Nexus API key
+on `/api/*` and the planning/accounting JSON gateways. The `/mcp` transport
+accepts POST and may require a transparent OAuth bearer token when
+`MCP_OAUTH_SIGNING_KEY` is configured; that flow has no user login and grants
+only public-scope access. External integrations degrade gracefully — when a
+provider key is absent the dependent endpoint returns `None` / empty / `503`
+rather than failing the service.
 
 Restricted mode lets production consumers keep the public native MCP transport
 as a low-risk demo while gating REST/JSON calculation paths. The hosted
 deployment currently sets `NEXUS_PUBLIC_MCP_PROFILE=demo`, so OAuth MCP clients
-see only `option_price`, `collar_book`, `health`, and `describe`. It also sets
+see only `option_price`, `collar_book`, `classify_layer`, `health`, and
+`describe`. It also sets
 `NEXUS_ACCESS_MODE=restricted` plus `NEXUS_API_KEYS`, requiring
 `Authorization: Bearer <key>` or `X-Nexus-Api-Key` on `/api/*`,
 `/api/planning/tools/*`, and legacy `/mcp/tools/*`. `pw-api` supplies the
@@ -218,6 +252,8 @@ Crypto option underliers: **BTC, ETH** are coin-settled (inverse, queried as `cu
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/analytics` | The Graph + RPC (Tatum) + Merkl | `THEGRAPH_API_KEY`, `TATUM_API_KEY` (uncollected fees); USD prices are required query params |
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` | same + hold-strategy benchmark returns over a window | `THEGRAPH_API_KEY`, `TATUM_API_KEY`; USD prices are required query params |
 | `GET /api/lp/aerodrome/{token_id}/analytics` | Aerodrome Slipstream on **Base**, read on-chain via Tatum RPC (no subgraph) | `TATUM_API_KEY`; USD prices required. `data_mode: onchain_rpc` — value/in-range/amounts/uncollected fees only; IL, fee APR, AERO gauge APR null/zero |
+| `GET /api/accounting/tools` | accounting contract `0.1.0` + REST handler discovery | `NEXUS_API_KEYS` in hosted restricted mode |
+| `POST /api/accounting/tools/{tool_id}` | historical pricing, event decoding, FIFO cost basis, and realized-PnL aggregation over de-identified facts | `NEXUS_API_KEYS` in hosted restricted mode |
 
 Uniswap V3 analytics computes value, in-range status, **exact** impermanent-loss-vs-HODL,
 fee-APR estimate, uncollected fees (RPC `tokensOwed`), and Merkl reward APR → total APR.
@@ -289,6 +325,11 @@ callers — same handlers, contractVersion `0.1.0`. Legacy `/mcp/tools/{id}`
 aliases remain. The composite Roth/IRMAA case contract is
 `PLANNING_CONTRACT_VERSION = 1.1.0`; the gateway envelope remains `0.1.0`.
 
+Accounting is different today: its P0-P4 handlers are deployed through the
+restricted REST gateway only and are absent from native MCP `tools/list`. Issue
+#259 tracks full-profile MCP registration; the production demo profile must not
+gain these tools.
+
 ## Code layout
 
 | Area | Modules |
@@ -299,7 +340,8 @@ aliases remain. The composite Roth/IRMAA case contract is
 | Data — fundamentals | `data/edgar` (SEC) |
 | Data — derivatives | `data/derivatives` (Deribit) |
 | Data — persistence | `data/db.py` + `data/snapshots.py` (asyncpg) |
-| Engine | `engine/regime` (RegimeEngine), `engine/scoring/emf` (8-check) + `engine/scoring/framework` (`ScoreExplanation` / `as_of` replay), `engine/pricing` (Black-Scholes), `engine/lp/uniswap_v3.py` (CLMM tick math, `get_amounts_for_liquidity`, exact IL, fee APR), `engine/benchmarks.py` (base-100 + buy-and-hold) |
+| Engine | `engine/regime` (RegimeEngine), `engine/scoring/emf` (8-check) + `engine/scoring/framework` (`ScoreExplanation` / `as_of` replay), `engine/pricing` (Black-Scholes), `engine/lp/uniswap_v3.py` (CLMM tick math, `get_amounts_for_liquidity`, exact IL, fee APR), `engine/accounting` (price history, event decoding, FIFO lots/cost basis, realized PnL), `engine/benchmarks.py` (base-100 + buy-and-hold) |
+| App — accounting | `app/accounting/{contract,gateway,tools}.py` (restricted REST contract and dispatch; not native MCP yet) |
 | Jobs | `jobs/daily_snapshot.py` |
 | CLI | `nexus-core {serve \| mcp \| snapshot}` |
 
@@ -384,10 +426,16 @@ key is absent.
 
 ## Recent work
 
+- **Onchain accounting P0-P4 deployed (2026-07-15 ET)** — PRs #254-#258
+  shipped the separate accounting contract/gateway, multi-oracle historical
+  pricing, de-identified event decoder, FIFO lots/cost basis, and realized-PnL
+  rollup. Commit `d528389` is live on revision `nexus-core-00068-5pf` through
+  restricted REST. Native MCP registration remains #259, and private
+  ingestion/client statement production remains outside nexus-core.
 - **Docs/status reconciliation (2026-07-01)** — verified live `/health`, `/mcp/tools`,
   OpenAPI, OAuth metadata, `/llms.txt`, GitHub issues, and local `main`; reconciled
-  docs around 23 planning tools, public PII-free planning, transparent MCP OAuth,
-  and open GitHub issue tracking (#197-#203).
+  docs around the then-current 23 planning tools, public PII-free planning,
+  transparent MCP OAuth, and open GitHub issue tracking (#197-#203).
 - **Cash-flow planning bridge engine functions (2026-07-05)** —
   `cashflow_planning_bridge`, `cash_reserve_analysis`, and
   `budget_pacing_projection` exist as pure, deterministic `engine/planning`
@@ -489,13 +537,20 @@ key is absent.
 
 Outstanding and future work is tracked in GitHub Issues:
 
+- **#248 onchain accounting epic** — P0-P4 are deployed on restricted REST; the
+  epic remains open only for its promised native MCP portion.
+- **#259 native MCP accounting registration** — adapt the existing handlers into
+  the full MCP profile with the same PII scan, contract/disclaimer envelope, and
+  no change to the hosted demo profile.
+- **#260 accounting semantics/replay hardening** — blocks the cost-basis and
+  realized-PnL statement phases until account-scoped lots, transfer/fee treatment,
+  calendar holding periods, report windows/opening state, deterministic replay,
+  and calculation lineage are complete and methodology-reviewed.
 - **#197 public-safe planning/report analytics extraction** — decide what generic,
   PII-free analytics should move from private PWOS producer work into nexus-core
-  versus staying in advisor workflow code. This now includes the Cash Flow OS /
-  Planning Bridge question: the Slice 1 pure engine functions consume derived
-  monthly-close values only. Wrapper exposure, if accepted, is future Slice 2.
-- **#198 planning assumptions provenance** — add source/freshness metadata to
-  reference planning assumptions and echo it in outputs.
+  versus staying in advisor workflow code. Existing planning-bridge wrappers
+  consume derived monthly-close values only; real ingestion and statement/report
+  workflows stay private.
 - **#199 LP/indexer expansion and data-quality backlog** — Aerodrome Envio,
   Arbitrum V3 subgraph, Base data quality, subgraph health-gate, Uniswap V4,
   Solana CLMM, persisted LP PnL, and Solana USD enrichment.

@@ -22,12 +22,26 @@ Provided as-is under Apache-2.0. Educational use only — nothing here is invest
 Current live status is tracked in [CURRENT-STATE.md](CURRENT-STATE.md). Future
 work is issue-linked in [ROADMAP.md](ROADMAP.md) and GitHub Issues.
 
-As of the 2026-07-07 closeout, the hosted production posture is a public demo
-MCP surface plus authenticated REST/JSON calculation endpoints. Anonymous MCP
-clients can use the low-risk demo tool set; `/api/*` and planning JSON paths are
-service-key gated in production and should be called server-to-server by
-`pw-api`, not directly from browser apps. PWOS/PWPortal browser code should call
-their own BFF/API layer, which keeps Nexus keys out of clients.
+As of the 2026-07-15 ET closeout, commit `d528389` is deployed on Cloud Run
+revision `nexus-core-00068-5pf`. The hosted production posture remains a public
+demo MCP surface plus authenticated REST/JSON calculation endpoints. Anonymous
+MCP clients can use the low-risk demo tool set; `/api/*` and the planning and
+accounting JSON gateways are service-key gated in production and should be
+called server-to-server by `pw-api`, not directly from browser apps.
+PWOS/PWPortal browser code should call their own BFF/API layer, which keeps
+Nexus keys out of clients.
+
+The P0-P4 onchain-accounting substrate is deployed through
+`GET /api/accounting/tools` and `POST /api/accounting/tools/{tool_id}` with
+accounting contract `0.1.0`. It provides historical pricing, de-identified event
+decoding, FIFO cost basis, and realized-PnL aggregation. These accounting
+handlers are **not yet registered in native MCP**; issue
+[#259](https://github.com/Protocol-Wealth/nexus-core/issues/259) tracks that
+full-profile adapter, while the hosted demo MCP profile stays unchanged. This is
+calculation substrate, not an end-to-end client statement or tax-return system.
+Issue [#260](https://github.com/Protocol-Wealth/nexus-core/issues/260) blocks
+statement wiring until account-scoped lots, transfers, fees, calendar holding
+periods, report-window replay, and calculation lineage are hardened.
 
 The current options substrate includes the MBOUM equity option expiration/chain
 provider, batch collar screens, and a collar-book realistic-fill layer. The
@@ -58,13 +72,15 @@ its provider key is absent.
 For the PW Cash Flow OS + PW Planning Lab + PW Retirement Income Lab direction,
 Nexus Core is the public-safe calculation plane. It can accept de-identified
 planning inputs, optional taxable / traditional / Roth planning buckets, derived
-monthly-close numbers, pre-screened stock symbols, and caller-supplied
-option-chain facts. It must not ingest Monarch CSV exports, Seeking Alpha
-workbooks, Schwab order/status files, raw transaction rows, merchant/payee
-strings, account nicknames, household records, advisor/client notes, approval
-state, release state, or books-and-records audit trails. Those production
-workflows belong in private PWOS / pw-api / PWPortal; Nexus should receive only
-de-identified calculation inputs after private ingestion.
+monthly-close numbers, pre-screened stock symbols, caller-supplied option-chain
+facts, and de-identified public-chain movements under opaque account and
+transaction references. It must not ingest Monarch CSV exports, Seeking Alpha
+workbooks, Schwab order/status files, client-linked custodian rows,
+wallet-to-client mappings, merchant/payee strings, account nicknames, household
+records, advisor/client notes, approval state, release state, or books-and-records
+audit trails. Those production workflows belong in private PWOS / pw-api /
+PWPortal; Nexus should receive only de-identified calculation inputs after
+private ingestion.
 
 ### Meta
 
@@ -79,6 +95,7 @@ de-identified calculation inputs after private ingestion.
 | `GET /api/usage` | Provider usage / quota report |
 | `POST /mcp` | Model Context Protocol over HTTP (FastMCP, also stdio). In full mode, `tools/list` = research tools + `health`/`describe`/`get_quotes` + 34 planning tools; in demo mode, only closed-world demo tools are registered. All tools are read-only |
 | `GET /api/planning/tools` · `POST /api/planning/tools/{id}` | Planning JSON gateway (pw-api / pwplan-core contractVersion `0.1.0`, PII-free). Legacy `/mcp/tools` aliases remain for compatibility |
+| `GET /api/accounting/tools` · `POST /api/accounting/tools/{id}` | Restricted REST accounting gateway (contractVersion `0.1.0`): `describe`, `price_history`, `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report`. Not yet registered in native MCP; see #259 |
 
 ### Regime & Scoring
 
@@ -137,6 +154,8 @@ de-identified calculation inputs after private ingestion.
 | `GET /api/vaults/chains` | Vault-supported chains |
 | `GET /api/solana/price/{mint}` | Solana SPL token USD price (Jupiter, keyless) |
 | `GET /api/solana/prices?mints=` | Batch Solana SPL token USD prices (Jupiter, keyless) |
+| `GET /api/accounting/tools` | Accounting contract/tool discovery for de-identified onchain analysis |
+| `POST /api/accounting/tools/{tool_id}` | Historical pricing, event decoding, FIFO cost basis, and realized-PnL calculations over opaque references; restricted REST only |
 
 ### LP Analytics (Uniswap V3 + Aerodrome Slipstream)
 
@@ -242,13 +261,20 @@ Nexus Core stands on a foundation of exceptional open-source projects. We bundle
 
 ## What's Open vs Private
 
-**Open (Apache 2.0):** Framework architecture, scoring structure, layer model, tool pattern, the public REST/MCP surface, caching patterns — **and Protocol Wealth's calibrated regime thresholds + scoring values**, which PW publishes openly as part of the EMF framework ([protocolwealthllc.com/framework](https://protocolwealthllc.com/framework)). All third-party integrations listed above.
+**Open (Apache 2.0):** Framework architecture, scoring structure, layer model,
+tool pattern, public-safe REST/MCP surfaces, caching patterns, and the
+de-identified onchain price/decoder/FIFO/PnL calculation substrate — **and
+Protocol Wealth's calibrated regime thresholds + scoring values**, which PW
+publishes openly as part of the EMF framework
+([protocolwealthllc.com/framework](https://protocolwealthllc.com/framework)). All
+third-party integrations listed above.
 
 **Private:** API keys, client data, Monarch imports, Schwab/custodian files,
-Seeking Alpha CSV/XLSX imports, raw transaction processing, household records,
-advisor/client planning workflows, suitability logic, report production,
-approvals, release workflow, books-and-records audit trail, the narrative and
-research-ingestion pipeline, and any client-specific implementation.
+Seeking Alpha CSV/XLSX imports, wallet-to-client linkage, client-linked raw
+transaction ingestion, household records, advisor/client planning workflows,
+suitability logic, statement/report production, approvals, release workflow,
+books-and-records audit trail, the narrative and research-ingestion pipeline,
+and any client-specific implementation.
 (Calibrations are *not* private — EMF is a published framework. Adopters with
 different signal sources should still re-fit.)
 
