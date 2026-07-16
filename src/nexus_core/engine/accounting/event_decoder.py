@@ -160,7 +160,11 @@ def decode_transaction(tx: RawTransactionInput) -> LedgerEvent:
 
     legs = [
         LedgerLeg(
-            asset=m.asset,
+            asset=(
+                m.asset
+                if m.asset.chain is not None
+                else m.asset.model_copy(update={"chain": tx.chain})
+            ),
             direction=m.direction,
             amount=m.amount,
             unit_price_usd=m.unit_price_usd,
@@ -174,7 +178,8 @@ def decode_transaction(tx: RawTransactionInput) -> LedgerEvent:
 
     # Deterministic id: the caller's tx_ref when present, else a stable synthetic
     # from opaque fields (no Date/random, so decoding is reproducible).
-    event_id = tx.tx_ref or f"{tx.chain}:{tx.account_ref}:{tx.timestamp}"
+    sequence_suffix = "" if tx.sequence is None else f":{tx.sequence}"
+    event_id = tx.tx_ref or f"{tx.chain}:{tx.account_ref}:{tx.timestamp}{sequence_suffix}"
     is_transfer = kind in (EventKind.transfer_in, EventKind.transfer_out)
 
     return LedgerEvent(
@@ -198,7 +203,11 @@ def decode_transaction(tx: RawTransactionInput) -> LedgerEvent:
 
 def decode_transactions(transactions: list[RawTransactionInput]) -> EventLedger:
     """Decode a batch of raw transactions into a normalized event ledger."""
-    return EventLedger(events=[decode_transaction(tx) for tx in transactions])
+    events = [decode_transaction(tx) for tx in transactions]
+    event_ids = [event.event_id for event in events]
+    if len(set(event_ids)) != len(event_ids):
+        raise ValueError("decoded transactions produced duplicate event_id values")
+    return EventLedger(events=events)
 
 
 __all__ = [

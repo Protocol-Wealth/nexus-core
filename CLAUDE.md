@@ -18,9 +18,12 @@
 - **Accounting methodology `2.0.0`:** current source scopes FIFO by account,
   handles explicitly linked same-owner transfers without gain, allocates fees
   once plus any separate fee-asset disposal, uses calendar holding periods,
-  supports full-history or opening-state report replay, and returns lot/event/
-  transaction/price lineage with structured completeness. Ambiguous DeFi and
-  external/unknown transfer treatments fail closed. See
+  conserves authoritative basis/fee totals across partial lots and transfers,
+  supports full-history or method-pinned complete opening-state replay, and
+  returns root-lot/event/transaction/evidence/price lineage with structured
+  completeness. Ambiguous DeFi and external/unknown transfer treatments fail
+  closed. Calculation completeness is not a closing-valuation or deliverable
+  attestation; the private composer applies section-specific gates. See
   `docs/ONCHAIN-ACCOUNTING.md`.
 - **Transport boundary:** accounting is REST-only today. The handlers are not in
   native MCP `tools/list`; issue #259 tracks reuse through a full-profile MCP

@@ -4,7 +4,8 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+from datetime import date
+from decimal import Decimal, localcontext
 from typing import Literal
 
 from nexus_core.engine.accounting import (
@@ -12,6 +13,8 @@ from nexus_core.engine.accounting import (
     EventKind,
     LedgerEvent,
     LedgerLeg,
+    OpeningLotInput,
+    OpeningStateInput,
     ReportWindowInput,
     TransferTreatment,
     onchain_pnl_report,
@@ -140,3 +143,64 @@ def test_unmatched_transfer_market_value_cannot_make_statement_complete() -> Non
     assert report.summary.complete is False
     assert report.completeness.complete is False
     assert "unmatched_transfer_in" in {gap.code for gap in report.completeness.gaps}
+
+
+def test_high_precision_pnl_aggregation_is_exact() -> None:
+    basis_total = Decimal("15.153846153846153846153846155")
+    opening = OpeningStateInput(
+        schema_version="2.0.0",
+        basis_method="fifo",
+        basis_method_version="2.0.0",
+        snapshot_complete=True,
+        state_ref="pnl-precision",
+        as_of=_ACQ - 1,
+        source="private_event_ledger",
+        last_verified=date(2026, 7, 16),
+        lots=[
+            OpeningLotInput(
+                lot_ref="pnl-lot",
+                account_ref="acct-1",
+                asset=AssetRef(asset_id="asset", decimals=36),
+                quantity=Decimal("2"),
+                cost_basis_usd=basis_total,
+                unit_cost_usd=basis_total / Decimal("2"),
+                acquired_at=_ACQ - _DAY,
+                basis_source="replayed_history",
+                basis_price_source="historian",
+                basis_price_as_of=_ACQ - _DAY,
+            )
+        ],
+    )
+    events = [
+        _ev("dispose-1", EventKind.dispose, _ACQ, [_leg("asset", "out", "0.2", "10")]),
+        _ev(
+            "dispose-2",
+            EventKind.dispose,
+            _ACQ + 1,
+            [_leg("asset", "out", "0.54", "20")],
+        ),
+        _ev(
+            "dispose-3",
+            EventKind.dispose,
+            _ACQ + 2,
+            [_leg("asset", "out", "1.26", "30")],
+        ),
+    ]
+    report = onchain_pnl_report(
+        events,
+        report_window=ReportWindowInput(
+            start_at=_ACQ,
+            end_at=_ACQ + 3,
+            opening_state=opening,
+        ),
+    )
+
+    with localcontext() as context:
+        context.prec = 100
+        expected_gain = Decimal("60") - basis_total
+        assert report.summary.cost_basis_usd == basis_total
+        assert report.summary.proceeds_usd == Decimal("60")
+        assert report.summary.realized_gain_usd == expected_gain
+        assert report.summary.short_term_gain_usd == expected_gain
+        assert report.by_year[0].realized_gain_usd == expected_gain
+    assert report.summary.complete is True

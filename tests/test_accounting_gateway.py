@@ -25,6 +25,7 @@ from nexus_core.app.accounting.contract import (
 )
 from nexus_core.app.accounting.tools import PLANNED_TOOLS, build_tool_handlers
 from nexus_core.engine.accounting import PriceHistorian
+from nexus_core.engine.accounting.lots import exact_decimal_sum
 
 # A de-identified sample ledger: opaque refs + public onchain facts only.
 SAMPLE_LEDGER = {
@@ -118,6 +119,36 @@ def test_event_ledger_requires_at_least_one_leg() -> None:
     }
     with pytest.raises(ValidationError):
         EventLedger.model_validate(bad)
+
+
+@pytest.mark.parametrize("value", ["1e-100000000", "1e100000000", "0e100000000"])
+def test_event_ledger_rejects_extreme_decimal_exponents(value: str) -> None:
+    with pytest.raises(ValidationError, match="accounting"):
+        EventLedger.model_validate(
+            {
+                "events": [
+                    {
+                        "event_id": "e",
+                        "account_ref": "a",
+                        "kind": "acquire",
+                        "timestamp": 1,
+                        "legs": [
+                            {
+                                "asset": {"asset_id": "x"},
+                                "direction": "in",
+                                "amount": "1",
+                                "usd_value": value,
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+
+
+def test_exact_decimal_sum_rejects_unbounded_alignment_before_arithmetic() -> None:
+    with pytest.raises(ValueError, match="arithmetic envelope"):
+        exact_decimal_sum((Decimal("1"), Decimal("1e-100000000")))
 
 
 def test_event_ledger_rejects_raw_wallet_as_opaque_account_ref() -> None:
@@ -294,6 +325,22 @@ def test_route_decode_invalid_body_400() -> None:
     assert resp.status_code == 400
 
 
+def test_route_decode_rejects_fallback_event_id_collision_400() -> None:
+    transaction = {
+        "account_ref": "account-opaque",
+        "chain": "ethereum",
+        "timestamp": 1,
+        "movements": [{"asset": {"asset_id": "eth:asset"}, "direction": "in", "amount": "1"}],
+    }
+    resp = _client().post(
+        "/api/accounting/tools/decode_onchain_events",
+        json={"transactions": [transaction, transaction]},
+    )
+
+    assert resp.status_code == 400
+    assert "duplicate event_id" in resp.text
+
+
 def test_route_compute_cost_basis_fifo() -> None:
     body = {
         "events": [
@@ -346,6 +393,61 @@ def test_route_compute_cost_basis_fifo() -> None:
 def test_route_compute_cost_basis_invalid_body_400() -> None:
     resp = _client().post("/api/accounting/tools/compute_cost_basis", json={"events": []})
     assert resp.status_code == 400
+
+
+def test_route_compute_cost_basis_rejects_extreme_decimal_exponent_400() -> None:
+    body = {
+        "events": [
+            {
+                "event_id": "acq",
+                "account_ref": "acct-opaque",
+                "kind": "acquire",
+                "timestamp": 1,
+                "legs": [
+                    {
+                        "asset": {"asset_id": "asset"},
+                        "direction": "in",
+                        "amount": "1",
+                        "usd_value": "1e-100000000",
+                    }
+                ],
+            }
+        ],
+        "report_window": {"start_at": 1, "end_at": 2, "full_history": True},
+    }
+
+    resp = _client().post("/api/accounting/tools/compute_cost_basis", json=body)
+
+    assert resp.status_code == 400
+
+
+def test_route_compute_cost_basis_rejects_blank_price_provenance_400() -> None:
+    body = {
+        "events": [
+            {
+                "event_id": "acq",
+                "account_ref": "acct-opaque",
+                "kind": "acquire",
+                "timestamp": 1,
+                "legs": [
+                    {
+                        "asset": {"asset_id": "asset"},
+                        "direction": "in",
+                        "amount": "1",
+                        "usd_value": "10",
+                        "price_source": "   ",
+                        "price_as_of": 1,
+                    }
+                ],
+            }
+        ],
+        "report_window": {"start_at": 1, "end_at": 2, "full_history": True},
+    }
+
+    resp = _client().post("/api/accounting/tools/compute_cost_basis", json=body)
+
+    assert resp.status_code == 400
+    assert "must not be blank" in resp.text
 
 
 def test_route_quiet_period_requests_are_valid() -> None:

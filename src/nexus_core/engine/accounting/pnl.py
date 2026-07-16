@@ -36,6 +36,7 @@ from .cost_basis import (
     ReplayMetadata,
     compute_cost_basis,
 )
+from .lots import exact_decimal_sum
 from .models import BasisOverrideInput, LedgerEvent, ReportWindowInput
 
 
@@ -43,8 +44,9 @@ class PnlBucket(BaseModel):
     """Aggregated realized figures for a set of disposals (a year, or overall).
 
     Sums include only disposals with a known realized gain (both proceeds and
-    basis known); the rest are counted in ``incomplete_count`` and excluded, so
-    ``complete`` says whether the sums cover every disposal."""
+    basis known); the rest are counted in ``incomplete_count`` and excluded.
+    ``complete`` is deliberately calculation-wide: unrelated open-lot, replay,
+    provenance, transfer, or fee gaps also keep the bucket incomplete."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -87,11 +89,11 @@ def _aggregate(
     disposals: list[DisposalRecord],
 ) -> tuple[Decimal, Decimal, Decimal, Decimal, Decimal, int]:
     """(realized, short_term, long_term, proceeds, cost_basis, incomplete_count)."""
-    realized = Decimal(0)
-    short_term = Decimal(0)
-    long_term = Decimal(0)
-    proceeds = Decimal(0)
-    cost_basis = Decimal(0)
+    realized_values: list[Decimal] = []
+    short_term_values: list[Decimal] = []
+    long_term_values: list[Decimal] = []
+    proceeds_values: list[Decimal] = []
+    cost_basis_values: list[Decimal] = []
     incomplete = 0
     for disposal in disposals:
         if (
@@ -102,14 +104,21 @@ def _aggregate(
         ):
             incomplete += 1
             continue
-        realized += disposal.realized_gain_usd
-        proceeds += disposal.proceeds_usd
-        cost_basis += disposal.cost_basis_usd
+        realized_values.append(disposal.realized_gain_usd)
+        proceeds_values.append(disposal.proceeds_usd)
+        cost_basis_values.append(disposal.cost_basis_usd)
         if disposal.term == "short":
-            short_term += disposal.realized_gain_usd
+            short_term_values.append(disposal.realized_gain_usd)
         elif disposal.term == "long":
-            long_term += disposal.realized_gain_usd
-    return realized, short_term, long_term, proceeds, cost_basis, incomplete
+            long_term_values.append(disposal.realized_gain_usd)
+    return (
+        exact_decimal_sum(realized_values),
+        exact_decimal_sum(short_term_values),
+        exact_decimal_sum(long_term_values),
+        exact_decimal_sum(proceeds_values),
+        exact_decimal_sum(cost_basis_values),
+        incomplete,
+    )
 
 
 def onchain_pnl_report(

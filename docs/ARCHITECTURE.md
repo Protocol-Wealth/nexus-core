@@ -227,7 +227,9 @@ gate. Accounting is not in native MCP yet; #259 will adapt the same handler
 registry into the full profile without changing the production demo profile.
 Current source contract `0.2.0` adds account-scoped FIFO, explicit transfer and
 fee treatment, calendar holding periods, full-history/opening-state report replay,
-lineage, and structured completeness. Private custodian ingestion,
+authoritative basis conservation, method-pinned opening snapshots, replay-safe
+lineage, and structured completeness. Unit-only legacy opening lots remain
+calculable but explicitly incomplete. Private custodian ingestion,
 wallet-to-client mapping, statement construction, tax-return preparation,
 approval, release, and retention remain outside this repo. Issue #260 continues
 to block private statement composition until this source is deployed and its

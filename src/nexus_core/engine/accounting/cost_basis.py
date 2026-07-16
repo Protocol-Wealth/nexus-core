@@ -14,14 +14,22 @@ gaps. They are not silently converted into statement-ready figures.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from .lots import Lot, LotBook
+from .lots import (
+    Lot,
+    LotBook,
+    bounded_decimal_share,
+    deterministic_decimal_divide,
+    exact_decimal_multiply,
+    exact_decimal_subtract,
+    exact_decimal_sum,
+)
 from .models import (
     AsOfPriceInput,
     AssetRef,
@@ -125,6 +133,9 @@ class ReplayMetadata(BaseModel):
     opening_state_schema_version: str | None
     opening_state_source: str | None
     opening_state_last_verified: date | None
+    opening_state_basis_method: str | None
+    opening_state_basis_method_version: str | None
+    opening_state_snapshot_complete: bool | None
     input_event_count: int
     replayed_event_count: int
     pre_period_event_count: int
@@ -174,9 +185,11 @@ class CostLot(BaseModel):
     unit_cost_usd: Decimal | None
     acquired_at: int | None
     acquisition_sequence: int | None
+    acquisition_leg_index: int
     basis_source: str
     basis_override_ref: str | None
     basis_last_verified: date | None
+    basis_evidence_source: str | None
     acquisition_fee_usd: Decimal
     acquisition_event_id: str | None
     acquisition_tx_ref: str | None
@@ -207,11 +220,13 @@ class DisposalRecord(BaseModel):
     lot_ref: str | None
     acquisition_event_id: str | None
     acquisition_tx_ref: str | None
+    origin_lot_ref: str | None
     disposal_event_id: str
     disposal_tx_ref: str | None
     basis_source: str | None
     basis_override_ref: str | None
     basis_last_verified: date | None
+    basis_evidence_source: str | None
     basis_fee_adjustment_usd: Decimal
     basis_price_source: str | None
     basis_price_as_of: int | None
@@ -258,40 +273,97 @@ class CostBasisResult(BaseModel):
 @dataclass
 class _EngineCounts:
     unresolved_event_count: int = 0
-    unresolved_transfer_count: int = 0
     unresolved_fee_count: int = 0
+    unresolved_transfer_keys: set[str] = field(default_factory=set)
+
+    def mark_unresolved_transfer(self, event: LedgerEvent) -> None:
+        key = event.transfer_ref or f"event:{event.event_id}"
+        self.unresolved_transfer_keys.add(key)
+
+    @property
+    def unresolved_transfer_count(self) -> int:
+        return len(self.unresolved_transfer_keys)
 
 
 def _leg_usd(leg: LedgerLeg) -> Decimal | None:
     if leg.usd_value is not None:
         return leg.usd_value
     if leg.unit_price_usd is not None:
-        return leg.unit_price_usd * leg.amount
+        return exact_decimal_multiply(leg.unit_price_usd, leg.amount)
     return None
 
 
 def _sum_opt(values: Sequence[Decimal | None]) -> Decimal | None:
     """Sum values, returning ``None`` if any component is unknown."""
-    total = Decimal(0)
+    known: list[Decimal] = []
     for value in values:
         if value is None:
             return None
-        total += value
-    return total
+        known.append(value)
+    return exact_decimal_sum(known)
+
+
+def _allocate_weighted(total: Decimal, weights: Sequence[Decimal]) -> list[Decimal]:
+    """Allocate nonnegative shares while preserving the exact input total."""
+    if not weights:
+        return []
+    if total < 0 or any(weight < 0 for weight in weights):
+        raise ValueError("weighted allocation requires nonnegative totals and weights")
+    weight_sum = exact_decimal_sum(weights)
+    if weight_sum <= 0:
+        weights = [Decimal(1) for _ in weights]
+        weight_sum = Decimal(len(weights))
+    remaining_total = total
+    remaining_weight = weight_sum
+    allocated: list[Decimal] = []
+    for weight in weights[:-1]:
+        share = (
+            Decimal(0)
+            if remaining_total == 0 or remaining_weight == 0
+            else bounded_decimal_share(remaining_total, weight, remaining_weight)
+        )
+        share = min(remaining_total, max(Decimal(0), share))
+        allocated.append(share)
+        remaining_total = exact_decimal_subtract(remaining_total, share)
+        remaining_weight = exact_decimal_subtract(remaining_weight, weight)
+    allocated.append(remaining_total)
+    return allocated
 
 
 def _allocate(total: Decimal, legs: Sequence[LedgerLeg]) -> list[Decimal]:
-    """Allocate a USD total by priced value, then quantity, then equally."""
+    """Allocate a USD total by priced value, then quantity, while conserving it."""
     usds = [_leg_usd(leg) for leg in legs]
     if all(value is not None for value in usds):
         weights = [value for value in usds if value is not None]
-        weight_sum = sum(weights, Decimal(0))
+        weight_sum = exact_decimal_sum(weights)
         if weight_sum > 0:
-            return [total * (weight / weight_sum) for weight in weights]
-    quantity_sum = sum((leg.amount for leg in legs), Decimal(0))
+            return _allocate_weighted(total, weights)
+    quantity_sum = exact_decimal_sum([leg.amount for leg in legs])
     if quantity_sum > 0:
-        return [total * (leg.amount / quantity_sum) for leg in legs]
-    return [total / len(legs) for _ in legs] if legs else []
+        return _allocate_weighted(total, [leg.amount for leg in legs])
+    return _allocate_weighted(total, [Decimal(1) for _ in legs])
+
+
+def _merge_asset_metadata(assets: dict[str, AssetRef], incoming: AssetRef) -> AssetRef:
+    """Merge compatible partial metadata so later conflicts cannot hide behind nulls."""
+    prior = assets.get(incoming.asset_id)
+    if prior is None:
+        assets[incoming.asset_id] = incoming
+        return incoming
+    for field_name in ("chain", "decimals"):
+        old_value = getattr(prior, field_name)
+        new_value = getattr(incoming, field_name)
+        if old_value is not None and new_value is not None and old_value != new_value:
+            raise ValueError(f"conflicting {field_name} metadata for asset_id: {incoming.asset_id}")
+    merged = prior.model_copy(
+        update={
+            "symbol": prior.symbol or incoming.symbol,
+            "chain": prior.chain or incoming.chain,
+            "decimals": prior.decimals if prior.decimals is not None else incoming.decimals,
+        }
+    )
+    assets[incoming.asset_id] = merged
+    return merged
 
 
 def _one_year_anniversary(value: date) -> date:
@@ -370,12 +442,15 @@ def _validate_inputs(
     report_window: ReportWindowInput | None,
 ) -> None:
     event_by_id: dict[str, LedgerEvent] = {}
+    asset_metadata: dict[str, AssetRef] = {}
     by_timestamp: dict[int, list[LedgerEvent]] = {}
     transfer_directions: set[tuple[str, EventKind]] = set()
     for event in events:
         if event.event_id in event_by_id:
             raise ValueError(f"duplicate event_id: {event.event_id}")
         event_by_id[event.event_id] = event
+        for leg in event.legs:
+            _merge_asset_metadata(asset_metadata, leg.asset)
         # Sequence values exist only to make replay order deterministic. Events
         # outside a bounded report are counted as excluded input, not replayed,
         # so their relative order cannot affect this calculation.
@@ -411,6 +486,11 @@ def _validate_inputs(
             raise ValueError(f"orphan basis override: {override.event_id}")
         if override_event.kind != EventKind.transfer_in:
             raise ValueError("basis overrides are accepted only for transfer_in events")
+        principal_ins = [
+            leg for leg in override_event.legs if leg.role == "principal" and leg.direction == "in"
+        ]
+        if len(principal_ins) != 1:
+            raise ValueError("event-level basis override requires exactly one principal in leg")
         if override.acquired_at is not None and override.acquired_at > override_event.timestamp:
             raise ValueError(f"basis override acquired_at cannot follow event {override.event_id}")
 
@@ -432,25 +512,74 @@ def _validate_inputs(
     if any(event.timestamp < report_window.start_at for event in events):
         raise ValueError("opening_state replay cannot also include pre-period events")
     lot_refs: set[str] = set()
-    opening_order: dict[tuple[str, str, int], list[OpeningLotInput]] = {}
+    opening_order: dict[tuple[str, int], list[OpeningLotInput]] = {}
+    roots: dict[str, OpeningLotInput] = {}
     for lot in opening_state.lots:
         if lot.lot_ref in lot_refs:
             raise ValueError(f"duplicate opening lot_ref: {lot.lot_ref}")
         lot_refs.add(lot.lot_ref)
+        _merge_asset_metadata(asset_metadata, lot.asset)
+        root_ref = lot.origin_lot_ref or lot.lot_ref
+        prior_root = roots.get(root_ref)
+        if prior_root is None:
+            roots[root_ref] = lot
+        else:
+            invariant_fields = (
+                "acquired_at",
+                "acquisition_sequence",
+                "acquisition_leg_index",
+                "unit_cost_usd",
+                "basis_source",
+                "basis_override_ref",
+                "basis_last_verified",
+                "basis_evidence_source",
+                "unit_fee_basis_usd",
+                "acquisition_event_id",
+                "acquisition_tx_ref",
+                "basis_price_source",
+                "basis_price_as_of",
+            )
+            if prior_root.asset.asset_id != lot.asset.asset_id or any(
+                getattr(prior_root, field_name) != getattr(lot, field_name)
+                for field_name in invariant_fields
+            ):
+                raise ValueError(
+                    "opening fragments sharing origin_lot_ref have conflicting lot invariants"
+                )
+            if lot.unit_cost_usd is None:
+                raise ValueError(
+                    "split opening fragments sharing origin_lot_ref require unit_cost_usd"
+                )
         if lot.acquired_at is not None and lot.acquired_at > opening_state.as_of:
             raise ValueError(f"opening lot {lot.lot_ref} was acquired after snapshot as_of")
         if lot.acquired_at is not None:
-            opening_key = (lot.account_ref, lot.asset.asset_id, lot.acquired_at)
+            opening_key = (lot.asset.asset_id, lot.acquired_at)
             opening_order.setdefault(opening_key, []).append(lot)
-    for (account_ref, asset_id, acquired_at), lots in opening_order.items():
+    for (asset_id, acquired_at), lots in opening_order.items():
         if len(lots) < 2:
             continue
-        sequences = [lot.acquisition_sequence for lot in lots]
-        if any(sequence is None for sequence in sequences) or len(set(sequences)) != len(lots):
-            raise ValueError(
-                "opening lots sharing account/asset/acquired_at require unique "
-                f"acquisition_sequence values: {account_ref}/{asset_id}/{acquired_at}"
-            )
+        for index, lot in enumerate(lots):
+            root_ref = lot.origin_lot_ref or lot.lot_ref
+            for other in lots[index + 1 :]:
+                other_root_ref = other.origin_lot_ref or other.lot_ref
+                if root_ref == other_root_ref:
+                    continue
+                sequence_orders = (
+                    lot.acquisition_sequence is not None
+                    and other.acquisition_sequence is not None
+                    and lot.acquisition_sequence != other.acquisition_sequence
+                )
+                same_event_leg_orders = (
+                    lot.acquisition_event_id is not None
+                    and lot.acquisition_event_id == other.acquisition_event_id
+                    and lot.acquisition_leg_index != other.acquisition_leg_index
+                )
+                if not sequence_orders and not same_event_leg_orders:
+                    raise ValueError(
+                        "opening lots sharing asset/acquired_at require unique "
+                        "acquisition_sequence or intra-event leg order values: "
+                        f"{asset_id}/{acquired_at}"
+                    )
 
 
 def _event_sort_key(event: LedgerEvent) -> tuple[int, int, str]:
@@ -468,6 +597,18 @@ def _price_provenance(legs: Sequence[LedgerLeg]) -> tuple[str | None, int | None
 
 
 def _opening_lot(lot: OpeningLotInput) -> Lot:
+    total_basis = (
+        lot.cost_basis_usd
+        if lot.cost_basis_usd is not None
+        else None
+        if lot.unit_cost_usd is None
+        else exact_decimal_multiply(lot.unit_cost_usd, lot.quantity)
+    )
+    total_fee_basis = (
+        lot.acquisition_fee_usd
+        if lot.acquisition_fee_usd is not None
+        else exact_decimal_multiply(lot.unit_fee_basis_usd or Decimal(0), lot.quantity)
+    )
     return Lot(
         lot_ref=lot.lot_ref,
         account_ref=lot.account_ref,
@@ -476,12 +617,17 @@ def _opening_lot(lot: OpeningLotInput) -> Lot:
         unit_cost_usd=lot.unit_cost_usd,
         acquired_at=lot.acquired_at,
         basis_source=lot.basis_source,
+        remaining_cost_basis_usd=total_basis,
+        remaining_fee_basis_usd=total_fee_basis,
         acquisition_sequence=lot.acquisition_sequence,
+        acquisition_leg_index=lot.acquisition_leg_index,
         basis_override_ref=lot.basis_override_ref,
         basis_last_verified=lot.basis_last_verified,
-        unit_fee_basis_usd=lot.unit_fee_basis_usd,
+        basis_evidence_source=lot.basis_evidence_source,
+        unit_fee_basis_usd=lot.unit_fee_basis_usd or Decimal(0),
         acquisition_event_id=lot.acquisition_event_id,
         acquisition_tx_ref=lot.acquisition_tx_ref,
+        origin_lot_ref=lot.origin_lot_ref,
         basis_price_source=lot.basis_price_source,
         basis_price_as_of=lot.basis_price_as_of,
         symbol=lot.asset.symbol,
@@ -493,6 +639,7 @@ def _record_disposals(
     book: LotBook,
     *,
     leg: LedgerLeg,
+    asset: AssetRef,
     leg_index: int,
     gross_proceeds: Decimal | None,
     fee_adjustment: Decimal,
@@ -502,21 +649,27 @@ def _record_disposals(
     gaps: list[CalculationGap],
     warnings: list[str],
 ) -> None:
-    net_proceeds = None if gross_proceeds is None else gross_proceeds - fee_adjustment
+    net_proceeds = (
+        None if gross_proceeds is None else exact_decimal_subtract(gross_proceeds, fee_adjustment)
+    )
     if net_proceeds is not None and net_proceeds < 0:
         raise ValueError(f"fee allocation exceeds proceeds in event {event.event_id}")
     matched, shortfall = book.consume(event.account_ref, leg.asset.asset_id, leg.amount)
+    quantities = [consumed.quantity for consumed in matched]
+    if shortfall > 0:
+        quantities.append(shortfall)
+    gross_allocations = (
+        None if gross_proceeds is None else _allocate_weighted(gross_proceeds, quantities)
+    )
+    fee_allocations = _allocate_weighted(fee_adjustment, quantities)
     for fragment_index, consumed in enumerate(matched):
-        share = consumed.quantity / leg.amount
-        gross = None if gross_proceeds is None else gross_proceeds * share
-        fee = fee_adjustment * share
-        proceeds = None if gross is None else gross - fee
-        basis = (
-            None
-            if consumed.lot.unit_cost_usd is None
-            else consumed.lot.unit_cost_usd * consumed.quantity
+        gross = None if gross_allocations is None else gross_allocations[fragment_index]
+        fee = fee_allocations[fragment_index]
+        proceeds = None if gross is None else exact_decimal_subtract(gross, fee)
+        basis = consumed.cost_basis_usd
+        gain = (
+            None if proceeds is None or basis is None else exact_decimal_subtract(proceeds, basis)
         )
-        gain = None if proceeds is None or basis is None else proceeds - basis
         holding_days, term = _holding_period(consumed.lot.acquired_at, event.timestamp)
         missing: list[str] = []
         if proceeds is None:
@@ -525,8 +678,10 @@ def _record_disposals(
             missing.append("cost_basis_usd")
         if consumed.lot.acquired_at is None:
             missing.append("acquired_at")
-        if consumed.lot.basis_price_source is None or consumed.lot.basis_price_as_of is None:
-            missing.append("basis_price_provenance")
+        if (consumed.lot.basis_price_source is None or consumed.lot.basis_price_as_of is None) and (
+            consumed.lot.basis_evidence_source is None or consumed.lot.basis_last_verified is None
+        ):
+            missing.append("basis_provenance")
         if leg.price_source is None or leg.price_as_of is None:
             missing.append("proceeds_price_provenance")
         complete = not missing
@@ -535,7 +690,7 @@ def _record_disposals(
                 disposition_ref=(f"{event.event_id}:out:{leg_index}:fragment:{fragment_index}"),
                 disposition_type=disposition_type,
                 account_ref=event.account_ref,
-                asset=leg.asset,
+                asset=asset,
                 quantity=consumed.quantity,
                 gross_proceeds_usd=gross,
                 fee_adjustment_usd=fee,
@@ -545,12 +700,14 @@ def _record_disposals(
                 lot_ref=consumed.lot.lot_ref,
                 acquisition_event_id=consumed.lot.acquisition_event_id,
                 acquisition_tx_ref=consumed.lot.acquisition_tx_ref,
+                origin_lot_ref=consumed.lot.origin_lot_ref or consumed.lot.lot_ref,
                 disposal_event_id=event.event_id,
                 disposal_tx_ref=event.tx_ref,
                 basis_source=consumed.lot.basis_source,
                 basis_override_ref=consumed.lot.basis_override_ref,
                 basis_last_verified=consumed.lot.basis_last_verified,
-                basis_fee_adjustment_usd=(consumed.lot.unit_fee_basis_usd * consumed.quantity),
+                basis_evidence_source=consumed.lot.basis_evidence_source,
+                basis_fee_adjustment_usd=consumed.fee_basis_usd,
                 basis_price_source=consumed.lot.basis_price_source,
                 basis_price_as_of=consumed.lot.basis_price_as_of,
                 proceeds_price_source=leg.price_source,
@@ -567,16 +724,16 @@ def _record_disposals(
         )
     if shortfall <= 0:
         return
-    share = shortfall / leg.amount
-    gross = None if gross_proceeds is None else gross_proceeds * share
-    fee = fee_adjustment * share
-    proceeds = None if gross is None else gross - fee
+    shortfall_index = len(matched)
+    gross = None if gross_allocations is None else gross_allocations[shortfall_index]
+    fee = fee_allocations[shortfall_index]
+    proceeds = None if gross is None else exact_decimal_subtract(gross, fee)
     disposals.append(
         DisposalRecord(
             disposition_ref=f"{event.event_id}:out:{leg_index}:shortfall",
             disposition_type=disposition_type,
             account_ref=event.account_ref,
-            asset=leg.asset,
+            asset=asset,
             quantity=shortfall,
             gross_proceeds_usd=gross,
             fee_adjustment_usd=fee,
@@ -586,11 +743,13 @@ def _record_disposals(
             lot_ref=None,
             acquisition_event_id=None,
             acquisition_tx_ref=None,
+            origin_lot_ref=None,
             disposal_event_id=event.event_id,
             disposal_tx_ref=event.tx_ref,
             basis_source=None,
             basis_override_ref=None,
             basis_last_verified=None,
+            basis_evidence_source=None,
             basis_fee_adjustment_usd=Decimal(0),
             basis_price_source=None,
             basis_price_as_of=None,
@@ -646,8 +805,9 @@ def _add_acquisition_lots(
         basis_source = "override"
         basis_override_ref = override.override_ref or override.event_id
         basis_last_verified = override.last_verified
-        price_source = override.source
-        price_as_of = override.acquired_at if override.source is not None else None
+        basis_evidence_source = override.source
+        price_source = None
+        price_as_of = None
         if acquired_at is None:
             _gap(
                 gaps,
@@ -662,17 +822,39 @@ def _add_acquisition_lots(
                 "basis override requires source and last_verified for statement use",
                 event=event,
             )
+        if override.single_lot_assertion is not True:
+            _gap(
+                gaps,
+                "unconfirmed_single_lot_override",
+                "event-level transfer basis requires an explicit single-original-lot assertion",
+                event=event,
+            )
+        if override.origin_lot_ref is None:
+            _gap(
+                gaps,
+                "missing_override_origin_lot_ref",
+                "single-lot transfer basis requires an opaque source-lot reference",
+                event=event,
+            )
+        if override.acquisition_sequence is None:
+            _gap(
+                gaps,
+                "missing_transfer_acquisition_sequence",
+                "single-lot transfer basis requires original acquisition order",
+                event=event,
+            )
     elif outs:
         total_out = _sum_opt([_leg_usd(leg) for leg in outs])
         if total_out is None:
             bases = [None for _ in in_legs]
         else:
             bases = []
-            bases.extend(_allocate(total_out + fee_addition, in_legs))
+            bases.extend(_allocate(exact_decimal_sum((total_out, fee_addition)), in_legs))
         basis_source = "taxable_exchange"
         basis_override_ref = None
         basis_last_verified = None
         price_source, price_as_of = _price_provenance(outs)
+        basis_evidence_source = None
     else:
         leg_values = [_leg_usd(leg) for leg in in_legs]
         if fee_addition:
@@ -680,7 +862,7 @@ def _add_acquisition_lots(
                 bases = [None for _ in in_legs]
             else:
                 bases = [
-                    value + fee
+                    exact_decimal_sum((value, fee))
                     for value, fee in zip(leg_values, fee_by_leg, strict=True)
                     if value is not None
                 ]
@@ -689,6 +871,7 @@ def _add_acquisition_lots(
         basis_source = "income_market" if event.kind == EventKind.claim else "market"
         basis_override_ref = None
         basis_last_verified = None
+        basis_evidence_source = None
         price_source = None
         price_as_of = None
 
@@ -703,7 +886,11 @@ def _add_acquisition_lots(
             message = f"acquisition basis unknown for {leg.asset.asset_id} ({event.event_id})"
             warnings.append(message)
             _gap(gaps, "unknown_basis", message, event=event, asset_id=leg.asset.asset_id)
-        if basis_total is not None and (leg_price_source is None or leg_price_as_of is None):
+        leg_evidence_source = basis_evidence_source if override is not None else None
+        if basis_total is not None and (
+            (leg_price_source is None or leg_price_as_of is None)
+            and (leg_evidence_source is None or basis_last_verified is None)
+        ):
             _gap(
                 gaps,
                 "missing_price_provenance",
@@ -717,15 +904,32 @@ def _add_acquisition_lots(
                 account_ref=event.account_ref,
                 asset_id=leg.asset.asset_id,
                 quantity=leg.amount,
-                unit_cost_usd=None if basis_total is None else basis_total / leg.amount,
+                unit_cost_usd=(
+                    None
+                    if basis_total is None
+                    else deterministic_decimal_divide(basis_total, leg.amount)
+                ),
                 acquired_at=acquired_at if override is not None else event.timestamp,
                 basis_source=basis_source,
-                acquisition_sequence=event.sequence,
+                remaining_cost_basis_usd=basis_total,
+                remaining_fee_basis_usd=fee_for_leg,
+                acquisition_sequence=(
+                    override.acquisition_sequence if override is not None else event.sequence
+                ),
+                acquisition_leg_index=(
+                    override.acquisition_leg_index if override is not None else leg_index
+                ),
                 basis_override_ref=basis_override_ref,
                 basis_last_verified=basis_last_verified,
-                unit_fee_basis_usd=fee_for_leg / leg.amount,
-                acquisition_event_id=event.event_id,
-                acquisition_tx_ref=event.tx_ref,
+                basis_evidence_source=leg_evidence_source,
+                unit_fee_basis_usd=deterministic_decimal_divide(fee_for_leg, leg.amount),
+                acquisition_event_id=(
+                    override.acquisition_event_id if override is not None else event.event_id
+                ),
+                acquisition_tx_ref=(
+                    override.acquisition_tx_ref if override is not None else event.tx_ref
+                ),
+                origin_lot_ref=None if override is None else override.origin_lot_ref,
                 basis_price_source=leg_price_source,
                 basis_price_as_of=leg_price_as_of,
                 symbol=leg.asset.symbol,
@@ -741,6 +945,7 @@ def _consume_transfer_out(
     outs: Sequence[tuple[int, LedgerLeg]],
     pending: dict[str, list[Lot]],
     gaps: list[CalculationGap],
+    counts: _EngineCounts,
 ) -> None:
     transfer_ref = event.transfer_ref
     if transfer_ref is None:
@@ -759,9 +964,13 @@ def _consume_transfer_out(
                     unit_cost_usd=consumed.lot.unit_cost_usd,
                     acquired_at=consumed.lot.acquired_at,
                     basis_source=consumed.lot.basis_source,
+                    remaining_cost_basis_usd=consumed.cost_basis_usd,
+                    remaining_fee_basis_usd=consumed.fee_basis_usd,
                     acquisition_sequence=consumed.lot.acquisition_sequence,
+                    acquisition_leg_index=consumed.lot.acquisition_leg_index,
                     basis_override_ref=consumed.lot.basis_override_ref,
                     basis_last_verified=consumed.lot.basis_last_verified,
+                    basis_evidence_source=consumed.lot.basis_evidence_source,
                     unit_fee_basis_usd=consumed.lot.unit_fee_basis_usd,
                     acquisition_event_id=consumed.lot.acquisition_event_id,
                     acquisition_tx_ref=consumed.lot.acquisition_tx_ref,
@@ -773,6 +982,7 @@ def _consume_transfer_out(
                 )
             )
         if shortfall > 0:
+            counts.mark_unresolved_transfer(event)
             fragments.append(
                 Lot(
                     lot_ref=f"{event.event_id}:transfer:{leg_index}:shortfall",
@@ -807,6 +1017,7 @@ def _add_transfer_in_from_pending(
     gaps: list[CalculationGap],
     warnings: list[str],
     assumptions: list[CalculationAssumption],
+    counts: _EngineCounts,
 ) -> None:
     transfer_ref = event.transfer_ref
     if transfer_ref is None:
@@ -850,6 +1061,14 @@ def _add_transfer_in_from_pending(
             if fragment.asset_id != leg.asset.asset_id or fragment.quantity <= 0:
                 continue
             quantity = min(remaining, fragment.quantity)
+            quantity_before = fragment.quantity
+            consume_all = quantity == quantity_before
+            cost_basis = fragment.remaining_cost_basis_usd
+            if cost_basis is not None and not consume_all:
+                cost_basis = bounded_decimal_share(cost_basis, quantity, quantity_before)
+            fee_basis = fragment.remaining_fee_basis_usd or Decimal(0)
+            if not consume_all:
+                fee_basis = bounded_decimal_share(fee_basis, quantity, quantity_before)
             book.add(
                 Lot(
                     lot_ref=f"{event.event_id}:in:{leg_index}:transfer:{destination_index}",
@@ -858,10 +1077,14 @@ def _add_transfer_in_from_pending(
                     quantity=quantity,
                     unit_cost_usd=fragment.unit_cost_usd,
                     acquired_at=fragment.acquired_at,
-                    basis_source="same_owner_transfer",
+                    basis_source=fragment.basis_source,
+                    remaining_cost_basis_usd=cost_basis,
+                    remaining_fee_basis_usd=fee_basis,
                     acquisition_sequence=fragment.acquisition_sequence,
+                    acquisition_leg_index=fragment.acquisition_leg_index,
                     basis_override_ref=fragment.basis_override_ref,
                     basis_last_verified=fragment.basis_last_verified,
+                    basis_evidence_source=fragment.basis_evidence_source,
                     unit_fee_basis_usd=fragment.unit_fee_basis_usd,
                     acquisition_event_id=fragment.acquisition_event_id,
                     acquisition_tx_ref=fragment.acquisition_tx_ref,
@@ -872,10 +1095,21 @@ def _add_transfer_in_from_pending(
                     chain=leg.asset.chain,
                 )
             )
-            fragment.quantity -= quantity
-            remaining -= quantity
+            fragment.quantity = exact_decimal_subtract(fragment.quantity, quantity)
+            if fragment.remaining_cost_basis_usd is not None and cost_basis is not None:
+                fragment.remaining_cost_basis_usd = exact_decimal_subtract(
+                    fragment.remaining_cost_basis_usd,
+                    cost_basis,
+                )
+            if fragment.remaining_fee_basis_usd is not None:
+                fragment.remaining_fee_basis_usd = exact_decimal_subtract(
+                    fragment.remaining_fee_basis_usd,
+                    fee_basis,
+                )
+            remaining = exact_decimal_subtract(remaining, quantity)
             destination_index += 1
         if remaining > 0:
+            counts.mark_unresolved_transfer(event)
             book.add(
                 Lot(
                     lot_ref=f"{event.event_id}:in:{leg_index}:unmatched",
@@ -917,6 +1151,8 @@ def _consume_unresolved_transfer(
     override: BasisOverrideInput | None,
     gaps: list[CalculationGap],
     warnings: list[str],
+    gap_code: str,
+    gap_message: str,
 ) -> None:
     for _, leg in outs:
         book.consume(event.account_ref, leg.asset.asset_id, leg.amount)
@@ -950,8 +1186,8 @@ def _consume_unresolved_transfer(
                 )
     _gap(
         gaps,
-        "unresolved_transfer_treatment",
-        "external or unknown transfer treatment cannot produce a tax conclusion",
+        gap_code,
+        gap_message,
         event=event,
     )
 
@@ -1080,11 +1316,15 @@ def _build_open_lots(
 ) -> list[CostLot]:
     result: list[CostLot] = []
     for lot in book.open_lots():
-        cost_basis = None if lot.unit_cost_usd is None else lot.unit_cost_usd * lot.quantity
+        cost_basis = lot.remaining_cost_basis_usd
         price = price_by_asset.get(lot.asset_id)
-        market_value = None if price is None else price.unit_price_usd * lot.quantity
+        market_value = (
+            None if price is None else exact_decimal_multiply(price.unit_price_usd, lot.quantity)
+        )
         unrealized = (
-            None if market_value is None or cost_basis is None else market_value - cost_basis
+            None
+            if market_value is None or cost_basis is None
+            else exact_decimal_subtract(market_value, cost_basis)
         )
         asset = asset_by_id.get(lot.asset_id) or AssetRef(
             asset_id=lot.asset_id,
@@ -1101,13 +1341,15 @@ def _build_open_lots(
                 unit_cost_usd=lot.unit_cost_usd,
                 acquired_at=lot.acquired_at,
                 acquisition_sequence=lot.acquisition_sequence,
+                acquisition_leg_index=lot.acquisition_leg_index,
                 basis_source=lot.basis_source,
                 basis_override_ref=lot.basis_override_ref,
                 basis_last_verified=lot.basis_last_verified,
-                acquisition_fee_usd=lot.unit_fee_basis_usd * lot.quantity,
+                basis_evidence_source=lot.basis_evidence_source,
+                acquisition_fee_usd=lot.remaining_fee_basis_usd or Decimal(0),
                 acquisition_event_id=lot.acquisition_event_id,
                 acquisition_tx_ref=lot.acquisition_tx_ref,
-                origin_lot_ref=lot.origin_lot_ref,
+                origin_lot_ref=lot.origin_lot_ref or lot.lot_ref,
                 basis_price_source=lot.basis_price_source,
                 basis_price_as_of=lot.basis_price_as_of,
                 market_value_usd=market_value,
@@ -1134,6 +1376,9 @@ def _replay_metadata(
                 opening_state_schema_version=None,
                 opening_state_source=None,
                 opening_state_last_verified=None,
+                opening_state_basis_method=None,
+                opening_state_basis_method_version=None,
+                opening_state_snapshot_complete=None,
                 input_event_count=len(events),
                 replayed_event_count=len(events),
                 pre_period_event_count=0,
@@ -1156,6 +1401,13 @@ def _replay_metadata(
             opening_state_schema_version=None if opening is None else opening.schema_version,
             opening_state_source=None if opening is None else opening.source,
             opening_state_last_verified=None if opening is None else opening.last_verified,
+            opening_state_basis_method=None if opening is None else opening.basis_method,
+            opening_state_basis_method_version=(
+                None if opening is None else opening.basis_method_version
+            ),
+            opening_state_snapshot_complete=(
+                None if opening is None else opening.snapshot_complete
+            ),
             input_event_count=len(events),
             replayed_event_count=len(replayed),
             pre_period_event_count=pre,
@@ -1192,6 +1444,13 @@ def compute_cost_basis(
     asset_by_id: dict[str, AssetRef] = {}
     pending_transfers: dict[str, list[Lot]] = {}
 
+    if report_window is not None and report_window.opening_state is not None:
+        for opening in report_window.opening_state.lots:
+            _merge_asset_metadata(asset_by_id, opening.asset)
+    for event in replayed_events:
+        for leg in event.legs:
+            _merge_asset_metadata(asset_by_id, leg.asset)
+
     if report_window is None:
         _gap(
             gaps,
@@ -1211,18 +1470,37 @@ def compute_cost_basis(
             key=lambda lot: (
                 lot.acquired_at is None,
                 lot.acquired_at or 0,
+                lot.acquisition_sequence is None,
                 lot.acquisition_sequence or 0,
+                lot.acquisition_event_id or "",
+                lot.acquisition_leg_index,
                 lot.lot_ref,
             ),
         )
+        assumptions.append(
+            CalculationAssumption(
+                code="opening_state_assertion",
+                message=(
+                    "caller supplied a complete FIFO opening snapshot compatible with "
+                    f"method version {report_window.opening_state.basis_method_version}"
+                ),
+            )
+        )
         for opening in opening_lots:
-            asset_by_id.setdefault(opening.asset.asset_id, opening.asset)
             book.add(_opening_lot(opening))
-            if opening.unit_cost_usd is None:
+            if opening.cost_basis_usd is None and opening.unit_cost_usd is None:
                 _gap(
                     gaps,
                     "unknown_opening_basis",
                     "opening-state lot has unknown basis",
+                    account_ref=opening.account_ref,
+                    asset_id=opening.asset.asset_id,
+                )
+            elif opening.cost_basis_usd is None:
+                _gap(
+                    gaps,
+                    "missing_opening_total_basis",
+                    "statement replay requires authoritative opening total basis",
                     account_ref=opening.account_ref,
                     asset_id=opening.asset.asset_id,
                 )
@@ -1234,13 +1512,15 @@ def compute_cost_basis(
                     account_ref=opening.account_ref,
                     asset_id=opening.asset.asset_id,
                 )
-            if opening.unit_cost_usd is not None and (
-                opening.basis_price_source is None or opening.basis_price_as_of is None
+            if (
+                (opening.cost_basis_usd is not None or opening.unit_cost_usd is not None)
+                and (opening.basis_price_source is None or opening.basis_price_as_of is None)
+                and (opening.basis_evidence_source is None or opening.basis_last_verified is None)
             ):
                 _gap(
                     gaps,
                     "missing_opening_basis_provenance",
-                    "known opening-state basis requires price source/as_of",
+                    "known opening-state basis requires price or verified evidence provenance",
                     account_ref=opening.account_ref,
                     asset_id=opening.asset.asset_id,
                 )
@@ -1258,7 +1538,6 @@ def compute_cost_basis(
         ]
         fee_legs = [(index, leg) for index, leg in enumerate(event.legs) if leg.role == "fee"]
         for leg in event.legs:
-            asset_by_id.setdefault(leg.asset.asset_id, leg.asset)
             if _leg_usd(leg) is not None and (leg.price_source is None or leg.price_as_of is None):
                 _gap(
                     gaps,
@@ -1280,8 +1559,8 @@ def compute_cost_basis(
         )
 
         if event.kind in (EventKind.transfer_in, EventKind.transfer_out):
-            if event.transfer_ref is None or event.transfer_treatment is None:
-                counts.unresolved_transfer_count += 1
+            if event.transfer_ref is None:
+                counts.mark_unresolved_transfer(event)
                 _consume_unresolved_transfer(
                     book,
                     event=event,
@@ -1290,6 +1569,21 @@ def compute_cost_basis(
                     override=override,
                     gaps=gaps,
                     warnings=warnings,
+                    gap_code="missing_transfer_ref",
+                    gap_message="transfer requires an opaque transfer_ref",
+                )
+            elif event.transfer_treatment is None:
+                counts.mark_unresolved_transfer(event)
+                _consume_unresolved_transfer(
+                    book,
+                    event=event,
+                    ins=principal_ins,
+                    outs=principal_outs,
+                    override=override,
+                    gaps=gaps,
+                    warnings=warnings,
+                    gap_code="missing_transfer_treatment",
+                    gap_message="transfer requires an explicit ownership treatment",
                 )
             elif event.transfer_treatment == TransferTreatment.same_owner:
                 if event.kind == EventKind.transfer_out:
@@ -1301,6 +1595,7 @@ def compute_cost_basis(
                         outs=principal_outs,
                         pending=pending_transfers,
                         gaps=gaps,
+                        counts=counts,
                     )
                 else:
                     if principal_outs or not principal_ins:
@@ -1314,9 +1609,10 @@ def compute_cost_basis(
                         gaps=gaps,
                         warnings=warnings,
                         assumptions=assumptions,
+                        counts=counts,
                     )
             else:
-                counts.unresolved_transfer_count += 1
+                counts.mark_unresolved_transfer(event)
                 _consume_unresolved_transfer(
                     book,
                     event=event,
@@ -1325,6 +1621,10 @@ def compute_cost_basis(
                     override=override,
                     gaps=gaps,
                     warnings=warnings,
+                    gap_code="unresolved_transfer_treatment",
+                    gap_message=(
+                        "external or unknown transfer treatment cannot produce a tax conclusion"
+                    ),
                 )
         elif event.kind in (EventKind.acquire, EventKind.claim):
             if principal_outs or not principal_ins:
@@ -1346,6 +1646,7 @@ def compute_cost_basis(
                 _record_disposals(
                     book,
                     leg=leg,
+                    asset=asset_by_id[leg.asset.asset_id],
                     leg_index=leg_index,
                     gross_proceeds=_leg_usd(leg),
                     fee_adjustment=reduction,
@@ -1365,6 +1666,7 @@ def compute_cost_basis(
                 _record_disposals(
                     book,
                     leg=leg,
+                    asset=asset_by_id[leg.asset.asset_id],
                     leg_index=leg_index,
                     gross_proceeds=_leg_usd(leg),
                     fee_adjustment=reduction,
@@ -1415,6 +1717,7 @@ def compute_cost_basis(
             _record_disposals(
                 book,
                 leg=leg,
+                asset=asset_by_id[leg.asset.asset_id],
                 leg_index=leg_index,
                 gross_proceeds=_leg_usd(leg),
                 fee_adjustment=Decimal(0),
@@ -1427,7 +1730,7 @@ def compute_cost_basis(
 
     for transfer_ref, fragments in pending_transfers.items():
         if any(fragment.quantity > 0 for fragment in fragments):
-            counts.unresolved_transfer_count += 1
+            counts.unresolved_transfer_keys.add(transfer_ref)
             _gap(
                 gaps,
                 "unmatched_transfer_out",

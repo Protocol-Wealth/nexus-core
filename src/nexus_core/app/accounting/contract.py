@@ -24,7 +24,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ...engine.accounting.models import (
     AsOfPriceInput,
@@ -43,6 +43,7 @@ from ...engine.accounting.models import (
     ReportWindowInput,
     TaxTreatment,
     TransferTreatment,
+    validate_accounting_decimal,
 )
 
 #: The accounting contract version. Bump on any breaking request/response change.
@@ -152,6 +153,8 @@ class PriceOverrideInput(BaseModel):
     coin: str = Field(min_length=1, max_length=256)
     timestamp: int = Field(ge=0)
     price_usd: Decimal = Field(ge=0)
+
+    _bounded_price = field_validator("price_usd")(validate_accounting_decimal)
 
 
 class PriceHistoryRequest(BaseModel):

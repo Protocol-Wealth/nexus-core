@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   own account-scoped disposal.
 - Added quiet-period replay so a bounded request with no events can still return
   opening lots, closing valuation, completeness, and a zero-disposition report.
+- Added method-pinned `2.0.0` opening snapshots with explicit completeness
+  attestation, authoritative remaining basis/fee totals, intra-event acquisition
+  order, verified evidence provenance, and replay-safe root-lot lineage.
 - Reject supported-chain raw wallet shapes in account references and reject
   contradictory standalone fee-event metadata.
 
@@ -41,6 +44,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   validation.
 - Limited equal-timestamp sequence validation to replayed events; excluded
   post-period events cannot invalidate the current report.
+- Conserved Decimal basis, fee, proceeds, and allocation totals exactly across
+  partial consumption, transfers, full disposals, and snapshot boundaries. FIFO
+  queues now reinsert transferred lots by original acquisition order and reject
+  economically ambiguous ties or conflicting split-root invariants.
+- Reject conflicting chain/decimal metadata for one asset identity, inconsistent
+  dual valuation fields, ignored tax-treatment metadata, multi-leg event-level
+  overrides, embedded raw EVM addresses, and decoder event-ID collisions. Raw
+  transaction chain context is authoritative and normalized; explicit movement
+  chains must match, while missing movement chains inherit it. Required lineage
+  and provenance strings reject whitespace-only values.
+- Count unresolved transfers by reference (including unmatched inbound and fully
+  paired source shortfalls) and emit specific missing-reference/treatment gaps.
 - Corrected `describe` from `status: scaffold` to `status: available` while
   retaining `plannedTools` as a compatibility alias. Native MCP registration
   remains separate issue #259; the public demo profile is unchanged.

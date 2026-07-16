@@ -28,7 +28,8 @@ substrate only: private ingestion, client linkage, statement production, review,
 and retention remain in the private stack. Native MCP registration is not yet
 shipped and is tracked in #259; the hosted demo MCP tool set remains unchanged.
 Accounting contract `0.2.0` in current source implements #260's FIFO/PnL
-semantics and replay hardening. Statement wiring remains blocked until that source
+semantics, exact remaining-basis conservation, method-pinned replay, and root
+lineage hardening. Statement wiring remains blocked until that source
 is merged/deployed and its methodology receives CIO/IC/CCO review.
 
 Current source also corrects the Monte Carlo `student_t` return model so its
@@ -301,8 +302,9 @@ Prioritized. Top item first.
 
 **Accounting semantics and replay hardening — open issue #260.** Contract `0.2.0`
 source now scopes FIFO books by account, handles linked same-owner transfers and
-explicit fees, uses calendar terms, supports full-history/opening-state replay,
-and returns deterministic lineage plus structured completeness. Keep private
+explicit fees, conserves authoritative basis across snapshot boundaries, uses
+calendar terms, supports full-history/method-pinned opening-state replay, and
+returns deterministic root lineage plus structured completeness. Keep private
 cost-basis and realized-PnL statement composition disabled until merge/deploy
 verification and CIO/IC/CCO methodology review; source enforces that gate through
 `statement_ready=false` while review remains pending.

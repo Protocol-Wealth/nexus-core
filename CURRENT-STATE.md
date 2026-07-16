@@ -7,9 +7,10 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
 
 - **Last docs closeout:** 2026-07-16 ET — root docs distinguish accounting
   contract `0.2.0` source from the still-live `0.1.0` deployment. The v2 source
-  implements #260's account, transfer, fee, period-replay, lineage, and
-  completeness hardening but remains held from statement use pending deployment,
-  consumer compatibility, and CIO/IC/CCO methodology review. Restricted REST is
+  implements #260's account, transfer, fee, exact-basis, method-pinned replay,
+  lineage, and completeness hardening but remains held from statement use
+  pending deployment, consumer compatibility, and CIO/IC/CCO methodology
+  review. Restricted REST is
   live, native MCP registration remains open in #259, and private ingestion,
   wallet/client linkage, statement assembly, review, and retention remain in
   `pw-api`/PWOS rather than this public engine.
@@ -29,8 +30,9 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   #259 owns a full-profile-only adapter and the requirement to keep the hosted
   demo profile unchanged. Accounting v2 corrects the REST `describe` status while
   retaining `plannedTools` as a compatibility alias. It adds account-scoped lots,
-  explicit same-owner transfers and fee allocation, calendar terms, bounded
-  replay, lineage, and structured completeness. P0-P4 remain calculation
+  explicit same-owner transfers and fee allocation, calendar terms, exact
+  remaining-basis conservation, bounded method-pinned replay, root lineage, and
+  structured completeness. P0-P4 remain calculation
   primitives, not proof that a client statement workflow or tax return is
   complete; #260 still blocks statement wiring pending CIO/IC/CCO methodology
   review, and source forces `statement_ready=false` until that review is recorded.

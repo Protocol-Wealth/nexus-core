@@ -20,6 +20,34 @@ are complete. A CIO/IC/CCO methodology review is required before a consumer may
 use this output in a client statement. Code review or passing CI does not satisfy
 that governance requirement.
 
+## Numeric Envelope
+
+All wire-level numeric values are finite decimal strings. Direct quantities and
+unit prices allow at most 36 fractional and 42 integer digits. Explicit monetary
+totals allow 72 fractional and 84 integer digits so an exact product of two
+direct inputs remains representable. Authoritative opening-snapshot basis and
+fee values use a bounded 256-fractional/128-integer derived envelope so an engine
+output can be replayed in the next statement period. Extreme scientific
+exponents, oversized coefficients, NaN, and infinity are rejected before any
+accounting arithmetic. Internal exact-sum operations enforce a separate bounded
+alignment envelope and return an input error instead of allocating
+caller-controlled precision.
+
+Division is method-pinned: calculations use a local 384-digit context,
+round-half-even, and at most 256 fractional digits, independent of the caller's
+thread-local Decimal context. Proportional lot, fee, transfer, and allocation
+shares are additionally clamped to the inclusive range from zero through their
+authoritative remaining total; the exact residual is assigned separately. This
+prevents a rounded partial share from producing a negative remaining basis.
+
+## Decoder Chain Contract
+
+Each `RawTransactionInput.chain` is the authoritative chain for one transaction.
+It is trimmed and normalized to lowercase, every explicit movement asset chain
+must match it, and movements without a chain inherit it in the normalized event.
+Blank or contradictory chain context is rejected before fallback event identity
+or accounting replay can be produced.
+
 ## Event Treatment Matrix
 
 | Event kind | Engine treatment |
@@ -44,8 +72,11 @@ never consume another account's lot implicitly.
 
 A same-owner transfer requires an opaque `transfer_ref` on both events and
 `transfer_treatment=same_owner`. The out leg moves the selected FIFO fragments;
-the matching in leg preserves quantity, unit basis, acquisition date, acquisition
+the matching in leg preserves quantity, authoritative remaining basis and fee
+basis totals, original unit basis, acquisition date/order, acquisition
 event/transaction lineage, and the source lot reference without realizing gain.
+Destination queues are re-sorted by original acquisition order, so an older lot
+that arrives later by transfer still precedes newer destination lots.
 An unmatched inbound transfer may use a manual override only when the caller
 asserts same ownership and supplies original basis/date. External, unknown, and
 unmatched transfers remain explicit completeness gaps. A market value observed
@@ -82,10 +113,15 @@ adjacent periods:
 1. `full_history=true`: the caller asserts that all relevant history was
    supplied. Pre-period events build opening lots, in-period dispositions are
    reported, and post-period events are excluded.
-2. `opening_state`: a `schema_version=1.0.0` snapshot at exactly `start_at - 1`
-   second, including unique opaque lot references, account, asset, quantity,
-   basis, acquisition date/order, and provenance. Events before the period are
-   rejected in this mode to prevent double replay.
+2. `opening_state`: a `schema_version=2.0.0` snapshot at exactly `start_at - 1`
+   second, with `basis_method=fifo`, `basis_method_version=2.0.0`, and
+   `snapshot_complete=true`. It includes unique opaque lot references, account,
+   asset, quantity, authoritative remaining total basis/fee basis, original unit
+   basis, acquisition date/order/leg index, root lineage, and provenance. Events
+   before the period are rejected in this mode to prevent double replay. A
+   unit-only legacy lot remains calculable but produces a
+   `missing_opening_total_basis` gap. An acquisition-fee basis component cannot
+   exceed the effective total cost basis.
 
 A bounded request may contain an empty `events` list. This represents a quiet
 period and still returns opening lots, closing valuation, completeness, and a
@@ -93,10 +129,15 @@ zero-disposition PnL report. Legacy all-event requests still require an event.
 
 Replayed events sharing a timestamp require unique `sequence` values. Excluded
 post-period events do not participate in replay-order validation. Opening lots
-sharing account, asset, and acquisition time require unique
-`acquisition_sequence` values. Event IDs, opening lot refs, override refs,
-override targets, and as-of price assets are validated for uniqueness. Replaying
-identical inputs is deterministic.
+sharing an asset and acquisition time require deterministic original ordering:
+distinct roots need unique `acquisition_sequence` values, or unique leg indexes
+when they came from the same acquisition event. Split fragments of one root may
+span accounts only when their acquisition and provenance invariants agree. Event
+IDs, opening lot refs, override refs, override targets, and as-of price assets are
+validated for uniqueness. Decoder fallback IDs include an available sequence,
+and remaining collisions fail closed. Required opaque references and provenance
+are trimmed and reject whitespace-only values. Replaying identical inputs is
+deterministic.
 
 As-of prices are closing valuations, not replayed events. A price timestamped
 exactly at `end_at` is accepted; a price after `end_at` is rejected.
@@ -104,13 +145,20 @@ exactly at `end_at` is accepted; a price after `end_at` is rejected.
 ## Completeness And Lineage
 
 Open lots carry account, lot, source-lot, acquisition-event, transaction, basis,
-and price provenance. Dispositions additionally carry disposal event/transaction,
-gross and fee-adjusted proceeds, term, and per-record missing fields.
+verified evidence or price provenance, authoritative remaining basis, and
+conserved fee basis. Dispositions additionally carry the root lot, disposal
+event/transaction, gross and fee-adjusted proceeds, term, and per-record missing
+fields. Decimal allocation residue is assigned deterministically to the final
+component, so disposal basis plus remaining basis reconciles exactly to the
+authoritative input total.
 
 `coverage` reports known/unknown lot and disposition counts plus unresolved event,
-transfer, and fee counts. `completeness.gaps` gives stable codes with opaque event,
-account, and asset references. Unknown basis or proceeds stays `null`; it is never
-coerced to zero.
+transfer-reference, and fee counts. `completeness.gaps` gives stable codes with
+opaque event, account, and asset references. Unknown basis or proceeds stays
+`null`; it is never coerced to zero. Calculation completeness does not by itself
+attest that closing inventory valuations are present or suitable for a particular
+client deliverable; the private statement composer applies section-specific
+realized-PnL and closing-valuation gates.
 
 The holding-period calculation uses UTC calendar dates. Counting begins after the
 acquisition date and includes the disposition date; a disposition is long term

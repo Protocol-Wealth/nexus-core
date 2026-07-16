@@ -35,7 +35,8 @@ The P0-P4 onchain-accounting substrate is deployed through
 `GET /api/accounting/tools` and `POST /api/accounting/tools/{tool_id}` with
 accounting contract `0.1.0`. Current source advances that contract to `0.2.0`
 with account-scoped FIFO, explicit transfer/fee/event treatment, bounded replay,
-calendar holding periods, lineage, and structured completeness; see
+calendar holding periods, exact total-basis conservation, method-pinned opening
+snapshots, replay-safe lineage, and structured completeness; see
 [the accounting contract guide](docs/ONCHAIN-ACCOUNTING.md). The source change
 must be merged and deployed before the live version handshake changes. These
 accounting handlers are **not yet registered in native MCP**; issue

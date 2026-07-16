@@ -95,7 +95,10 @@ def _decode_onchain_events(body: dict[str, Any]) -> dict[str, Any]:
         request = DecodeRequest.model_validate(body)
     except ValidationError as exc:
         raise AccountingInputError("invalid decode_onchain_events request body") from exc
-    ledger = decode_transactions(request.transactions)
+    try:
+        ledger = decode_transactions(request.transactions)
+    except ValueError as exc:
+        raise AccountingInputError(str(exc)) from exc
     counts: dict[str, int] = {}
     for event in ledger.events:
         counts[event.kind.value] = counts.get(event.kind.value, 0) + 1
