@@ -38,6 +38,8 @@ def _tx(
     tx_ref: str | None = None,
     account_ref: str = "acct-1",
     sequence: int | None = None,
+    transfer_ref: str | None = None,
+    transfer_treatment: TransferTreatment | None = None,
 ) -> RawTransactionInput:
     return RawTransactionInput(
         account_ref=account_ref,
@@ -48,6 +50,8 @@ def _tx(
         method=method,
         tx_ref=tx_ref,
         sequence=sequence,
+        transfer_ref=transfer_ref,
+        transfer_treatment=transfer_treatment,
     )
 
 
@@ -189,6 +193,44 @@ def test_decode_unknown_protocol_multi_asset_is_other_not_dropped() -> None:
     )
     assert ev.kind == EventKind.other  # typed, not guessed
     assert len(ev.legs) == 2  # legs preserved for review
+
+
+@pytest.mark.parametrize(
+    ("movements", "protocol_hint", "method"),
+    [
+        ([_mv("eth:a", "out", "1"), _mv("eth:b", "in", "1")], None, None),
+        ([_mv("eth:a", "out", "1")], "aave_v3", "supply"),
+    ],
+    ids=["other", "classified-defi"],
+)
+def test_decode_rejects_transfer_metadata_when_classification_is_not_transfer(
+    movements: list[MovementInput],
+    protocol_hint: str | None,
+    method: str | None,
+) -> None:
+    tx = _tx(
+        movements,
+        protocol_hint=protocol_hint,
+        method=method,
+        transfer_ref="transfer-1",
+        transfer_treatment=TransferTreatment.same_owner,
+    )
+
+    with pytest.raises(ValueError, match="transfer metadata is only valid"):
+        decode_transaction(tx)
+
+
+def test_decode_preserves_explicit_transfer_metadata_for_a_transfer() -> None:
+    event = decode_transaction(
+        _tx(
+            [_mv("eth:a", "in", "1")],
+            transfer_ref="transfer-1",
+            transfer_treatment=TransferTreatment.same_owner,
+        )
+    )
+
+    assert event.transfer_ref == "transfer-1"
+    assert event.transfer_treatment == TransferTreatment.same_owner
 
 
 def test_decode_uses_tx_ref_as_event_id() -> None:

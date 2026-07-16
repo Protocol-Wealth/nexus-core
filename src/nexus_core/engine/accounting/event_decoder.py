@@ -185,6 +185,8 @@ def decode_transaction(tx: RawTransactionInput) -> LedgerEvent:
     sequence_suffix = "" if tx.sequence is None else f":{tx.sequence}"
     event_id = tx.tx_ref or f"{tx.chain}:{tx.account_ref}:{tx.timestamp}{sequence_suffix}"
     is_transfer = kind in (EventKind.transfer_in, EventKind.transfer_out)
+    if not is_transfer and (tx.transfer_ref is not None or tx.transfer_treatment is not None):
+        raise ValueError("transfer metadata is only valid for decoded transfer events")
 
     return LedgerEvent(
         event_id=event_id,

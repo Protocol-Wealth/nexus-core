@@ -152,6 +152,13 @@ def test_exact_decimal_sum_rejects_unbounded_alignment_before_arithmetic() -> No
         exact_decimal_sum((Decimal("1"), Decimal("1e-100000000")))
 
 
+def test_exact_decimal_sum_rejects_a_derived_total_outside_the_envelope() -> None:
+    maximum_operand = Decimal("9" * 128)
+
+    with pytest.raises(ValueError, match="magnitude exceeds"):
+        exact_decimal_sum((maximum_operand, maximum_operand))
+
+
 def test_event_ledger_rejects_raw_wallet_as_opaque_account_ref() -> None:
     bad = {
         "events": [
@@ -366,6 +373,71 @@ def test_route_decode_rejects_fallback_event_id_collision_400() -> None:
 
     assert resp.status_code == 400
     assert "duplicate event_id" in resp.text
+
+
+def test_route_decode_rejects_transfer_metadata_on_a_non_transfer_400() -> None:
+    response = _client().post(
+        "/api/accounting/tools/decode_onchain_events",
+        json={
+            "transactions": [
+                {
+                    "account_ref": "account-opaque",
+                    "chain": "ethereum",
+                    "timestamp": 1,
+                    "movements": [
+                        {"asset": {"asset_id": "eth:a"}, "direction": "out", "amount": "1"},
+                        {"asset": {"asset_id": "eth:b"}, "direction": "in", "amount": "1"},
+                    ],
+                    "transfer_ref": "transfer-1",
+                    "transfer_treatment": "same_owner",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 400
+    assert "transfer metadata is only valid" in response.text
+
+
+def test_route_compute_cost_basis_rejects_a_derived_total_outside_the_envelope() -> None:
+    maximum_operand = "9" * 128
+    response = _client().post(
+        "/api/accounting/tools/compute_cost_basis",
+        json={
+            "events": [],
+            "report_window": {
+                "start_at": 10,
+                "end_at": 11,
+                "opening_state": {
+                    "schema_version": "2.0.0",
+                    "basis_method": "fifo",
+                    "basis_method_version": "2.0.0",
+                    "snapshot_complete": True,
+                    "state_ref": "derived-total-overflow",
+                    "as_of": 9,
+                    "source": "private_event_ledger",
+                    "last_verified": "2026-07-16",
+                    "lots": [
+                        {
+                            "lot_ref": f"opening-lot-{index}",
+                            "account_ref": "account-opaque",
+                            "asset": {"asset_id": f"asset-{index}"},
+                            "quantity": "1",
+                            "cost_basis_usd": maximum_operand,
+                            "acquired_at": 1,
+                            "basis_source": "replayed_history",
+                            "basis_price_source": "historian",
+                            "basis_price_as_of": 1,
+                        }
+                        for index in range(2)
+                    ],
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 400
+    assert "magnitude exceeds" in response.text
 
 
 def test_route_compute_cost_basis_fifo() -> None:
