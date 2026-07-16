@@ -3,12 +3,12 @@
 > Repo: `Protocol-Wealth/nexus-core` · License: Apache 2.0 · Patent Pending: USPTO #64/034,229 · OIN member.
 > Open-source extraction of the [Protocol Wealth research engine](https://nexusmcp.site); nothing in this repo is client-specific or proprietary to PW.
 
-**Current state (2026-07-16 ET — accounting v2 deployed; full-profile MCP adapter in source; private use gated):**
-- **Live deployment:** commit `70bd5d5` is on `origin/main`; Cloud Run revision
-  `nexus-core-00069-6m7` is Ready and serves 100% traffic. Custom-domain and
-  direct Cloud Run `/health` returned `200`, while unauthenticated
-  `/api/accounting/tools` returned the expected service-key `401` under
-  `NEXUS_ACCESS_MODE=restricted`.
+**Current state (2026-07-16 ET — accounting v2 and full-profile MCP adapter deployed; private use gated):**
+- **Live deployment:** commit `e5f4d84` is on `origin/main`; Cloud Run revision
+  `nexus-core-00070-zhx` is Ready and serves 100% traffic. Custom-domain, direct,
+  and regional Cloud Run `/health` returned `200`, `/health/db` returned `200`,
+  and unauthenticated `/api/accounting/tools` returned the expected service-key
+  `401` under `NEXUS_ACCESS_MODE=restricted`.
 - **Deployed accounting contract `0.2.0`:** P0-P4 are merged through PRs
   #254-#258 and the #260 hardening is merged through PR #262. The
   REST gateway exposes `describe`, `price_history`, `decode_onchain_events`,
@@ -28,25 +28,28 @@
   closed. Calculation completeness is not a closing-valuation or deliverable
   attestation; the private composer applies section-specific gates. See
   `docs/ONCHAIN-ACCOUNTING.md`.
-- **Transport boundary:** current source reuses the accounting handler registry
-  and configured REST historian to register `price_history`,
+- **Transport boundary:** the deployed image reuses the accounting handler
+  registry and configured REST historian to register `price_history`,
   `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report` in
   native MCP full mode. It preserves recursive identity rejection, contract and
   disclaimer envelopes, and stable `ToolError` mapping. Accounting's internal
   `describe` is omitted; the native top-level `describe` reports the accounting
   category and contract `0.2.0`. Production stays on
-  `NEXUS_PUBLIC_MCP_PROFILE=demo`, whose public tool set remains unchanged.
+  `NEXUS_PUBLIC_MCP_PROFILE=demo`; live OAuth `tools/list` returned
+  `classify_layer`, `collar_book`, `describe`, `health`, and `option_price`, with
+  accounting absent.
 - **Private boundary:** P0-P4 are calculation substrate, not statement readiness.
   Custodian ingestion, wallet/client linkage, statement assembly/rendering,
   advisor review, release, tax-return preparation, and books-and-records retention
-  remain in the private `pw-api`/PWOS plane. Issue #260 is closed as technically
-  complete; `pw-api#789` owns consumer compatibility and the still-pending
-  CIO/IC/CCO methodology enablement gate. The engine therefore continues to
-  force `statement_ready=false`.
-- **Validation:** exact source-head CI run `29518197955` passed ruff, strict
-  mypy, and pytest with coverage; SPDX, license-compliance, and both CodeQL
-  checks also passed. Standalone Codex accepted exact head `a142da6`, and all
-  inline review threads were addressed and resolved before merge.
+  remain in the private `pw-api`/PWOS plane. Issues #248, #259, and #260 are
+  closed as technically complete; `pw-api#789` owns consumer compatibility and
+  the still-pending CIO/IC/CCO methodology enablement gate. The engine therefore
+  continues to force `statement_ready=false`.
+- **Validation:** exact source-head CI run `29522873818` passed ruff, strict
+  mypy, and `1563` tests at `89.78%` coverage; SPDX, license-compliance, and both
+  CodeQL checks also passed. Standalone Codex accepted exact head `87afc45`, all
+  inline review threads were resolved before merge, and the complete live OAuth
+  MCP handshake passed after deployment.
 
 **Historical snapshot (2026-07-10 ET — public agent-discovery + Markdown negotiation):**
 - **Deployed:** Cloud Run revision `nexus-core-00064-fqx` serves 100% traffic on

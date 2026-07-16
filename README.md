@@ -22,8 +22,9 @@ Provided as-is under Apache-2.0. Educational use only — nothing here is invest
 Current live status is tracked in [CURRENT-STATE.md](CURRENT-STATE.md). Future
 work is issue-linked in [ROADMAP.md](ROADMAP.md) and GitHub Issues.
 
-As of the 2026-07-16 ET closeout, commit `70bd5d5` is deployed on Cloud Run
-revision `nexus-core-00069-6m7`. The hosted production posture remains a public
+As of the 2026-07-16 ET closeout, PR #264 is merged as commit `e5f4d84` and
+deployed on Cloud Run revision `nexus-core-00070-zhx`. The hosted production
+posture remains a public
 demo MCP surface plus authenticated REST/JSON calculation endpoints. Anonymous
 MCP clients can use the low-risk demo tool set; `/api/*` and the planning and
 accounting JSON gateways are service-key gated in production and should be
@@ -38,11 +39,12 @@ transfer/fee/event treatment, bounded replay,
 calendar holding periods, exact total-basis conservation, method-pinned opening
 snapshots, replay-safe lineage, and structured completeness; see
 [the accounting contract guide](docs/ONCHAIN-ACCOUNTING.md). The contract change
-was released through PR #262. Current source also reuses the same handler
+was released through PR #262. PR #264 also reuses the same handler
 registry and configured price historian to register `price_history`,
 `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report` in the
 native MCP **full** profile (issue
-[#259](https://github.com/Protocol-Wealth/nexus-core/issues/259)). The internal
+[#259](https://github.com/Protocol-Wealth/nexus-core/issues/259), now closed).
+The internal
 accounting `describe` handler is not duplicated; native discovery reports the
 four tools and contract `0.2.0` through the existing top-level `describe` tool.
 The hosted production service remains on the demo MCP profile, where accounting
@@ -106,7 +108,7 @@ private ingestion.
 | `GET /api/usage` | Provider usage / quota report |
 | `POST /mcp` | Model Context Protocol over HTTP (FastMCP, also stdio). In full mode, `tools/list` = research tools + `health`/`describe`/`get_quotes` + 34 planning tools + four accounting tools; in demo mode, only closed-world demo tools are registered. All tools are read-only |
 | `GET /api/planning/tools` · `POST /api/planning/tools/{id}` | Planning JSON gateway (pw-api / pwplan-core contractVersion `0.1.0`, PII-free). Legacy `/mcp/tools` aliases remain for compatibility |
-| `GET /api/accounting/tools` · `POST /api/accounting/tools/{id}` | Restricted REST accounting gateway (deployed contractVersion `0.2.0` on Cloud Run revision `nexus-core-00069-6m7`): `describe`, `price_history`, `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report`. Current source registers the four calculation handlers (not the colliding internal `describe`) in native MCP full mode; hosted demo remains unchanged |
+| `GET /api/accounting/tools` · `POST /api/accounting/tools/{id}` | Restricted REST accounting gateway (deployed contractVersion `0.2.0` on Cloud Run revision `nexus-core-00070-zhx`): `describe`, `price_history`, `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report`. The deployed image registers the four calculation handlers (not the colliding internal `describe`) in native MCP full mode; hosted demo remains unchanged |
 
 ### Regime & Scoring
 

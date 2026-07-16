@@ -21,13 +21,13 @@ server-to-server key path. Browser apps such as PWOS and PWPortal should call
 their own BFF/API routes and never hold Nexus service keys.
 
 The hardened onchain-accounting engine is deployed on that restricted REST
-surface at commit `70bd5d5`, Cloud Run revision `nexus-core-00069-6m7`. The
+surface at commit `e5f4d84`, Cloud Run revision `nexus-core-00070-zhx`. The
 `0.2.0` accounting gateway exposes historical pricing, de-identified event
 decoding, account-scoped FIFO cost basis/replay, and realized-PnL aggregation.
 It is calculation substrate only: private ingestion, client linkage, statement
-production, review, and retention remain in the private stack. Current source
-completes #259 by registering the same four calculation handlers in native MCP
-full mode; the hosted demo MCP tool set remains unchanged.
+production, review, and retention remain in the private stack. The deployed
+image completes #259 by registering the same four calculation handlers in
+native MCP full mode; the hosted demo MCP tool set excludes accounting.
 Accounting contract `0.2.0` implements #260's FIFO/PnL semantics, exact
 remaining-basis conservation, method-pinned replay, and root-lineage hardening.
 Statement wiring remains blocked until the private `pw-api` consumer passes its
@@ -211,7 +211,7 @@ gracefully to `None` / empty / `503` when its key is absent.
 
 ### Onchain & DeFi
 
-- **Onchain accounting P0-P4 (#248, PRs #254-#258)** — the separate
+- **Onchain accounting P0-P5 (#248, PRs #254-#258, #262, #264)** — the separate
   `app/accounting` contract/gateway and `engine/accounting` package provide a
   multi-oracle price historian (`price_history`), protocol-aware de-identified
   event decoding (`decode_onchain_events`), FIFO lot/cost-basis analysis
@@ -219,8 +219,9 @@ gracefully to `None` / empty / `503` when its key is absent.
   (`onchain_pnl_report`). Unknown prices and basis remain explicit rather than
   fabricated as zero; identity-shaped keys fail closed; canonical accounting/tax
   disclaimers are attached. Contract `0.2.0` is deployed through restricted REST
-  on `nexus-core-00069-6m7`; current source also registers the four calculation
-  handlers in native MCP full mode while excluding them from demo mode.
+  on `nexus-core-00070-zhx`; the deployed image also registers the four
+  calculation handlers in native MCP full mode while excluding them from demo
+  mode. Issues #248 and #259 are complete and closed.
 - **`GET /api/wallet/{address}`** — anonymous EVM wallet balance (DeBank).
 - **`GET /api/chain/chains`, `/api/chain/balance/{chain}/{address}`,
   `/api/chain/native/{address}`** — multi-chain native balances via Tatum
