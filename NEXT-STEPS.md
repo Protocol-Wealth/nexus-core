@@ -7,14 +7,15 @@
 > [VALIDATION.md](VALIDATION.md). Read [`CLAUDE.md`](CLAUDE.md) for operating
 > rules. Where the material below differs, those current sources win.
 
-## Current pointer (2026-07-15 ET)
+## Current pointer (2026-07-16 ET)
 
 - `d528389` is deployed on `nexus-core-00068-5pf` at 100% traffic.
 - Onchain accounting P0-P4 is available through restricted REST only. Issue #259
   owns native MCP full-profile registration; the hosted demo profile stays
   unchanged.
-- Issue #260 blocks statement wiring pending account/transfer/fee, calendar-term,
-  period-replay, lineage, and methodology hardening.
+- Contract `0.2.0` source implements #260's account/transfer/fee, calendar-term,
+  period-replay, lineage, and completeness hardening. Statement wiring remains
+  blocked pending merge/deploy verification and CIO/IC/CCO methodology review.
 - The accounting engine is de-identified calculation substrate. Private
   custodian ingestion, wallet/client linkage, statement assembly, advisor review,
   tax-return preparation, release, and retention remain outside this repo.

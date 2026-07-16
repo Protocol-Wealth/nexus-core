@@ -19,10 +19,13 @@ from nexus_core.app.accounting import build_accounting_router
 from nexus_core.app.accounting.contract import (
     ACCOUNTING_CONTRACT_VERSION,
     EventLedger,
+    OpeningLotInput,
+    RawTransactionInput,
     find_identity_keys,
 )
 from nexus_core.app.accounting.tools import PLANNED_TOOLS, build_tool_handlers
 from nexus_core.engine.accounting import PriceHistorian
+from nexus_core.engine.accounting.lots import exact_decimal_sum
 
 # A de-identified sample ledger: opaque refs + public onchain facts only.
 SAMPLE_LEDGER = {
@@ -35,7 +38,12 @@ SAMPLE_LEDGER = {
             "tx_ref": "tx-opaque-1",
             "legs": [
                 {
-                    "asset": {"asset_id": "eth:usdc", "symbol": "USDC", "chain": "ethereum", "decimals": 6},
+                    "asset": {
+                        "asset_id": "eth:usdc",
+                        "symbol": "USDC",
+                        "chain": "ethereum",
+                        "decimals": 6,
+                    },
                     "direction": "in",
                     "amount": "1000.00",
                     "unit_price_usd": "1.00",
@@ -60,6 +68,7 @@ SAMPLE_LEDGER = {
 
 
 def test_contract_version_is_a_semver_string() -> None:
+    assert ACCOUNTING_CONTRACT_VERSION == "0.2.0"
     assert ACCOUNTING_CONTRACT_VERSION.count(".") == 2
 
 
@@ -105,20 +114,112 @@ def test_event_ledger_rejects_non_positive_amount() -> None:
 
 
 def test_event_ledger_requires_at_least_one_leg() -> None:
-    bad = {"events": [{"event_id": "e", "account_ref": "a", "kind": "fee", "timestamp": 1, "legs": []}]}
+    bad = {
+        "events": [{"event_id": "e", "account_ref": "a", "kind": "fee", "timestamp": 1, "legs": []}]
+    }
     with pytest.raises(ValidationError):
         EventLedger.model_validate(bad)
+
+
+@pytest.mark.parametrize("value", ["1e-100000000", "1e100000000", "0e100000000"])
+def test_event_ledger_rejects_extreme_decimal_exponents(value: str) -> None:
+    with pytest.raises(ValidationError, match="accounting"):
+        EventLedger.model_validate(
+            {
+                "events": [
+                    {
+                        "event_id": "e",
+                        "account_ref": "a",
+                        "kind": "acquire",
+                        "timestamp": 1,
+                        "legs": [
+                            {
+                                "asset": {"asset_id": "x"},
+                                "direction": "in",
+                                "amount": "1",
+                                "usd_value": value,
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+
+
+def test_exact_decimal_sum_rejects_unbounded_alignment_before_arithmetic() -> None:
+    with pytest.raises(ValueError, match="arithmetic envelope"):
+        exact_decimal_sum((Decimal("1"), Decimal("1e-100000000")))
+
+
+def test_event_ledger_rejects_raw_wallet_as_opaque_account_ref() -> None:
+    bad = {
+        "events": [
+            {
+                "event_id": "e",
+                "account_ref": "0x" + "a" * 40,
+                "kind": "acquire",
+                "timestamp": 1,
+                "legs": [{"asset": {"asset_id": "x"}, "direction": "in", "amount": "1"}],
+            }
+        ]
+    }
+    with pytest.raises(ValidationError, match="account_ref must be opaque"):
+        EventLedger.model_validate(bad)
+
+
+def test_supported_chain_wallet_shapes_are_rejected_across_account_inputs() -> None:
+    solana_address = "11111111111111111111111111111111"
+    bitcoin_legacy = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
+
+    with pytest.raises(ValidationError, match="account_ref must be opaque"):
+        EventLedger.model_validate(
+            {
+                "events": [
+                    {
+                        "event_id": "e",
+                        "account_ref": solana_address,
+                        "kind": "acquire",
+                        "timestamp": 1,
+                        "legs": [{"asset": {"asset_id": "x"}, "direction": "in", "amount": "1"}],
+                    }
+                ]
+            }
+        )
+
+    with pytest.raises(ValidationError, match="account_ref must be opaque"):
+        RawTransactionInput.model_validate(
+            {
+                "account_ref": bitcoin_legacy,
+                "chain": "bitcoin",
+                "timestamp": 1,
+                "movements": [{"asset": {"asset_id": "btc"}, "direction": "in", "amount": "1"}],
+            }
+        )
+
+    with pytest.raises(ValidationError, match="account_ref must be opaque"):
+        OpeningLotInput.model_validate(
+            {
+                "lot_ref": "lot-1",
+                "account_ref": solana_address,
+                "asset": {"asset_id": "sol"},
+                "quantity": "1",
+                "unit_cost_usd": "10",
+                "acquired_at": 1,
+                "basis_source": "replayed_history",
+            }
+        )
 
 
 def test_find_identity_keys_catches_identity_wallet_and_client_keys() -> None:
     assert find_identity_keys({"name": "x"}) == ["name"]
     assert find_identity_keys({"client_id": "x"}) == ["client_id"]
+    assert find_identity_keys({"client_ref": "x"}) == ["client_ref"]
     assert find_identity_keys({"nested": [{"walletAddress": "0x0"}]}) == ["walletAddress"]
     # opaque references are fine
     assert find_identity_keys({"account_ref": "acct-1", "asset_id": "eth:usdc"}) == []
 
 
-def test_build_tool_handlers_ships_describe_scaffold() -> None:
+def test_build_tool_handlers_describes_available_v2_contract() -> None:
     handlers = build_tool_handlers()
     assert set(handlers) == {
         "describe",
@@ -127,11 +228,46 @@ def test_build_tool_handlers_ships_describe_scaffold() -> None:
         "onchain_pnl_report",
     }
     out = handlers["describe"]({})
-    assert out["status"] == "scaffold"
+    assert out["status"] == "available"
+    assert set(out["tools"]) == set(handlers)
+    assert "price_history" not in out["tools"]
     assert list(out["plannedTools"]) == list(PLANNED_TOOLS)
     # the ledger schema is published so a consumer can validate its shape
     assert "eventLedgerSchema" in out
     assert out["eventLedgerSchema"]["type"] == "object"
+    assert "report_window" in out["costBasisRequestSchema"]["properties"]
+    assert out["methodology"]["reviewStatus"] == "pending_governance_review"
+
+
+def test_describe_lists_optional_price_history_only_when_registered() -> None:
+    handlers = build_tool_handlers(price_historian=PriceHistorian([]))
+    assert "price_history" in handlers["describe"]({})["tools"]
+
+
+def test_decode_handler_classifies_fee_only_transaction() -> None:
+    out = build_tool_handlers()["decode_onchain_events"](
+        {
+            "transactions": [
+                {
+                    "account_ref": "account-opaque",
+                    "chain": "ethereum",
+                    "timestamp": 1,
+                    "tx_ref": "fee-transaction",
+                    "movements": [
+                        {
+                            "asset": {"asset_id": "eth:eth"},
+                            "direction": "out",
+                            "amount": "0.001",
+                            "role": "fee",
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+
+    assert out["events"][0]["kind"] == "fee"
+    assert out["eventCountsByKind"] == {"fee": 1}
 
 
 # --- HTTP gateway tests ------------------------------------------------------
@@ -215,6 +351,22 @@ def test_route_decode_invalid_body_400() -> None:
     assert resp.status_code == 400
 
 
+def test_route_decode_rejects_fallback_event_id_collision_400() -> None:
+    transaction = {
+        "account_ref": "account-opaque",
+        "chain": "ethereum",
+        "timestamp": 1,
+        "movements": [{"asset": {"asset_id": "eth:asset"}, "direction": "in", "amount": "1"}],
+    }
+    resp = _client().post(
+        "/api/accounting/tools/decode_onchain_events",
+        json={"transactions": [transaction, transaction]},
+    )
+
+    assert resp.status_code == 400
+    assert "duplicate event_id" in resp.text
+
+
 def test_route_compute_cost_basis_fifo() -> None:
     body = {
         "events": [
@@ -224,7 +376,14 @@ def test_route_compute_cost_basis_fifo() -> None:
                 "kind": "acquire",
                 "timestamp": 1,
                 "legs": [
-                    {"asset": {"asset_id": "a"}, "direction": "in", "amount": "1", "usd_value": "10"}
+                    {
+                        "asset": {"asset_id": "a"},
+                        "direction": "in",
+                        "amount": "1",
+                        "usd_value": "10",
+                        "price_source": "caller_price",
+                        "price_as_of": 1,
+                    }
                 ],
             },
             {
@@ -233,10 +392,18 @@ def test_route_compute_cost_basis_fifo() -> None:
                 "kind": "dispose",
                 "timestamp": 2,
                 "legs": [
-                    {"asset": {"asset_id": "a"}, "direction": "out", "amount": "1", "usd_value": "30"}
+                    {
+                        "asset": {"asset_id": "a"},
+                        "direction": "out",
+                        "amount": "1",
+                        "usd_value": "30",
+                        "price_source": "caller_price",
+                        "price_as_of": 2,
+                    }
                 ],
             },
-        ]
+        ],
+        "report_window": {"start_at": 1, "end_at": 3, "full_history": True},
     }
     resp = _client().post("/api/accounting/tools/compute_cost_basis", json=body)
     assert resp.status_code == 200
@@ -244,11 +411,84 @@ def test_route_compute_cost_basis_fifo() -> None:
     assert out["method"] == "fifo"
     assert out["disposals"][0]["realized_gain_usd"] == "20"
     assert out["totals"]["realized_gain_usd"] == "20"
+    assert out["completeness"]["complete"] is True
+    assert out["completeness"]["statement_ready"] is False
+    assert out["methodology"]["method_version"] == "2.0.0"
 
 
 def test_route_compute_cost_basis_invalid_body_400() -> None:
     resp = _client().post("/api/accounting/tools/compute_cost_basis", json={"events": []})
     assert resp.status_code == 400
+
+
+def test_route_compute_cost_basis_rejects_extreme_decimal_exponent_400() -> None:
+    body = {
+        "events": [
+            {
+                "event_id": "acq",
+                "account_ref": "acct-opaque",
+                "kind": "acquire",
+                "timestamp": 1,
+                "legs": [
+                    {
+                        "asset": {"asset_id": "asset"},
+                        "direction": "in",
+                        "amount": "1",
+                        "usd_value": "1e-100000000",
+                    }
+                ],
+            }
+        ],
+        "report_window": {"start_at": 1, "end_at": 2, "full_history": True},
+    }
+
+    resp = _client().post("/api/accounting/tools/compute_cost_basis", json=body)
+
+    assert resp.status_code == 400
+
+
+def test_route_compute_cost_basis_rejects_blank_price_provenance_400() -> None:
+    body = {
+        "events": [
+            {
+                "event_id": "acq",
+                "account_ref": "acct-opaque",
+                "kind": "acquire",
+                "timestamp": 1,
+                "legs": [
+                    {
+                        "asset": {"asset_id": "asset"},
+                        "direction": "in",
+                        "amount": "1",
+                        "usd_value": "10",
+                        "price_source": "   ",
+                        "price_as_of": 1,
+                    }
+                ],
+            }
+        ],
+        "report_window": {"start_at": 1, "end_at": 2, "full_history": True},
+    }
+
+    resp = _client().post("/api/accounting/tools/compute_cost_basis", json=body)
+
+    assert resp.status_code == 400
+    assert "invalid compute_cost_basis request body" in resp.text
+
+
+def test_route_quiet_period_requests_are_valid() -> None:
+    body = {
+        "events": [],
+        "report_window": {"start_at": 1, "end_at": 2, "full_history": True},
+    }
+
+    cost_basis = _client().post("/api/accounting/tools/compute_cost_basis", json=body)
+    assert cost_basis.status_code == 200
+    assert cost_basis.json()["replay"]["in_period_event_count"] == 0
+
+    pnl = _client().post("/api/accounting/tools/onchain_pnl_report", json=body)
+    assert pnl.status_code == 200
+    assert pnl.json()["summary"]["disposal_count"] == 0
 
 
 def test_route_onchain_pnl_report() -> None:
@@ -260,7 +500,14 @@ def test_route_onchain_pnl_report() -> None:
                 "kind": "acquire",
                 "timestamp": 1_600_000_000,
                 "legs": [
-                    {"asset": {"asset_id": "a"}, "direction": "in", "amount": "1", "usd_value": "10"}
+                    {
+                        "asset": {"asset_id": "a"},
+                        "direction": "in",
+                        "amount": "1",
+                        "usd_value": "10",
+                        "price_source": "caller_price",
+                        "price_as_of": 1_600_000_000,
+                    }
                 ],
             },
             {
@@ -269,16 +516,31 @@ def test_route_onchain_pnl_report() -> None:
                 "kind": "dispose",
                 "timestamp": 1_600_100_000,
                 "legs": [
-                    {"asset": {"asset_id": "a"}, "direction": "out", "amount": "1", "usd_value": "30"}
+                    {
+                        "asset": {"asset_id": "a"},
+                        "direction": "out",
+                        "amount": "1",
+                        "usd_value": "30",
+                        "price_source": "caller_price",
+                        "price_as_of": 1_600_100_000,
+                    }
                 ],
             },
-        ]
+        ],
+        "report_window": {
+            "start_at": 1_600_000_000,
+            "end_at": 1_600_100_001,
+            "full_history": True,
+        },
     }
     resp = _client().post("/api/accounting/tools/onchain_pnl_report", json=body)
     assert resp.status_code == 200
     out = resp.json()
     assert out["summary"]["realized_gain_usd"] == "20"
     assert out["summary"]["complete"] is True
+    assert out["completeness"]["complete"] is True
+    assert out["completeness"]["statement_ready"] is False
+    assert out["dispositions"][0]["disposal_event_id"] == "d"
     assert "tax professional" in out["disclaimer"]
 
 
@@ -297,6 +559,40 @@ def test_route_decode_rejects_identity_field_400() -> None:
     resp = _client().post("/api/accounting/tools/decode_onchain_events", json=body)
     assert resp.status_code == 400
     assert "PII-free" in resp.text
+
+
+def test_route_rejects_raw_wallet_value_as_account_ref() -> None:
+    raw_wallet = "0x" + "a" * 40
+    body = {
+        "events": [
+            {
+                "event_id": "a",
+                "account_ref": raw_wallet,
+                "kind": "acquire",
+                "timestamp": 1,
+                "legs": [{"asset": {"asset_id": "a"}, "direction": "in", "amount": "1"}],
+            }
+        ]
+    }
+    response = _client().post("/api/accounting/tools/compute_cost_basis", json=body)
+    assert response.status_code == 400
+
+
+def test_route_rejects_duplicate_events_as_bad_request() -> None:
+    event = {
+        "event_id": "duplicate",
+        "account_ref": "acct-opaque",
+        "kind": "acquire",
+        "timestamp": 1,
+        "sequence": 0,
+        "legs": [{"asset": {"asset_id": "a"}, "direction": "in", "amount": "1"}],
+    }
+    response = _client().post(
+        "/api/accounting/tools/compute_cost_basis",
+        json={"events": [event, event | {"sequence": 1}]},
+    )
+    assert response.status_code == 400
+    assert "duplicate event_id" in response.text
 
 
 def test_route_price_history_absent_without_historian_404() -> None:

@@ -22,20 +22,31 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
 from ...disclaimers import TAX_AWARENESS
-from .cost_basis import DisposalRecord, compute_cost_basis
-from .models import BasisOverrideInput, LedgerEvent
+from .cost_basis import (
+    CalculationAssumption,
+    CalculationCompleteness,
+    CoverageMetadata,
+    DisposalRecord,
+    MethodologyMetadata,
+    ReplayMetadata,
+    compute_cost_basis,
+)
+from .lots import exact_decimal_sum
+from .models import BasisOverrideInput, LedgerEvent, ReportWindowInput
 
 
 class PnlBucket(BaseModel):
     """Aggregated realized figures for a set of disposals (a year, or overall).
 
     Sums include only disposals with a known realized gain (both proceeds and
-    basis known); the rest are counted in ``incomplete_count`` and excluded, so
-    ``complete`` says whether the sums cover every disposal."""
+    basis known); the rest are counted in ``incomplete_count`` and excluded.
+    ``complete`` is deliberately calculation-wide: unrelated open-lot, replay,
+    provenance, transfer, or fee gaps also keep the bucket incomplete."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -46,6 +57,7 @@ class PnlBucket(BaseModel):
     cost_basis_usd: Decimal
     disposal_count: int
     incomplete_count: int
+    calculation_gap_count: int
     complete: bool
 
 
@@ -60,9 +72,15 @@ class PnlReport(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    method: str
+    method: Literal["fifo"]
+    methodology: MethodologyMetadata
+    replay: ReplayMetadata
+    coverage: CoverageMetadata
+    completeness: CalculationCompleteness
+    assumptions: list[CalculationAssumption]
     summary: PnlBucket
     by_year: list[PnlYear]
+    dispositions: list[DisposalRecord]
     warnings: list[str]
     disclaimer: str
 
@@ -71,38 +89,52 @@ def _aggregate(
     disposals: list[DisposalRecord],
 ) -> tuple[Decimal, Decimal, Decimal, Decimal, Decimal, int]:
     """(realized, short_term, long_term, proceeds, cost_basis, incomplete_count)."""
-    realized = Decimal(0)
-    short_term = Decimal(0)
-    long_term = Decimal(0)
-    proceeds = Decimal(0)
-    cost_basis = Decimal(0)
+    realized_values: list[Decimal] = []
+    short_term_values: list[Decimal] = []
+    long_term_values: list[Decimal] = []
+    proceeds_values: list[Decimal] = []
+    cost_basis_values: list[Decimal] = []
     incomplete = 0
     for disposal in disposals:
+        if not disposal.complete:
+            incomplete += 1
         if (
             disposal.realized_gain_usd is None
             or disposal.proceeds_usd is None
             or disposal.cost_basis_usd is None
         ):
-            incomplete += 1
             continue
-        realized += disposal.realized_gain_usd
-        proceeds += disposal.proceeds_usd
-        cost_basis += disposal.cost_basis_usd
+        realized_values.append(disposal.realized_gain_usd)
+        proceeds_values.append(disposal.proceeds_usd)
+        cost_basis_values.append(disposal.cost_basis_usd)
         if disposal.term == "short":
-            short_term += disposal.realized_gain_usd
+            short_term_values.append(disposal.realized_gain_usd)
         elif disposal.term == "long":
-            long_term += disposal.realized_gain_usd
-    return realized, short_term, long_term, proceeds, cost_basis, incomplete
+            long_term_values.append(disposal.realized_gain_usd)
+    return (
+        exact_decimal_sum(realized_values),
+        exact_decimal_sum(short_term_values),
+        exact_decimal_sum(long_term_values),
+        exact_decimal_sum(proceeds_values),
+        exact_decimal_sum(cost_basis_values),
+        incomplete,
+    )
 
 
 def onchain_pnl_report(
     events: Sequence[LedgerEvent],
     *,
     overrides: Sequence[BasisOverrideInput] | None = None,
+    report_window: ReportWindowInput | None = None,
     method: str = "fifo",
 ) -> PnlReport:
     """Realized-PnL report: FIFO cost basis, then aggregate disposals by year."""
-    result = compute_cost_basis(events, overrides=overrides, method=method)
+    result = compute_cost_basis(
+        events,
+        overrides=overrides,
+        report_window=report_window,
+        method=method,
+    )
     disposals = result.disposals
 
     realized, short_term, long_term, proceeds, cost_basis, incomplete = _aggregate(disposals)
@@ -114,7 +146,8 @@ def onchain_pnl_report(
         cost_basis_usd=cost_basis,
         disposal_count=len(disposals),
         incomplete_count=incomplete,
-        complete=incomplete == 0,
+        calculation_gap_count=result.completeness.gap_count,
+        complete=incomplete == 0 and result.completeness.complete,
     )
 
     by_year_map: dict[int, list[DisposalRecord]] = {}
@@ -138,14 +171,21 @@ def onchain_pnl_report(
                 cost_basis_usd=cost_basis,
                 disposal_count=len(year_disposals),
                 incomplete_count=incomplete,
-                complete=incomplete == 0,
+                calculation_gap_count=result.completeness.gap_count,
+                complete=incomplete == 0 and result.completeness.complete,
             )
         )
 
     return PnlReport(
-        method=method,
+        method="fifo",
+        methodology=result.methodology,
+        replay=result.replay,
+        coverage=result.coverage,
+        completeness=result.completeness,
+        assumptions=result.assumptions,
         summary=summary,
         by_year=by_year,
+        dispositions=disposals,
         warnings=result.warnings,
         disclaimer=TAX_AWARENESS,
     )

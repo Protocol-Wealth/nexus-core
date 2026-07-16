@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Onchain accounting contract v2 (#260)
+
+#### Added
+
+- Added account-scoped FIFO queues, opening-lot snapshots, half-open report
+  windows, full-history assertions, deterministic same-timestamp sequencing, and
+  structured replay/coverage/completeness metadata.
+- Added opaque lot, account, acquisition/disposal event, transaction, transfer,
+  override, and price lineage to cost-basis and PnL outputs.
+- Added explicit same-owner transfer linking that preserves lot quantity, basis,
+  acquisition date, and lineage across accounts without realizing gain.
+- Added explicit fee allocation/payment semantics. USD costs adjust acquisition
+  basis or disposition proceeds once; a digital-asset fee leg is recorded as its
+  own account-scoped disposal.
+- Added quiet-period replay so a bounded request with no events can still return
+  opening lots, closing valuation, completeness, and a zero-disposition report.
+- Added method-pinned `2.0.0` opening snapshots with explicit completeness
+  attestation, authoritative remaining basis/fee totals, intra-event acquisition
+  order, verified evidence provenance, and replay-safe root-lot lineage.
+- Reject supported-chain raw wallet shapes in account references and reject
+  contradictory standalone fee-event metadata.
+
+#### Changed
+
+- Bumped the accounting gateway contract from `0.1.0` to `0.2.0`. Legacy request
+  fields and result fields remain accepted/present, while all-event requests now
+  carry a `missing_report_window` gap and cannot be statement-ready.
+- Replaced direction-only processing with a versioned event-treatment matrix.
+  Ambiguous DeFi transformations require an explicit caller-reviewed
+  `taxable_exchange` treatment; transfers with external/unknown ownership and
+  `other` events fail closed as structured gaps.
+- Changed holding-term classification to UTC calendar dates and the exact
+  more-than-one-year anniversary rule. Future-dated acquisition overrides,
+  duplicate refs, orphan overrides, and ambiguous equal-timestamp order now fail
+  validation.
+- Limited equal-timestamp sequence validation to replayed events; excluded
+  post-period events cannot invalidate the current report.
+- Conserved Decimal basis, fee, proceeds, and allocation totals exactly across
+  partial consumption, transfers, full disposals, and snapshot boundaries. FIFO
+  queues now reinsert transferred lots by original acquisition order and reject
+  economically ambiguous ties or conflicting split-root invariants.
+- Reject conflicting chain/decimal metadata for one asset identity, inconsistent
+  dual valuation fields, ignored tax-treatment metadata, multi-leg event-level
+  overrides, embedded raw EVM addresses, and decoder event-ID collisions. Raw
+  transaction chain context is authoritative and normalized; explicit movement
+  chains must match, while missing movement chains inherit it. Required lineage
+  and provenance strings reject whitespace-only values. Raw transactions whose
+  only movements are fee legs decode as standalone fee events.
+- Count unresolved transfers by reference (including unmatched inbound and fully
+  paired source shortfalls) and emit specific missing-reference/treatment gaps.
+  When a report ends with same-owner fragments still in transit, return closing
+  inventory totals as unknown instead of a false numeric zero.
+- Include numerically known disposal basis, proceeds, and gains in PnL aggregates
+  even when missing provenance or acquisition-date facts keep the disposal
+  incomplete; unknown-term gains remain outside short/long subtotals.
+- Corrected `describe` from `status: scaffold` to `status: available` while
+  retaining `plannedTools` as a compatibility alias. Native MCP registration
+  remains separate issue #259; the public demo profile is unchanged.
+
+#### Governance
+
+- Methodology version `2.0.0` is stamped `pending_governance_review` and every
+  result keeps `statement_ready=false` until CIO/IC/CCO review is recorded. CI,
+  deployment, or code review alone does not enable private statement composition.
+- Private identity, wallet/client linkage, ingestion, statement assembly, review,
+  release, and records retention remain outside this public repository.
+
 ### Onchain accounting P0-P4 (#248)
 
 #### Added

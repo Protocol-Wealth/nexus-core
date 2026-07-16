@@ -22,6 +22,11 @@ from typing import Any
 from pydantic import ValidationError
 
 from ...engine.accounting import (
+    ACCOUNTING_METHOD_LAST_VERIFIED,
+    ACCOUNTING_METHOD_SOURCE,
+    ACCOUNTING_METHOD_VERSION,
+    ACCOUNTING_METHODOLOGY_REVIEW_STATUS,
+    EVENT_TREATMENT_MATRIX,
     PriceHistorian,
     PriceQuery,
     PriceResult,
@@ -50,14 +55,38 @@ PLANNED_TOOLS: tuple[str, ...] = (
 )
 
 
-def _describe(_body: dict[str, Any]) -> dict[str, Any]:
-    """Scaffold introspection: the planned tool set and the ledger input schema."""
-    return {
-        "engine": "onchain-accounting",
-        "status": "scaffold",
-        "plannedTools": list(PLANNED_TOOLS),
-        "eventLedgerSchema": EventLedger.model_json_schema(),
-    }
+def _make_describe_handler(*, price_history_available: bool) -> ToolHandler:
+    """Bind introspection to the actual optional-tool registry."""
+    available = [
+        "describe",
+        "decode_onchain_events",
+        "compute_cost_basis",
+        "onchain_pnl_report",
+    ]
+    if price_history_available:
+        available.append("price_history")
+
+    def handler(_body: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "engine": "onchain-accounting",
+            "status": "available",
+            "tools": sorted(available),
+            # Compatibility alias retained for contract 0.1.0 consumers.
+            "plannedTools": list(PLANNED_TOOLS),
+            "eventLedgerSchema": EventLedger.model_json_schema(),
+            "costBasisRequestSchema": CostBasisRequest.model_json_schema(),
+            "pnlReportRequestSchema": PnlReportRequest.model_json_schema(),
+            "methodology": {
+                "method": "fifo",
+                "methodVersion": ACCOUNTING_METHOD_VERSION,
+                "source": ACCOUNTING_METHOD_SOURCE,
+                "lastVerified": ACCOUNTING_METHOD_LAST_VERIFIED.isoformat(),
+                "reviewStatus": ACCOUNTING_METHODOLOGY_REVIEW_STATUS,
+                "eventTreatment": EVENT_TREATMENT_MATRIX,
+            },
+        }
+
+    return handler
 
 
 def _decode_onchain_events(body: dict[str, Any]) -> dict[str, Any]:
@@ -66,7 +95,10 @@ def _decode_onchain_events(body: dict[str, Any]) -> dict[str, Any]:
         request = DecodeRequest.model_validate(body)
     except ValidationError as exc:
         raise AccountingInputError("invalid decode_onchain_events request body") from exc
-    ledger = decode_transactions(request.transactions)
+    try:
+        ledger = decode_transactions(request.transactions)
+    except ValueError as exc:
+        raise AccountingInputError(str(exc)) from exc
     counts: dict[str, int] = {}
     for event in ledger.events:
         counts[event.kind.value] = counts.get(event.kind.value, 0) + 1
@@ -81,12 +113,16 @@ def _compute_cost_basis(body: dict[str, Any]) -> dict[str, Any]:
         request = CostBasisRequest.model_validate(body)
     except ValidationError as exc:
         raise AccountingInputError("invalid compute_cost_basis request body") from exc
-    result = compute_cost_basis(
-        request.events,
-        overrides=request.overrides,
-        as_of_prices=request.as_of_prices,
-        method=request.method,
-    )
+    try:
+        result = compute_cost_basis(
+            request.events,
+            overrides=request.overrides,
+            as_of_prices=request.as_of_prices,
+            report_window=request.report_window,
+            method=request.method,
+        )
+    except ValueError as exc:
+        raise AccountingInputError(str(exc)) from exc
     payload: dict[str, Any] = result.model_dump(mode="json")
     return payload
 
@@ -97,7 +133,15 @@ def _onchain_pnl_report(body: dict[str, Any]) -> dict[str, Any]:
         request = PnlReportRequest.model_validate(body)
     except ValidationError as exc:
         raise AccountingInputError("invalid onchain_pnl_report request body") from exc
-    report = onchain_pnl_report(request.events, overrides=request.overrides, method=request.method)
+    try:
+        report = onchain_pnl_report(
+            request.events,
+            overrides=request.overrides,
+            report_window=request.report_window,
+            method=request.method,
+        )
+    except ValueError as exc:
+        raise AccountingInputError(str(exc)) from exc
     payload: dict[str, Any] = report.model_dump(mode="json")
     return payload
 
@@ -139,7 +183,7 @@ def build_tool_handlers(*, price_historian: PriceHistorian | None = None) -> dic
     historian is injected (production always injects one).
     """
     handlers: dict[str, ToolHandler] = {
-        "describe": _describe,
+        "describe": _make_describe_handler(price_history_available=price_historian is not None),
         "decode_onchain_events": _decode_onchain_events,
         "compute_cost_basis": _compute_cost_basis,
         "onchain_pnl_report": _onchain_pnl_report,

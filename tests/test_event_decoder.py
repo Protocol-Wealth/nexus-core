@@ -7,11 +7,14 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Literal
 
+import pytest
+
 from nexus_core.engine.accounting import (
     AssetRef,
     EventKind,
     MovementInput,
     RawTransactionInput,
+    TransferTreatment,
     classify_kind,
     decode_transaction,
     decode_transactions,
@@ -20,7 +23,9 @@ from nexus_core.engine.accounting import (
 
 
 def _mv(asset_id: str, direction: Literal["in", "out"], amount: str) -> MovementInput:
-    return MovementInput(asset=AssetRef(asset_id=asset_id), direction=direction, amount=Decimal(amount))
+    return MovementInput(
+        asset=AssetRef(asset_id=asset_id), direction=direction, amount=Decimal(amount)
+    )
 
 
 def _tx(
@@ -32,6 +37,7 @@ def _tx(
     method: str | None = None,
     tx_ref: str | None = None,
     account_ref: str = "acct-1",
+    sequence: int | None = None,
 ) -> RawTransactionInput:
     return RawTransactionInput(
         account_ref=account_ref,
@@ -41,6 +47,7 @@ def _tx(
         protocol_hint=protocol_hint,
         method=method,
         tx_ref=tx_ref,
+        sequence=sequence,
     )
 
 
@@ -96,11 +103,15 @@ def test_classify_no_category_movement_pattern() -> None:
 
 def test_decode_evm_uniswap_swap() -> None:
     ev = decode_transaction(
-        _tx([_mv("eth:usdc", "out", "1000"), _mv("eth:weth", "in", "0.3")], protocol_hint="uniswap_v3")
+        _tx(
+            [_mv("eth:usdc", "out", "1000"), _mv("eth:weth", "in", "0.3")],
+            protocol_hint="uniswap_v3",
+        )
     )
     assert ev.kind == EventKind.swap
     assert len(ev.legs) == 2
     assert ev.event_id == "ethereum:acct-1:1"  # synthetic id when no tx_ref
+    assert {leg.asset.chain for leg in ev.legs} == {"ethereum"}
 
 
 def test_decode_solana_marinade_stake() -> None:
@@ -130,6 +141,46 @@ def test_decode_solana_jlp_deposit_is_lp_add() -> None:
 def test_decode_bitcoin_transfer_in() -> None:
     ev = decode_transaction(_tx([_mv("bitcoin:btc", "in", "0.5")], chain="bitcoin"))
     assert ev.kind == EventKind.transfer_in
+    assert ev.transfer_ref == ev.event_id
+    assert ev.transfer_treatment == TransferTreatment.unknown
+
+
+def test_fee_movement_does_not_change_principal_classification() -> None:
+    tx = _tx(
+        [
+            _mv("eth:usdc", "in", "100"),
+            MovementInput(
+                asset=AssetRef(asset_id="eth:eth"),
+                direction="out",
+                amount=Decimal("0.001"),
+                role="fee",
+            ),
+        ]
+    )
+    event = decode_transaction(tx)
+    assert event.kind == EventKind.transfer_in
+    assert event.legs[1].role == "fee"
+
+
+def test_fee_only_transaction_decodes_as_fee_event() -> None:
+    event = decode_transaction(
+        _tx(
+            [
+                MovementInput(
+                    asset=AssetRef(asset_id="eth:eth"),
+                    direction="out",
+                    amount=Decimal("0.001"),
+                    role="fee",
+                )
+            ],
+            tx_ref="fee-transaction",
+        )
+    )
+
+    assert event.kind == EventKind.fee
+    assert event.transfer_ref is None
+    assert event.transfer_treatment is None
+    assert event.legs[0].role == "fee"
 
 
 def test_decode_unknown_protocol_multi_asset_is_other_not_dropped() -> None:
@@ -155,3 +206,41 @@ def test_decode_transactions_batch_preserves_order() -> None:
     )
     assert len(ledger.events) == 2
     assert [e.kind for e in ledger.events] == [EventKind.transfer_in, EventKind.transfer_out]
+
+
+def test_fallback_event_ids_include_sequence_and_reject_remaining_collisions() -> None:
+    sequenced = decode_transactions(
+        [
+            _tx([_mv("eth:a", "in", "1")], sequence=0),
+            _tx([_mv("eth:a", "out", "1")], sequence=1),
+        ]
+    )
+    assert [event.event_id for event in sequenced.events] == [
+        "ethereum:acct-1:1:0",
+        "ethereum:acct-1:1:1",
+    ]
+
+    duplicate = _tx([_mv("eth:a", "in", "1")])
+    with pytest.raises(ValueError, match="duplicate event_id"):
+        decode_transactions([duplicate, duplicate])
+
+
+def test_raw_transaction_normalizes_chain_and_rejects_movement_mismatch() -> None:
+    normalized = _tx([_mv("eth:a", "in", "1")], chain=" Ethereum ")
+    assert normalized.chain == "ethereum"
+    assert decode_transaction(normalized).legs[0].asset.chain == "ethereum"
+
+    with pytest.raises(ValueError, match="movement asset chain must match"):
+        _tx(
+            [
+                MovementInput(
+                    asset=AssetRef(asset_id="asset", chain="solana"),
+                    direction="in",
+                    amount=Decimal("1"),
+                )
+            ],
+            chain="ethereum",
+        )
+
+    with pytest.raises(ValueError, match="chain must not be blank"):
+        _tx([_mv("eth:a", "in", "1")], chain="   ")

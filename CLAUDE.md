@@ -3,28 +3,39 @@
 > Repo: `Protocol-Wealth/nexus-core` · License: Apache 2.0 · Patent Pending: USPTO #64/034,229 · OIN member.
 > Open-source extraction of the [Protocol Wealth research engine](https://nexusmcp.site); nothing in this repo is client-specific or proprietary to PW.
 
-**Current state (2026-07-15 ET — onchain accounting P0-P4 deployed on restricted REST):**
+**Current state (2026-07-16 ET — accounting v2 hardening in source; live remains v1):**
 - **Live deployment:** commit `d528389` is on `origin/main`; Cloud Run revision
   `nexus-core-00068-5pf` is Ready and serves 100% traffic. Live `/health`
   returned `200`, while unauthenticated `/api/accounting/tools` returned the
   expected service-key `401` under `NEXUS_ACCESS_MODE=restricted`.
-- **Accounting contract `0.1.0`:** P0-P4 are merged through PRs #254-#258. The
+- **Live accounting contract `0.1.0`:** P0-P4 are merged through PRs #254-#258. The
   REST gateway exposes `describe`, `price_history`, `decode_onchain_events`,
   `compute_cost_basis`, and `onchain_pnl_report`. Inputs are de-identified
   public-chain/market facts with opaque references; identity-shaped keys fail
   closed, unknown price/basis stays explicit, and accounting/tax disclaimers are
-  canonical.
+  canonical. Current source advances the contract to `0.2.0`; it must be merged
+  and deployed before the live handshake changes.
+- **Accounting methodology `2.0.0`:** current source scopes FIFO by account,
+  handles explicitly linked same-owner transfers without gain, allocates fees
+  once plus any separate fee-asset disposal, uses calendar holding periods,
+  conserves authoritative basis/fee totals across partial lots and transfers,
+  supports full-history or method-pinned complete opening-state replay, and
+  returns root-lot/event/transaction/evidence/price lineage with structured
+  completeness. Ambiguous DeFi and external/unknown transfer treatments fail
+  closed. Calculation completeness is not a closing-valuation or deliverable
+  attestation; the private composer applies section-specific gates. See
+  `docs/ONCHAIN-ACCOUNTING.md`.
 - **Transport boundary:** accounting is REST-only today. The handlers are not in
   native MCP `tools/list`; issue #259 tracks reuse through a full-profile MCP
-  adapter and correction of the accounting `describe` handler's stale
-  `status: scaffold` / `plannedTools` metadata. Production stays on
+  adapter. Accounting v2 corrects the REST `describe` status while retaining
+  `plannedTools` as a compatibility alias. Production stays on
   `NEXUS_PUBLIC_MCP_PROFILE=demo`, whose public tool set must remain unchanged.
 - **Private boundary:** P0-P4 are calculation substrate, not statement readiness.
   Custodian ingestion, wallet/client linkage, statement assembly/rendering,
   advisor review, release, tax-return preparation, and books-and-records retention
-  remain in the private `pw-api`/PWOS plane. Issue #260 blocks statement wiring
-  until account isolation, transfers, fees, calendar holding periods, period
-  replay, lineage, and methodology review are complete.
+  remain in the private `pw-api`/PWOS plane. Issue #260 code hardening is in
+  current source, but its CIO/IC/CCO methodology review remains pending and the
+  engine therefore forces `statement_ready=false`.
 - **Validation:** CI run `29451408938` passed ruff, strict mypy, and pytest with
   coverage; SPDX, license-compliance, and both CodeQL checks also passed.
 

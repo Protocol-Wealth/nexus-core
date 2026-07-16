@@ -22,9 +22,9 @@ rules and protocol specs. No AGPL code (e.g. Rotki) is copied.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ...engine.accounting.models import (
     AsOfPriceInput,
@@ -32,14 +32,22 @@ from ...engine.accounting.models import (
     BasisOverrideInput,
     EventKind,
     EventLedger,
+    FeeAllocation,
+    FeePayment,
     LedgerEvent,
     LedgerLeg,
     MovementInput,
+    OpeningLotInput,
+    OpeningStateInput,
     RawTransactionInput,
+    ReportWindowInput,
+    TaxTreatment,
+    TransferTreatment,
+    validate_accounting_decimal,
 )
 
 #: The accounting contract version. Bump on any breaking request/response change.
-ACCOUNTING_CONTRACT_VERSION = "0.1.0"
+ACCOUNTING_CONTRACT_VERSION = "0.2.0"
 
 _MAX_PUBLIC_ERROR_CHARS = 500
 _TRACEBACK_MARKERS = (
@@ -64,8 +72,13 @@ IDENTITY_KEYS: frozenset[str] = frozenset(
         "phone",
         "address",
         "clientid",
+        "clientref",
         "client",
         "householdid",
+        "householdref",
+        "customerid",
+        "personid",
+        "personref",
         "walletaddress",
         "wallet",
     }
@@ -141,6 +154,8 @@ class PriceOverrideInput(BaseModel):
     timestamp: int = Field(ge=0)
     price_usd: Decimal = Field(ge=0)
 
+    _bounded_price = field_validator("price_usd")(validate_accounting_decimal)
+
 
 class PriceHistoryRequest(BaseModel):
     """Input to the ``price_history`` tool."""
@@ -172,10 +187,17 @@ class CostBasisRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    events: list[LedgerEvent] = Field(min_length=1, max_length=5000)
+    events: list[LedgerEvent] = Field(max_length=5000)
     overrides: list[BasisOverrideInput] = Field(default_factory=list, max_length=1000)
     as_of_prices: list[AsOfPriceInput] = Field(default_factory=list, max_length=2000)
+    report_window: ReportWindowInput | None = None
     method: Literal["fifo"] = "fifo"
+
+    @model_validator(mode="after")
+    def validate_quiet_period(self) -> Self:
+        if not self.events and self.report_window is None:
+            raise ValueError("events must not be empty without a report_window")
+        return self
 
 
 # --- onchain_pnl_report tool input (P4) --------------------------------------
@@ -187,9 +209,16 @@ class PnlReportRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    events: list[LedgerEvent] = Field(min_length=1, max_length=5000)
+    events: list[LedgerEvent] = Field(max_length=5000)
     overrides: list[BasisOverrideInput] = Field(default_factory=list, max_length=1000)
+    report_window: ReportWindowInput | None = None
     method: Literal["fifo"] = "fifo"
+
+    @model_validator(mode="after")
+    def validate_quiet_period(self) -> Self:
+        if not self.events and self.report_window is None:
+            raise ValueError("events must not be empty without a report_window")
+        return self
 
 
 __all__ = [
@@ -204,12 +233,19 @@ __all__ = [
     "PnlReportRequest",
     "EventKind",
     "EventLedger",
+    "FeeAllocation",
+    "FeePayment",
     "LedgerEvent",
     "LedgerLeg",
     "MovementInput",
+    "OpeningLotInput",
+    "OpeningStateInput",
     "PriceHistoryRequest",
     "PriceOverrideInput",
     "PriceQueryInput",
     "RawTransactionInput",
+    "ReportWindowInput",
+    "TaxTreatment",
+    "TransferTreatment",
     "find_identity_keys",
 ]

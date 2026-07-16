@@ -21,7 +21,14 @@ exchange-rate / APY enrichment (Marinade, Sanctum) is a follow-on.
 
 from __future__ import annotations
 
-from .models import EventKind, EventLedger, LedgerEvent, LedgerLeg, RawTransactionInput
+from .models import (
+    EventKind,
+    EventLedger,
+    LedgerEvent,
+    LedgerLeg,
+    RawTransactionInput,
+    TransferTreatment,
+)
 
 # Protocol categories. Keys are normalized (lower-case, alphanumerics only);
 # see :func:`_normalize`. Curated from public protocol identity, extensible.
@@ -146,39 +153,65 @@ def classify_kind(
 
 def decode_transaction(tx: RawTransactionInput) -> LedgerEvent:
     """Decode one raw transaction into a normalized :class:`LedgerEvent`."""
-    in_count = sum(1 for m in tx.movements if m.direction == "in")
-    out_count = sum(1 for m in tx.movements if m.direction == "out")
-    kind = classify_kind(resolve_category(tx.protocol_hint), in_count, out_count, tx.method)
+    principal = [movement for movement in tx.movements if movement.role == "principal"]
+    in_count = sum(1 for movement in principal if movement.direction == "in")
+    out_count = sum(1 for movement in principal if movement.direction == "out")
+    kind = (
+        EventKind.fee
+        if not principal
+        else classify_kind(resolve_category(tx.protocol_hint), in_count, out_count, tx.method)
+    )
 
     legs = [
         LedgerLeg(
-            asset=m.asset,
+            asset=(
+                m.asset
+                if m.asset.chain is not None
+                else m.asset.model_copy(update={"chain": tx.chain})
+            ),
             direction=m.direction,
             amount=m.amount,
             unit_price_usd=m.unit_price_usd,
             usd_value=m.usd_value,
+            role=m.role,
+            price_source=m.price_source,
+            price_as_of=m.price_as_of,
         )
         for m in tx.movements
     ]
 
     # Deterministic id: the caller's tx_ref when present, else a stable synthetic
     # from opaque fields (no Date/random, so decoding is reproducible).
-    event_id = tx.tx_ref or f"{tx.chain}:{tx.account_ref}:{tx.timestamp}"
+    sequence_suffix = "" if tx.sequence is None else f":{tx.sequence}"
+    event_id = tx.tx_ref or f"{tx.chain}:{tx.account_ref}:{tx.timestamp}{sequence_suffix}"
+    is_transfer = kind in (EventKind.transfer_in, EventKind.transfer_out)
 
     return LedgerEvent(
         event_id=event_id,
         account_ref=tx.account_ref,
         kind=kind,
         timestamp=tx.timestamp,
+        sequence=tx.sequence,
         tx_ref=tx.tx_ref,
         legs=legs,
         fee_usd=tx.fee_usd,
+        fee_allocation=tx.fee_allocation,
+        fee_payment=tx.fee_payment,
+        transfer_ref=(tx.transfer_ref or event_id) if is_transfer else None,
+        transfer_treatment=(tx.transfer_treatment or TransferTreatment.unknown)
+        if is_transfer
+        else None,
+        tax_treatment=tx.tax_treatment,
     )
 
 
 def decode_transactions(transactions: list[RawTransactionInput]) -> EventLedger:
     """Decode a batch of raw transactions into a normalized event ledger."""
-    return EventLedger(events=[decode_transaction(tx) for tx in transactions])
+    events = [decode_transaction(tx) for tx in transactions]
+    event_ids = [event.event_id for event in events]
+    if len(set(event_ids)) != len(event_ids):
+        raise ValueError("decoded transactions produced duplicate event_id values")
+    return EventLedger(events=events)
 
 
 __all__ = [

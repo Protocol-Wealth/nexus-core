@@ -25,7 +25,7 @@ The public deployment has:
 | Market/economic data | `data/market/`, `data/macro/` | Quotes, history, FRED/BEA/EIA/Treasury-style macro adapters |
 | Options | `engine/pricing/`, `app/options.py` | Black-Scholes overlays + Deribit crypto options; educational only |
 | On-chain/DeFi | `data/onchain/`, `app/{wallet,chain,vaults,lp,solana}.py` | Public wallet/chain/vault/LP/Solana data |
-| Onchain accounting | `engine/accounting/`, `app/accounting/` | Contract `0.1.0`; price history, de-identified event decoding, FIFO cost basis, and realized PnL through restricted REST only |
+| Onchain accounting | `engine/accounting/`, `app/accounting/` | Last verified deployment contract `0.1.0`; current source contract `0.2.0` adds account-scoped/replay-safe accounting and remains restricted REST only |
 | Benchmarks/history | `engine/benchmarks.py`, `data/snapshots.py` | Daily benchmark snapshots via private Cloud SQL |
 | Planning math | `engine/planning/`, `app/planning/` | 34 PII-free tools via native MCP and the primary `/api/planning/tools` REST gateway; `/mcp/tools` is a legacy alias |
 | MCP transport | `mcp/server/`, `app/mcp_mount.py` | Read-only full/demo profiles; accounting is not registered yet (#259) |
@@ -40,9 +40,11 @@ custody/trading actions, suitability determinations, client-specific planning
 records, custodian/client transaction ingestion, wallet-to-client mappings,
 statement/report-production workflows, tax-return preparation, artifact receipts,
 or private PWOS workflow state. Those belong in closed Protocol Wealth systems
-or consumer repos. The public-safe accounting math does not change that boundary;
-#260 blocks statement wiring until its account/transfer/fee, period-replay, and
-lineage semantics are hardened and methodology-reviewed.
+or consumer repos. The public-safe accounting math does not change that boundary.
+Contract `0.2.0` source implements #260's account/transfer/fee, period-replay, and
+lineage semantics, but statement wiring remains blocked until deploy verification
+and CIO/IC/CCO methodology review. The engine forces `statement_ready=false`
+while review is pending.
 
 ## Auth And OAuth
 
