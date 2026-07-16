@@ -22,8 +22,8 @@ Provided as-is under Apache-2.0. Educational use only — nothing here is invest
 Current live status is tracked in [CURRENT-STATE.md](CURRENT-STATE.md). Future
 work is issue-linked in [ROADMAP.md](ROADMAP.md) and GitHub Issues.
 
-As of the 2026-07-15 ET closeout, commit `d528389` is deployed on Cloud Run
-revision `nexus-core-00068-5pf`. The hosted production posture remains a public
+As of the 2026-07-16 ET closeout, commit `70bd5d5` is deployed on Cloud Run
+revision `nexus-core-00069-6m7`. The hosted production posture remains a public
 demo MCP surface plus authenticated REST/JSON calculation endpoints. Anonymous
 MCP clients can use the low-risk demo tool set; `/api/*` and the planning and
 accounting JSON gateways are service-key gated in production and should be
@@ -31,21 +31,22 @@ called server-to-server by `pw-api`, not directly from browser apps.
 PWOS/PWPortal browser code should call their own BFF/API layer, which keeps
 Nexus keys out of clients.
 
-The P0-P4 onchain-accounting substrate is deployed through
+The hardened onchain-accounting substrate is deployed through
 `GET /api/accounting/tools` and `POST /api/accounting/tools/{tool_id}` with
-accounting contract `0.1.0`. Current source advances that contract to `0.2.0`
-with account-scoped FIFO, explicit transfer/fee/event treatment, bounded replay,
+accounting contract `0.2.0`, with account-scoped FIFO, explicit
+transfer/fee/event treatment, bounded replay,
 calendar holding periods, exact total-basis conservation, method-pinned opening
 snapshots, replay-safe lineage, and structured completeness; see
 [the accounting contract guide](docs/ONCHAIN-ACCOUNTING.md). The source change
-must be merged and deployed before the live version handshake changes. These
+was released through PR #262. These
 accounting handlers are **not yet registered in native MCP**; issue
 [#259](https://github.com/Protocol-Wealth/nexus-core/issues/259) tracks that
 full-profile adapter, while the hosted demo MCP profile stays unchanged. This is
 calculation substrate, not an end-to-end client statement or tax-return system.
-Issue [#260](https://github.com/Protocol-Wealth/nexus-core/issues/260) tracks this
-hardening. The code keeps `statement_ready=false` while methodology review is
-pending; CIO/IC/CCO approval remains required before private statement wiring.
+Issue [#260](https://github.com/Protocol-Wealth/nexus-core/issues/260) tracks the
+remaining release gate. The code keeps `statement_ready=false` while methodology
+review is pending; private `pw-api` compatibility and CIO/IC/CCO approval remain
+required before statement composition is enabled.
 
 The current options substrate includes the MBOUM equity option expiration/chain
 provider, batch collar screens, and a collar-book realistic-fill layer. The
@@ -99,7 +100,7 @@ private ingestion.
 | `GET /api/usage` | Provider usage / quota report |
 | `POST /mcp` | Model Context Protocol over HTTP (FastMCP, also stdio). In full mode, `tools/list` = research tools + `health`/`describe`/`get_quotes` + 34 planning tools; in demo mode, only closed-world demo tools are registered. All tools are read-only |
 | `GET /api/planning/tools` · `POST /api/planning/tools/{id}` | Planning JSON gateway (pw-api / pwplan-core contractVersion `0.1.0`, PII-free). Legacy `/mcp/tools` aliases remain for compatibility |
-| `GET /api/accounting/tools` · `POST /api/accounting/tools/{id}` | Restricted REST accounting gateway (current source contractVersion `0.2.0`): `describe`, `price_history`, `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report`. The last verified deployment remains `0.1.0` until this source is released. Not yet registered in native MCP; see #259 |
+| `GET /api/accounting/tools` · `POST /api/accounting/tools/{id}` | Restricted REST accounting gateway (deployed contractVersion `0.2.0` on Cloud Run revision `nexus-core-00069-6m7`): `describe`, `price_history`, `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report`. Not yet registered in native MCP; see #259 |
 
 ### Regime & Scoring
 

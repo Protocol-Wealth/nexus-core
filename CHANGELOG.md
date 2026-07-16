@@ -66,6 +66,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   retaining `plannedTools` as a compatibility alias. Native MCP registration
   remains separate issue #259; the public demo profile is unchanged.
 
+#### Deployment
+
+- PR #262 merged at commit `70bd5d5` and was deployed on 2026-07-16 ET to
+  Cloud Run revision `nexus-core-00069-6m7` at 100% traffic.
+- Custom-domain and direct Cloud Run health checks returned HTTP 200. Anonymous
+  accounting discovery remained service-key gated with HTTP 401, and the public
+  demo MCP profile, restricted REST mode, VPC, Cloud SQL, scaling, and secret
+  bindings were preserved.
+- Deployment does not enable private statement composition. The `pw-api`
+  contract compatibility gate and CIO/IC/CCO methodology review remain open.
+
 #### Governance
 
 - Methodology version `2.0.0` is stamped `pending_governance_review` and every

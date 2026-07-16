@@ -20,17 +20,18 @@ public OAuth-compatible demo endpoint with only closed-world demo tools, while
 server-to-server key path. Browser apps such as PWOS and PWPortal should call
 their own BFF/API routes and never hold Nexus service keys.
 
-The P0-P4 onchain-accounting engine is now deployed on that restricted REST
-surface at commit `d528389`, Cloud Run revision `nexus-core-00068-5pf`. The
-`0.1.0` accounting gateway exposes historical pricing, de-identified event
-decoding, FIFO cost basis, and realized-PnL aggregation. It is calculation
-substrate only: private ingestion, client linkage, statement production, review,
-and retention remain in the private stack. Native MCP registration is not yet
-shipped and is tracked in #259; the hosted demo MCP tool set remains unchanged.
-Accounting contract `0.2.0` in current source implements #260's FIFO/PnL
-semantics, exact remaining-basis conservation, method-pinned replay, and root
-lineage hardening. Statement wiring remains blocked until that source
-is merged/deployed and its methodology receives CIO/IC/CCO review.
+The hardened onchain-accounting engine is deployed on that restricted REST
+surface at commit `70bd5d5`, Cloud Run revision `nexus-core-00069-6m7`. The
+`0.2.0` accounting gateway exposes historical pricing, de-identified event
+decoding, account-scoped FIFO cost basis/replay, and realized-PnL aggregation.
+It is calculation substrate only: private ingestion, client linkage, statement
+production, review, and retention remain in the private stack. Native MCP
+registration is not yet shipped and is tracked in #259; the hosted demo MCP tool
+set remains unchanged.
+Accounting contract `0.2.0` implements #260's FIFO/PnL semantics, exact
+remaining-basis conservation, method-pinned replay, and root-lineage hardening.
+Statement wiring remains blocked until the private `pw-api` consumer passes its
+compatibility gate and the methodology receives CIO/IC/CCO review.
 
 Current source also corrects the Monte Carlo `student_t` return model so its
 fat-tailed draw is scaled to the caller-supplied covariance matrix. Student-t
@@ -217,8 +218,8 @@ gracefully to `None` / empty / `503` when its key is absent.
   (`compute_cost_basis`), and realized-PnL/year rollups
   (`onchain_pnl_report`). Unknown prices and basis remain explicit rather than
   fabricated as zero; identity-shaped keys fail closed; canonical accounting/tax
-  disclaimers are attached. Deployed through restricted REST on
-  `nexus-core-00068-5pf`; not yet registered in native MCP.
+  disclaimers are attached. Contract `0.2.0` is deployed through restricted REST
+  on `nexus-core-00069-6m7`; not yet registered in native MCP.
 - **`GET /api/wallet/{address}`** — anonymous EVM wallet balance (DeBank).
 - **`GET /api/chain/chains`, `/api/chain/balance/{chain}/{address}`,
   `/api/chain/native/{address}`** — multi-chain native balances via Tatum
@@ -300,14 +301,15 @@ gracefully to `None` / empty / `503` when its key is absent.
 
 Prioritized. Top item first.
 
-**Accounting semantics and replay hardening — open issue #260.** Contract `0.2.0`
-source now scopes FIFO books by account, handles linked same-owner transfers and
-explicit fees, conserves authoritative basis across snapshot boundaries, uses
-calendar terms, supports full-history/method-pinned opening-state replay, and
-returns deterministic root lineage plus structured completeness. Keep private
-cost-basis and realized-PnL statement composition disabled until merge/deploy
-verification and CIO/IC/CCO methodology review; source enforces that gate through
-`statement_ready=false` while review remains pending.
+**Accounting semantics and replay hardening — open issue #260.** Deployed
+contract `0.2.0` scopes FIFO books by account, handles linked same-owner
+transfers and explicit fees, conserves authoritative basis across snapshot
+boundaries, uses calendar terms, supports full-history/method-pinned
+opening-state replay, and returns deterministic root lineage plus structured
+completeness. Keep private
+cost-basis and realized-PnL statement composition disabled until `pw-api`
+consumer compatibility and CIO/IC/CCO methodology review; the engine enforces
+that gate through `statement_ready=false` while review remains pending.
 
 **Native MCP accounting adapter — open issue #259 (completes #248).** Reuse the
 deployed accounting handlers in the native MCP full profile with the same
