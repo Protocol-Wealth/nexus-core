@@ -20,6 +20,7 @@ from nexus_core.app.accounting.contract import (
     ACCOUNTING_CONTRACT_VERSION,
     EventLedger,
     OpeningLotInput,
+    PriceHistoryRequest,
     RawTransactionInput,
     find_identity_keys,
 )
@@ -628,6 +629,47 @@ def test_route_price_history_prices_via_override() -> None:
     assert price["status"] == "priced"
     assert price["priceUsd"] == "0.999"
     assert price["source"] == "override"
+
+
+def test_price_history_allows_duplicate_query_slots_with_one_override() -> None:
+    body = {
+        "queries": [
+            {"coin": "eth:usdc", "timestamp": 100},
+            {"coin": "eth:usdc", "timestamp": 100},
+        ],
+        "overrides": [{"coin": "eth:usdc", "timestamp": 100, "price_usd": "0.999"}],
+    }
+    request = PriceHistoryRequest.model_validate(body)
+    assert len(request.queries) == 2
+
+    prices = build_tool_handlers(price_historian=PriceHistorian([]))["price_history"](body)[
+        "prices"
+    ]
+    assert len(prices) == 2
+    assert all(price["priceUsd"] == "0.999" for price in prices)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        [{"coin": "eth:dai", "timestamp": 100, "price_usd": "1"}],
+        [
+            {"coin": "eth:usdc", "timestamp": 100, "price_usd": "0.999"},
+            {"coin": "eth:usdc", "timestamp": 100, "price_usd": "1.001"},
+        ],
+    ],
+    ids=["orphan", "duplicate"],
+)
+def test_price_history_rejects_ambiguous_override_coordinates(
+    overrides: list[dict[str, object]],
+) -> None:
+    with pytest.raises(ValidationError):
+        PriceHistoryRequest.model_validate(
+            {
+                "queries": [{"coin": "eth:usdc", "timestamp": 100}],
+                "overrides": overrides,
+            }
+        )
 
 
 def test_route_price_history_gap_is_explicit_null() -> None:

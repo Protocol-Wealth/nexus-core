@@ -771,6 +771,38 @@ def test_unknown_disposition_proceeds_cannot_be_calculation_complete() -> None:
 
 
 @pytest.mark.parametrize(
+    ("proceeds", "expected_missing"),
+    [
+        (
+            None,
+            [
+                "matching_lot",
+                "proceeds_usd",
+                "cost_basis_usd",
+                "acquired_at",
+                "proceeds_price_provenance",
+            ],
+        ),
+        ("10", ["matching_lot", "cost_basis_usd", "acquired_at"]),
+    ],
+)
+def test_unmatched_disposition_reports_exact_missing_fields(
+    proceeds: str | None,
+    expected_missing: list[str],
+) -> None:
+    result = compute_cost_basis(
+        [_ev("disp", EventKind.dispose, 1, [_leg("asset", "out", "1", proceeds)])],
+        report_window=_window(1, 2),
+    )
+
+    disposal = result.disposals[0]
+    assert disposal.missing_fields == expected_missing
+    assert "basis_provenance" not in disposal.missing_fields
+    assert disposal.complete is False
+    assert result.completeness.complete is False
+
+
+@pytest.mark.parametrize(
     ("disposed_at", "expected"),
     [
         (_ts(2025, 2, 28), "short"),

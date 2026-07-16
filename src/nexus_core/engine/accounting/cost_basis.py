@@ -728,6 +728,12 @@ def _record_disposals(
     gross = None if gross_allocations is None else gross_allocations[shortfall_index]
     fee = fee_allocations[shortfall_index]
     proceeds = None if gross is None else exact_decimal_subtract(gross, fee)
+    missing = ["matching_lot"]
+    if proceeds is None:
+        missing.append("proceeds_usd")
+    missing.extend(["cost_basis_usd", "acquired_at"])
+    if leg.price_source is None or leg.price_as_of is None:
+        missing.append("proceeds_price_provenance")
     disposals.append(
         DisposalRecord(
             disposition_ref=f"{event.event_id}:out:{leg_index}:shortfall",
@@ -762,7 +768,7 @@ def _record_disposals(
             holding_days=None,
             term=None,
             complete=False,
-            missing_fields=["matching_lot", "cost_basis_usd", "acquired_at"],
+            missing_fields=missing,
         )
     )
     message = (
