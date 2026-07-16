@@ -224,7 +224,7 @@ curl https://nexus-core-XXXXXX-uc.a.run.app/health
 curl https://nexus-core-XXXXXX-uc.a.run.app/health/db
 # Hosted native `/mcp` uses transparent OAuth when `MCP_OAUTH_SIGNING_KEY` is
 # mounted. With `NEXUS_PUBLIC_MCP_PROFILE=demo`, an OAuth MCP `tools/list` should
-# return only option_price, collar_book, health, and describe.
+# return only option_price, collar_book, classify_layer, health, and describe.
 
 # Restricted REST/planning paths should 401 without the pw-api service key.
 curl -i https://nexus-core-XXXXXX-uc.a.run.app/api/planning/tools

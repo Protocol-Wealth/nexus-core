@@ -31,6 +31,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   set is unchanged. Private ingestion, client linkage, statement assembly,
   approval, release, and retention remain outside nexus-core.
 
+#### Deployment
+
+- PR #264 merged reviewed source head `87afc45` as commit `e5f4d84` and was
+  deployed on 2026-07-16 ET to Cloud Run revision `nexus-core-00070-zhx` at 100%
+  traffic.
+- Regional Cloud Build `613cea11-beab-4e02-aca8-60837d6d35b0` succeeded. The
+  deployed image digest is
+  `sha256:5d9b9bdad08fe300a5196e6f2824a48f749e067f8d782bc0c0599f474ccfb097`.
+- Custom-domain, direct, regional, and database health checks returned HTTP 200;
+  anonymous restricted REST checks returned HTTP 401. The live OAuth MCP flow
+  passed and listed only `classify_layer`, `collar_book`, `describe`, `health`,
+  and `option_price`, confirming accounting remains absent from hosted demo mode.
+- Issues #259 and #248 are closed. The release does not enable private statement
+  composition or change the `pw-api#789` compatibility and methodology gate.
+
 ### Onchain accounting contract v2 (#260)
 
 #### Added

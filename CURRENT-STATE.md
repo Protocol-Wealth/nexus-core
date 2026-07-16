@@ -5,24 +5,28 @@ verification. For the architectural overview see [README.md](README.md); for
 deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
 [AUDIT.md](AUDIT.md).
 
-- **Last docs closeout:** 2026-07-16 ET — accounting contract `0.2.0` is merged
-  and deployed. Current source completes #259's native MCP adapter by reusing
-  the same four accounting calculation handlers and configured price historian
-  in the full profile. The production service remains on the demo profile, so
-  its public MCP tool list is unchanged. Private statement use remains held
+- **Last docs closeout:** 2026-07-16 ET — accounting epic #248, including #259's
+  native MCP adapter, is merged and deployed. PR #264 reuses the same four
+  accounting calculation handlers and configured price historian in the full
+  profile; issues #248 and #259 are closed. The production service remains on
+  the demo profile, so accounting is absent from its public MCP tool list.
+  Private statement use remains held
   pending `pw-api` consumer compatibility and CIO/IC/CCO methodology review;
   ingestion, wallet/client linkage, statement assembly, review, and retention
   remain in `pw-api`/PWOS rather than this public engine.
-- **Last live verified:** 2026-07-16 ET — commit `70bd5d5` is on `origin/main`;
-  Cloud Run revision `nexus-core-00069-6m7` is Ready and serves 100% traffic.
-  Custom-domain and direct Cloud Run `/health` returned `200`; unauthenticated
-  `/api/accounting/tools` returned the expected service-key `401`. The deployed
-  image was built from the reviewed merge tree and contains contract `0.2.0`.
-  No production service-key value was read for this closeout, so an authenticated
-  v2 version handshake was not rerun. The service still sets
+- **Last live verified:** 2026-07-16 ET — commit `e5f4d84` is on `origin/main`;
+  Cloud Run revision `nexus-core-00070-zhx` is Ready and serves 100% traffic.
+  Custom-domain, direct, and regional Cloud Run `/health` returned `200`;
+  `/health/db` also returned `200`, while unauthenticated accounting, planning,
+  and regime REST requests returned the expected service-key `401`. A complete
+  OAuth MCP flow succeeded and `tools/list` returned `classify_layer`,
+  `collar_book`, `describe`, `health`, and `option_price`, with accounting absent
+  under the demo profile. No production service-key value was read, so an
+  authenticated v2 REST handshake was not rerun. The service still sets
   `NEXUS_PUBLIC_MCP_PROFILE=demo` and `NEXUS_ACCESS_MODE=restricted`.
-- **Current accounting source:** P0-P4 are merged through PRs #254-#258 and the
-  #260 hardening is merged through PR #262. Deployed accounting contract `0.2.0`
+- **Current accounting release:** P0-P4 are merged through PRs #254-#258, the
+  #260 hardening is merged through PR #262, and #259's native adapter is merged
+  through PR #264. Deployed accounting contract `0.2.0`
   contains `describe`, `price_history`, `decode_onchain_events`,
   `compute_cost_basis`, and `onchain_pnl_report`. The #259 adapter registers the
   four calculation handlers in native MCP full mode, with the same recursive
@@ -268,7 +272,7 @@ Crypto option underliers: **BTC, ETH** are coin-settled (inverse, queried as `cu
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/analytics` | The Graph + RPC (Tatum) + Merkl | `THEGRAPH_API_KEY`, `TATUM_API_KEY` (uncollected fees); USD prices are required query params |
 | `GET /api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` | same + hold-strategy benchmark returns over a window | `THEGRAPH_API_KEY`, `TATUM_API_KEY`; USD prices are required query params |
 | `GET /api/lp/aerodrome/{token_id}/analytics` | Aerodrome Slipstream on **Base**, read on-chain via Tatum RPC (no subgraph) | `TATUM_API_KEY`; USD prices required. `data_mode: onchain_rpc` — value/in-range/amounts/uncollected fees only; IL, fee APR, AERO gauge APR null/zero |
-| `GET /api/accounting/tools` | deployed accounting contract `0.2.0` + REST handler discovery; Cloud Run revision `nexus-core-00069-6m7` | `NEXUS_API_KEYS` in hosted restricted mode |
+| `GET /api/accounting/tools` | deployed accounting contract `0.2.0` + REST handler discovery; Cloud Run revision `nexus-core-00070-zhx` | `NEXUS_API_KEYS` in hosted restricted mode |
 | `POST /api/accounting/tools/{tool_id}` | historical pricing, event decoding, FIFO cost basis, and realized-PnL aggregation over de-identified facts | `NEXUS_API_KEYS` in hosted restricted mode |
 
 Uniswap V3 analytics computes value, in-range status, **exact** impermanent-loss-vs-HODL,
@@ -443,15 +447,17 @@ key is absent.
 
 ## Recent work
 
-- **Native MCP accounting adapter implemented (2026-07-16 ET)** — issue #259
+- **Native MCP accounting adapter deployed (2026-07-16 ET)** — issue #259 and
+  PR #264
   reuses `app/accounting/tools.py::build_tool_handlers` to register the four
   public calculation handlers in full mode. The adapter preserves recursive
   identity rejection, stable `ToolError` mapping, contract `0.2.0`, canonical
   disclaimers, and the same configured historian used by REST. Top-level MCP
   `describe` reports an `accounting` category without registering accounting's
-  internal `describe`; demo mode is unchanged. This is a source capability, not
-  evidence that the current hosted demo exposes accounting or that private
-  statement composition is enabled.
+  internal `describe`; demo mode is unchanged. Commit `e5f4d84` is live on Cloud
+  Run revision `nexus-core-00070-zhx` at 100% traffic. The hosted demo does not
+  expose accounting, and deployment does not enable private statement
+  composition.
 - **Onchain accounting v2 hardening deployed (2026-07-16 ET)** — PR #262
   shipped account-scoped lots, explicit transfer/fee/event treatment, bounded
   method-pinned replay, exact basis conservation, lineage, and structured
@@ -569,9 +575,6 @@ key is absent.
 
 Outstanding and future work is tracked in GitHub Issues:
 
-- **#248 onchain accounting epic** — P0-P4 are deployed on restricted REST and
-  P5 native MCP full-profile registration is implemented in current source;
-  private statement production remains outside the epic and outside nexus-core.
 - **pw-api#789 accounting statement consumer** — consume deployed contract
   `0.2.0`, pass the authenticated compatibility fixture, build the private
   statement sections, and record CIO/IC/CCO methodology approval before

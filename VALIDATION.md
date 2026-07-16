@@ -3,32 +3,53 @@
 Records the latest validation for the `nexus_core.app` HTTP API, MCP transport,
 data providers, and public documentation/status surface.
 
-## 2026-07-16 ET — native MCP accounting adapter implementation (#259)
+## 2026-07-16 ET — native MCP accounting adapter release closeout (#259)
 
-Current source adapts the existing accounting handler registry into native MCP
-full mode. No live deployment is claimed by this entry: production remains on
-Cloud Run revision `nexus-core-00069-6m7` with
-`NEXUS_PUBLIC_MCP_PROFILE=demo`, so its public MCP tool list is unchanged.
+PR #264 merged reviewed source head
+`87afc45b2c0e96b34ca01eabdd0c231418c2c903` as commit `e5f4d84` and deployed
+that merge tree to Cloud Run revision `nexus-core-00070-zhx` at 100% traffic.
+The deployed image contains the native full-profile adapter, while production
+continues to set `NEXUS_PUBLIC_MCP_PROFILE=demo` and does not expose accounting
+through its public MCP catalogue.
 
-| Check | Result |
-|-------|--------|
-| focused full/demo registration, discovery, four representative handler calls, PII rejection, and stable input-error mapping | `4 passed, 33 deselected` |
-| combined planning/accounting registration plus read-only annotations | `6 passed, 31 deselected` |
-| shared REST/native-MCP historian identity | `1 passed` |
-| non-route accounting contract/handler tests plus historian tests | `24 passed, 23 deselected` |
-| `ruff check src/ tests/` | passed |
-| `mypy --strict src/nexus_core/` | passed (`181` source files) |
-| `git diff --check` | clean |
-| full local `pytest -q` | could not complete: no output before the explicit 180-second timeout (exit `124`) |
+| Check | Evidence | Result |
+|-------|----------|--------|
+| focused full/demo registration, discovery, representative handler calls, PII rejection, and stable input-error mapping | local source head | `4 passed, 33 deselected` |
+| combined planning/accounting registration plus read-only annotations | local source head | `6 passed, 31 deselected` |
+| shared REST/native-MCP historian identity | local source head | `1 passed` |
+| non-route accounting contract/handler tests plus historian tests | local source head | `24 passed, 23 deselected` |
+| ruff + strict mypy + full pytest/coverage | Actions run `29522873818` | passed; `1563 passed`, `89.78%` coverage |
+| SPDX headers | Actions run `29522873896` | passed |
+| license compliance | Actions run `29522873884` | passed |
+| CodeQL | Actions runs `29522870821`, `29522871360` | passed |
+| exact-head standalone Codex review | source head `87afc45` | accepted; no unresolved inline comments |
+| `git diff --check` | local source head | clean |
 
-The focused MCP tests inspect `tools/list` and invoke the exact
-`FunctionTool.fn` callables registered by FastMCP. This avoids a known local
-WSL/AnyIO runner issue while still validating the registration boundary and
-adapter envelopes. As a control, the unchanged
-`test_planning_tool_call_echoes_contract_version` test timed out under the same
-local `server.call_tool` runner after 45 seconds (exit `124`). Exact-head GitHub
-CI remains authoritative for the complete FastMCP/pytest suite and coverage
-floor.
+The local full suite hit the documented WSL/AnyIO hang, so exact-head GitHub CI
+is authoritative for the complete FastMCP/pytest suite and coverage floor.
+Focused tests inspect `tools/list` and invoke the exact `FunctionTool.fn`
+callables registered by FastMCP, covering the registration and adapter envelopes.
+
+Cloud Run reports revision `nexus-core-00070-zhx` Ready and serving 100% traffic.
+Regional Cloud Build `613cea11-beab-4e02-aca8-60837d6d35b0` completed
+successfully, and the deployed image digest is
+`sha256:5d9b9bdad08fe300a5196e6f2824a48f749e067f8d782bc0c0599f474ccfb097`.
+The demo profile, restricted REST mode, VPC, Cloud SQL, scaling, resources,
+service account, and existing Secret Manager references were preserved.
+
+| Live check | Result |
+|------------|--------|
+| custom-domain, direct, and regional Cloud Run `GET /health` | `200` — `{"status":"ok","service":"nexus-core","version":"0.1.0"}` |
+| `GET /health/db` | `200` |
+| `GET /`, `/openapi.json`, and `/.well-known/mcp/server-card.json` | `200` |
+| anonymous accounting, planning, and regime REST requests | `401` — service key required |
+| OAuth `/register` -> `/authorize` -> `/token` | `201` -> `302` -> `200` |
+| MCP initialize -> initialized -> `tools/list` -> `describe` | `200` -> `202` -> `200` -> `200`; tools were `classify_layer`, `collar_book`, `describe`, `health`, and `option_price`; accounting category and tools were absent |
+
+No production service-key value was read or extracted, so an authenticated REST
+contract fixture was not run during this closeout. Exact-head CI covers the full
+adapter behavior. Issues #259 and #248 are closed; private statement composition
+and the methodology enablement gate remain in `pw-api#789`.
 
 ## 2026-07-16 ET — accounting contract 0.2.0 release closeout (#260)
 
@@ -72,9 +93,10 @@ secret bindings preserved.
 
 No production service-key value was read or extracted, so an authenticated
 contract `0.2.0` handshake and consumer fixture were not run during this
-closeout. That compatibility check remains in `pw-api#789`. Technical issue #260
-is closed; native MCP registration remains separate issue #259, and the hosted
-demo profile remains unchanged.
+closeout. That compatibility check remains in `pw-api#789`. At this earlier
+closeout, technical issue #260 was closed and native MCP registration remained
+separate issue #259; #259 is now complete, while the hosted demo profile remains
+unchanged.
 
 ## 2026-07-15 ET — onchain accounting P0-P4 closeout
 

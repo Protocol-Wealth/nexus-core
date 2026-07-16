@@ -7,11 +7,12 @@ market/macro/options/DeFi, planning, and de-identified onchain-accounting REST
 analytics, with no client data, account surfaces, suitability logic, or advisory
 workflow state.
 
-Last verified 2026-07-16 ET: commit `70bd5d5`, Cloud Run revision
-`nexus-core-00069-6m7`, 100% traffic. Custom-domain and direct health checks
-returned HTTP 200; anonymous accounting discovery returned the expected
-service-key HTTP 401. No production service-key value was read, so an
-authenticated v2 version handshake was not rerun during this closeout.
+Last verified 2026-07-16 ET: commit `e5f4d84`, Cloud Run revision
+`nexus-core-00070-zhx`, 100% traffic. Custom-domain, direct, regional, and
+database health checks returned HTTP 200; anonymous accounting discovery
+returned the expected service-key HTTP 401. A complete OAuth MCP flow returned
+the five-tool demo catalogue with accounting absent. No production service-key
+value was read, so an authenticated v2 REST handshake was not rerun.
 
 ## Current Boundary
 
@@ -31,7 +32,7 @@ The public deployment has:
 | Market/economic data | `data/market/`, `data/macro/` | Quotes, history, FRED/BEA/EIA/Treasury-style macro adapters |
 | Options | `engine/pricing/`, `app/options.py` | Black-Scholes overlays + Deribit crypto options; educational only |
 | On-chain/DeFi | `data/onchain/`, `app/{wallet,chain,vaults,lp,solana}.py` | Public wallet/chain/vault/LP/Solana data |
-| Onchain accounting | `engine/accounting/`, `app/accounting/` | Deployed contract `0.2.0` on restricted REST; current source reuses its four calculation handlers in native MCP full mode |
+| Onchain accounting | `engine/accounting/`, `app/accounting/` | Deployed contract `0.2.0` on restricted REST; the deployed image reuses its four calculation handlers in native MCP full mode |
 | Benchmarks/history | `engine/benchmarks.py`, `data/snapshots.py` | Daily benchmark snapshots via private Cloud SQL |
 | Planning math | `engine/planning/`, `app/planning/` | 34 PII-free tools via native MCP and the primary `/api/planning/tools` REST gateway; `/mcp/tools` is a legacy alias |
 | MCP transport | `mcp/server/`, `app/mcp_mount.py` | Read-only full/demo profiles; full includes four accounting calculation tools, hosted demo excludes them |
@@ -65,9 +66,9 @@ The hosted native MCP transport uses `NEXUS_PUBLIC_MCP_PROFILE=demo` and may
 require a bearer token when `MCP_OAUTH_SIGNING_KEY` is configured because remote
 MCP clients expect OAuth 2.1 + PKCE + Dynamic Client Registration. That flow is
 transparent and anonymous: any valid client can register and obtain public demo
-scope, with no login or privilege escalation. Current source registers the four
-accounting calculation handlers in native MCP full mode only. They remain absent
-from the hosted demo profile.
+scope, with no login or privilege escalation. The deployed image registers the
+four accounting calculation handlers in native MCP full mode only. They remain
+absent from the hosted demo profile.
 
 ## Persistence
 
