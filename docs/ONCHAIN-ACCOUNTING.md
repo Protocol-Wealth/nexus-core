@@ -14,11 +14,12 @@ carry a `missing_report_window` gap and are not statement-ready.
 
 The calculation methodology is version `2.0.0`. Every result includes its
 method version, source, last-verified date, treatment matrix, and review status.
-The current review status is `pending_governance_review`, so
-`completeness.statement_ready` is always `false` even when all calculation facts
-are complete. A CIO/IC/CCO methodology review is required before a consumer may
-use this output in a client statement. Code review or passing CI does not satisfy
-that governance requirement.
+The current review status is `approved`, recording the 2026-07-17 CCO/CIO/CTO
+decision to put methodology 2.0/FIFO into operational use. Numerically complete,
+bounded results can therefore set `completeness.statement_ready=true`. Private
+consumers remain responsible for authenticated client linkage, exact-artifact
+provenance, books-and-records retention, and delivery controls; later partner
+review is evidence and does not change calculation readiness.
 
 ## Transport Profiles
 

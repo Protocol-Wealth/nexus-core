@@ -70,7 +70,7 @@ def test_report_summary_and_short_long_split() -> None:
     assert report.summary.incomplete_count == 0
     assert report.summary.complete is True
     assert report.completeness.complete is True
-    assert report.completeness.statement_ready is False
+    assert report.completeness.statement_ready is True
     assert len(report.dispositions) == 2
     assert "tax professional" in report.disclaimer
 

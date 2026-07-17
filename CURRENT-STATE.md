@@ -5,14 +5,17 @@ verification. For the architectural overview see [README.md](README.md); for
 deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
 [AUDIT.md](AUDIT.md).
 
-- **Last docs closeout:** 2026-07-16 ET — accounting epic #248, including #259's
+- **Last docs closeout:** 2026-07-17 ET — CCO/CIO/CTO approved methodology
+  2.0/FIFO for immediate operational use. Complete bounded calculations may set
+  `statement_ready=true`; `pw-api#789` owns the authenticated private consumer,
+  immutable artifact, delivery, and retention path. Founder client dogfood and
+  partner review are post-deployment evidence, not runtime gates.
+- **Prior deploy closeout:** 2026-07-16 ET — accounting epic #248, including #259's
   native MCP adapter, is merged and deployed. PR #264 reuses the same four
   accounting calculation handlers and configured price historian in the full
   profile; issues #248 and #259 are closed. The production service remains on
   the demo profile, so accounting is absent from its public MCP tool list.
-  Private statement use remains held
-  pending `pw-api` consumer compatibility and CIO/IC/CCO methodology review;
-  ingestion, wallet/client linkage, statement assembly, review, and retention
+  Ingestion, wallet/client linkage, statement assembly, review, and retention
   remain in `pw-api`/PWOS rather than this public engine.
 - **Last live verified:** 2026-07-16 ET — commit `e5f4d84` is on `origin/main`;
   Cloud Run revision `nexus-core-00070-zhx` is Ready and serves 100% traffic.
@@ -40,10 +43,9 @@ deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
   remaining-basis conservation, bounded method-pinned replay, root lineage, and
   structured completeness. P0-P4 remain calculation
   primitives, not proof that a client statement workflow or tax return is
-  complete. Technical issue #260 is closed; private statement wiring remains
-  blocked in `pw-api#789` pending consumer compatibility and CIO/IC/CCO
-  methodology review. The engine forces `statement_ready=false` until that
-  review is recorded.
+  complete. Technical issue #260 is closed; methodology 2.0/FIFO is
+  operationally approved, and `pw-api#789` owns the private consumer and
+  delivery implementation without a methodology runtime gate.
 - **Earlier planning update:** 2026-07-08 — `main` completes planning
   assumption provenance (#198). Built-in federal tax, IRMAA, education vehicle,
   simplified state conversion/state-tax, ACA reference, cash-flow,
@@ -133,10 +135,10 @@ consumer responsibilities remain in `pw-api`/PWOS. Current source exposes the
 same four calculation handlers through native MCP full mode; production runs the
 demo MCP profile, so its public tool list is intentionally unchanged. Issue
 #260's code hardening is deployed in accounting contract `0.2.0`, and that
-technical issue is closed. Consumer and governance gates remain open in
-`pw-api#789`: `pw-api` must pass contract compatibility and methodology version
-`2.0.0` remains `pending_governance_review`, so private statement composition
-must remain disabled.
+technical issue is closed. The 2026-07-17 CCO/CIO/CTO decision marks
+methodology `2.0.0` approved for operational use. `pw-api#789` still owns
+authenticated client linkage, exact-artifact provenance, review, delivery, and
+retention, but no separate methodology gate disables private composition.
 
 ## Hybrid planning boundary
 
@@ -447,6 +449,11 @@ key is absent.
 
 ## Recent work
 
+- **Accounting methodology 2.0/FIFO operationally approved (2026-07-17 ET)** —
+  CCO/CIO/CTO directed immediate full implementation and deployment. Complete
+  bounded calculations can be statement-ready; founder client dogfood and
+  partner review are recorded after deployment. Private auth, immutable
+  artifacts, delivery, and retention controls remain enforced.
 - **Native MCP accounting adapter deployed (2026-07-16 ET)** — issue #259 and
   PR #264
   reuses `app/accounting/tools.py::build_tool_handlers` to register the four
@@ -576,9 +583,10 @@ key is absent.
 Outstanding and future work is tracked in GitHub Issues:
 
 - **pw-api#789 accounting statement consumer** — consume deployed contract
-  `0.2.0`, pass the authenticated compatibility fixture, build the private
-  statement sections, and record CIO/IC/CCO methodology approval before
-  enablement. Nexus technical issue #260 is complete.
+  `0.2.0`, pass the authenticated compatibility fixture, deploy the private
+  statement sections and portal delivery path, then record founder dogfood and
+  partner review as post-deployment evidence. Nexus technical issue #260 is
+  complete and methodology 2.0/FIFO is operationally approved.
 - **#197 public-safe planning/report analytics extraction** — decide what generic,
   PII-free analytics should move from private PWOS producer work into nexus-core
   versus staying in advisor workflow code. Existing planning-bridge wrappers

@@ -7,15 +7,16 @@
 > [VALIDATION.md](VALIDATION.md). Read [`CLAUDE.md`](CLAUDE.md) for operating
 > rules. Where the material below differs, those current sources win.
 
-## Current pointer (2026-07-16 ET)
+## Current pointer (2026-07-17 ET)
 
 - `e5f4d84` is deployed on `nexus-core-00070-zhx` at 100% traffic.
 - Onchain accounting contract `0.2.0` is live through restricted REST. The
   deployed code registers the same four calculation handlers in native MCP full
   mode; the hosted demo profile excludes them.
 - Contract `0.2.0` implements #260's account/transfer/fee, calendar-term,
-  period-replay, lineage, and completeness hardening. Statement wiring remains
-  blocked pending `pw-api` compatibility and CIO/IC/CCO methodology review.
+  period-replay, lineage, and completeness hardening. CCO/CIO/CTO approved
+  methodology 2.0/FIFO for operational use on 2026-07-17; the `pw-api#789`
+  consumer and post-deployment review proceed without a methodology runtime gate.
 - The accounting engine is de-identified calculation substrate. Private
   custodian ingestion, wallet/client linkage, statement assembly, advisor review,
   tax-return preparation, release, and retention remain outside this repo.

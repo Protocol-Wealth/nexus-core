@@ -15,11 +15,18 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
+import re
 from typing import Any
 
 _MODE_ENV = "NEXUS_ACCESS_MODE"
 _KEYS_ENV = "NEXUS_API_KEYS"
+_AUDIT_ID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+logger = logging.getLogger(__name__)
 
 
 def access_mode() -> str:
@@ -60,12 +67,37 @@ def _presented_key(headers: dict[bytes, bytes]) -> str:
     return headers.get(b"x-nexus-api-key", b"").decode("latin-1").strip()
 
 
-def _authorized(headers: dict[bytes, bytes]) -> bool:
+def _authorized_key_fingerprint(headers: dict[bytes, bytes]) -> str | None:
     key = _presented_key(headers)
     if not key:
-        return False
+        return None
     presented = hashlib.sha256(key.encode("utf-8")).hexdigest()
-    return any(hmac.compare_digest(presented, digest) for digest in _key_digests())
+    if any(hmac.compare_digest(presented, digest) for digest in _key_digests()):
+        return presented[:12]
+    return None
+
+
+def _accounting_audit_id(path: str, headers: dict[bytes, bytes]) -> str | None:
+    """Return the clean accounting audit id, or ``None`` when invalid/missing."""
+    if not path.startswith("/api/accounting/"):
+        return "not-applicable"
+    value = headers.get(b"x-pw-audit-id", b"").decode("latin-1").strip()
+    return value if _AUDIT_ID_RE.fullmatch(value) else None
+
+
+async def _reject(send: Any, status: int, error: str, description: str) -> None:
+    body = json.dumps({"error": error, "error_description": description}).encode()
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"cache-control", b"no-store"),
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": body})
 
 
 def _privatize_cache_control(message: dict[str, Any]) -> dict[str, Any]:
@@ -131,30 +163,40 @@ class NexusAccessGate:
             return
 
         headers = dict(scope.get("headers") or [])
-        if _authorized(headers):
+        key_fingerprint = _authorized_key_fingerprint(headers)
+        audit_id = _accounting_audit_id(path, headers)
+        if key_fingerprint is not None and audit_id is not None:
 
             async def _send(message: dict[str, Any]) -> None:
                 if message.get("type") == "http.response.start":
                     message = _privatize_cache_control(message)
+                    response_headers = list(message.get("headers", []))
+                    response_headers.append((b"x-nexus-authenticated", b"restricted"))
+                    if audit_id != "not-applicable":
+                        response_headers.append((b"x-pw-audit-id", audit_id.encode("ascii")))
+                    message["headers"] = response_headers
+                    if audit_id != "not-applicable":
+                        logger.info(
+                            "accounting request audit_id=%s path=%s key_fingerprint=%s status=%s",
+                            audit_id,
+                            path,
+                            key_fingerprint,
+                            message.get("status"),
+                        )
                 await send(message)
 
             await self.app(scope, receive, _send)
             return
 
-        body = json.dumps(
-            {"error": "unauthorized", "error_description": "Nexus API key required"}
-        ).encode()
-        await send(
-            {
-                "type": "http.response.start",
-                "status": 401,
-                "headers": [
-                    (b"content-type", b"application/json"),
-                    (b"cache-control", b"no-store"),
-                ],
-            }
-        )
-        await send({"type": "http.response.body", "body": body})
+        if key_fingerprint is not None:
+            await _reject(
+                send,
+                400,
+                "invalid_audit_id",
+                "Accounting requests require a UUID x-pw-audit-id",
+            )
+            return
+        await _reject(send, 401, "unauthorized", "Nexus API key required")
 
 
 __all__ = ["NexusAccessGate", "access_mode"]

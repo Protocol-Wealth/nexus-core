@@ -30,8 +30,9 @@ image completes #259 by registering the same four calculation handlers in
 native MCP full mode; the hosted demo MCP tool set excludes accounting.
 Accounting contract `0.2.0` implements #260's FIFO/PnL semantics, exact
 remaining-basis conservation, method-pinned replay, and root-lineage hardening.
-Statement wiring remains blocked until the private `pw-api` consumer passes its
-compatibility gate and the methodology receives CIO/IC/CCO review.
+CCO/CIO/CTO approved methodology 2.0/FIFO for operational use on 2026-07-17.
+The private `pw-api` consumer, exact-artifact controls, and founder client
+dogfood now proceed without a separate methodology runtime gate.
 
 Current source also corrects the Monte Carlo `student_t` return model so its
 fat-tailed draw is scaled to the caller-supplied covariance matrix. Student-t
@@ -307,10 +308,10 @@ Prioritized. Top item first.
 #260 is complete and deployed contract `0.2.0` now scopes FIFO books by account,
 handles linked same-owner transfers and explicit fees, conserves authoritative
 basis across snapshot boundaries, supports method-pinned replay, and returns
-deterministic lineage plus structured completeness. Keep private cost-basis and
-realized-PnL statement composition disabled until `pw-api` consumer
-compatibility and CIO/IC/CCO methodology review; the engine enforces that gate
-through `statement_ready=false` while review remains pending.
+deterministic lineage plus structured completeness. Methodology 2.0/FIFO is
+operationally approved. Finish and deploy the private consumer, retain
+authenticated linkage and exact-artifact delivery controls, then record founder
+client dogfood and partner review as post-deployment evidence.
 
 **Public-safe planning/report analytics extraction — open issue #197.** Decide
 which generic, PII-free analytics from private PWOS producer work belong in
