@@ -3,7 +3,7 @@
 > Repo: `Protocol-Wealth/nexus-core` · License: Apache 2.0 · Patent Pending: USPTO #64/034,229 · OIN member.
 > Open-source extraction of the [Protocol Wealth research engine](https://nexusmcp.site); nothing in this repo is client-specific or proprietary to PW.
 
-**Current state (2026-07-16 ET — accounting v2 and full-profile MCP adapter deployed; private use gated):**
+**Current state (2026-07-17 ET — accounting v2 operationally approved; consumer enablement in progress):**
 - **Live deployment:** commit `e5f4d84` is on `origin/main`; Cloud Run revision
   `nexus-core-00070-zhx` is Ready and serves 100% traffic. Custom-domain, direct,
   and regional Cloud Run `/health` returned `200`, `/health/db` returned `200`,
@@ -38,13 +38,14 @@
   `NEXUS_PUBLIC_MCP_PROFILE=demo`; live OAuth `tools/list` returned
   `classify_layer`, `collar_book`, `describe`, `health`, and `option_price`, with
   accounting absent.
-- **Private boundary:** P0-P4 are calculation substrate, not statement readiness.
+- **Private boundary:** P0-P4 are calculation substrate, not private delivery controls.
   Custodian ingestion, wallet/client linkage, statement assembly/rendering,
   advisor review, release, tax-return preparation, and books-and-records retention
   remain in the private `pw-api`/PWOS plane. Issues #248, #259, and #260 are
   closed as technically complete; `pw-api#789` owns consumer compatibility and
-  the still-pending CIO/IC/CCO methodology enablement gate. The engine therefore
-  continues to force `statement_ready=false`.
+  private delivery. CCO/CIO/CTO approved methodology 2.0/FIFO for operational
+  use on 2026-07-17, so complete bounded calculations may be statement-ready;
+  post-deployment partner review is evidence rather than a runtime gate.
 - **Validation:** exact source-head CI run `29522873818` passed ruff, strict
   mypy, and `1563` tests at `89.78%` coverage; SPDX, license-compliance, and both
   CodeQL checks also passed. Standalone Codex accepted exact head `87afc45`, all

@@ -244,7 +244,7 @@ def test_build_tool_handlers_describes_available_v2_contract() -> None:
     assert "eventLedgerSchema" in out
     assert out["eventLedgerSchema"]["type"] == "object"
     assert "report_window" in out["costBasisRequestSchema"]["properties"]
-    assert out["methodology"]["reviewStatus"] == "pending_governance_review"
+    assert out["methodology"]["reviewStatus"] == "approved"
 
 
 def test_describe_lists_optional_price_history_only_when_registered() -> None:
@@ -485,7 +485,7 @@ def test_route_compute_cost_basis_fifo() -> None:
     assert out["disposals"][0]["realized_gain_usd"] == "20"
     assert out["totals"]["realized_gain_usd"] == "20"
     assert out["completeness"]["complete"] is True
-    assert out["completeness"]["statement_ready"] is False
+    assert out["completeness"]["statement_ready"] is True
     assert out["methodology"]["method_version"] == "2.0.0"
 
 
@@ -612,7 +612,7 @@ def test_route_onchain_pnl_report() -> None:
     assert out["summary"]["realized_gain_usd"] == "20"
     assert out["summary"]["complete"] is True
     assert out["completeness"]["complete"] is True
-    assert out["completeness"]["statement_ready"] is False
+    assert out["completeness"]["statement_ready"] is True
     assert out["dispositions"][0]["disposal_event_id"] == "d"
     assert "tax professional" in out["disclaimer"]
 

@@ -3,6 +3,25 @@
 Records the latest validation for the `nexus_core.app` HTTP API, MCP transport,
 data providers, and public documentation/status surface.
 
+## 2026-07-17 ET — methodology 2.0/FIFO operational enablement
+
+CCO/CIO/CTO approved methodology 2.0/FIFO for immediate operational use. Source
+now permits `statement_ready=true` only when the existing numerical,
+completeness, replay, and bounded-input predicates all pass. Restricted
+accounting requests additionally require a UUID audit correlation id and echo
+authenticated/audit evidence in the response.
+
+| Check | Evidence | Result |
+|-------|----------|--------|
+| full pytest suite | isolated local Python 3.12 environment | `1576 passed` |
+| ruff | full repository | passed |
+| strict mypy | 181 source files | passed |
+| accounting access-gate, gateway, FIFO, and PnL focused tests | local source worktree | passed |
+| `git diff --check` | local source worktree | clean |
+
+This entry records source validation; the merge-commit CI and Cloud Run revision
+are recorded after the normal deployment workflow completes.
+
 ## 2026-07-16 ET — native MCP accounting adapter release closeout (#259)
 
 PR #264 merged reviewed source head

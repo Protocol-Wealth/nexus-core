@@ -49,10 +49,11 @@ statement/report-production workflows, tax-return preparation, artifact receipts
 or private PWOS workflow state. Those belong in closed Protocol Wealth systems
 or consumer repos. The public-safe accounting math does not change that boundary.
 Deployed contract `0.2.0` implements #260's account/transfer/fee, period-replay,
-and lineage semantics. Technical issue #260 is complete, but private statement
-wiring remains blocked in `pw-api#789` until consumer compatibility and
-CIO/IC/CCO methodology review pass. The engine forces `statement_ready=false`
-while review is pending.
+and lineage semantics. Technical issue #260 is complete, and the 2026-07-17
+CCO/CIO/CTO decision approved methodology 2.0/FIFO for operational use.
+Complete bounded calculations may report `statement_ready=true`; `pw-api#789`
+owns authenticated client linkage, immutable artifacts, review, delivery, and
+retention outside this public engine.
 
 ## Auth And OAuth
 

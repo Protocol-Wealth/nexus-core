@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Accounting methodology 2.0/FIFO operational enablement
+
+- Recorded the 2026-07-17 CCO/CIO/CTO decision approving methodology 2.0/FIFO
+  for operational use. Complete bounded results may now set
+  `completeness.statement_ready=true`; post-deployment partner review is evidence
+  rather than a runtime methodology gate.
+- Kept private identity linkage, exact-artifact provenance, approval, delivery,
+  and books-and-records retention in the authenticated private consumer plane.
+- Required restricted accounting requests to carry a UUID audit id and return
+  authenticated/audit response evidence without logging the service key.
+
 ### Native MCP accounting adapter (#259)
 
 #### Added

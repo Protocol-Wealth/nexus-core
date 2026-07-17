@@ -240,9 +240,10 @@ lineage, and structured completeness. Unit-only legacy opening lots remain
 calculable but explicitly incomplete. Private custodian ingestion,
 wallet-to-client mapping, statement construction, tax-return preparation,
 approval, release, and retention remain outside this repo. Technical issue #260
-is complete; private consumer epic `pw-api#789` blocks statement composition
-until compatibility passes and the methodology is CIO/IC/CCO-reviewed. The
-engine reports `statement_ready=false` while that review is pending.
+is complete; private consumer epic `pw-api#789` owns those private controls.
+The 2026-07-17 CCO/CIO/CTO decision approved methodology 2.0/FIFO for
+operational use, so complete bounded calculations may report
+`statement_ready=true`; post-deployment review is evidence, not a runtime gate.
 
 ## Planning Engine
 

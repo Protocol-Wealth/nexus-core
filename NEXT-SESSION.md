@@ -7,7 +7,7 @@
 > [VALIDATION.md](VALIDATION.md) for executed checks. Where this archived material
 > differs, those sources win.
 
-## Current pointer (2026-07-16 ET)
+## Current pointer (2026-07-17 ET)
 
 - Commit `d528389` is deployed on Cloud Run revision
   `nexus-core-00068-5pf` at 100% traffic.
@@ -16,8 +16,8 @@
 - Accounting is absent from native MCP; #259 tracks the full-profile adapter and
   keeps the hosted demo profile unchanged.
 - Contract `0.2.0` source implements #260's accounting-semantics and replay
-  hardening; statement wiring remains blocked pending merge/deploy verification
-  and CIO/IC/CCO methodology review.
+  hardening. CCO/CIO/CTO approved methodology 2.0/FIFO for operational use on
+  2026-07-17; private consumer deployment and post-deployment review remain.
 - Private ingestion, client linkage, statement production/review/release, and
   books-and-records retention remain outside nexus-core.
 

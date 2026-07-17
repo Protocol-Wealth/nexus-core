@@ -243,7 +243,7 @@ def test_same_owner_transfer_preserves_lot_basis_date_and_lineage() -> None:
     assert disposal.lot_ref is not None
     assert disposal.origin_lot_ref == "acq:in:0"
     assert result.completeness.complete is True
-    assert result.completeness.statement_ready is False  # governance review remains required
+    assert result.completeness.statement_ready is True
 
 
 def test_unmatched_same_owner_transfer_makes_closing_inventory_totals_unknown() -> None:
@@ -1859,7 +1859,7 @@ def test_as_of_price_lineage_is_carried_to_open_lot() -> None:
     assert lot.market_price_source == "historian"
     assert lot.market_price_as_of == 1
     assert result.methodology.method_version == "2.0.0"
-    assert result.methodology.review_status == "pending_governance_review"
+    assert result.methodology.review_status == "approved"
 
 
 def test_as_of_price_accepts_closing_boundary_but_not_later() -> None:
