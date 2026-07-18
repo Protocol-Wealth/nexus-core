@@ -99,10 +99,13 @@ basis totals, original unit basis, acquisition date/order, acquisition
 event/transaction lineage, and the source lot reference without realizing gain.
 Destination queues are re-sorted by original acquisition order, so an older lot
 that arrives later by transfer still precedes newer destination lots.
-An unmatched inbound transfer may use a manual override only when the caller
-asserts same ownership and supplies original basis/date. External, unknown, and
-unmatched transfers remain explicit completeness gaps. A market value observed
-on transfer never becomes original basis automatically.
+An unmatched same-owner inbound transfer may use a manual override only when the
+caller supplies original basis/date and provenance. A confirmed external inbound
+receipt creates a provisional acquisition lot at its persisted receipt-time fair
+market value; without event-time price provenance, basis remains unknown. A
+provenance-bearing client/advisor override may supersede that default. External
+outbound, unknown, and unmatched same-owner transfers remain explicit
+completeness gaps rather than presumed taxable dispositions.
 
 If a bounded report ends after a linked same-owner transfer-out but before the
 matching transfer-in, the engine records the unmatched transfer gap and returns

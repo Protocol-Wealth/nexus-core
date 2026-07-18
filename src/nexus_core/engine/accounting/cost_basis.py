@@ -47,7 +47,7 @@ from .models import (
 
 ACCOUNTING_METHOD_VERSION = "2.0.0"
 ACCOUNTING_METHOD_SOURCE = "nexus-core/docs/ONCHAIN-ACCOUNTING.md"
-ACCOUNTING_METHOD_LAST_VERIFIED = date(2026, 7, 17)
+ACCOUNTING_METHOD_LAST_VERIFIED = date(2026, 7, 18)
 ACCOUNTING_METHODOLOGY_REVIEW_STATUS: Literal["pending_governance_review", "approved"] = (
     "approved"
 )
@@ -67,7 +67,7 @@ EVENT_TREATMENT_MATRIX: dict[str, str] = {
     EventKind.acquire.value: "acquisition",
     EventKind.dispose.value: "taxable_disposition",
     EventKind.swap.value: "taxable_exchange",
-    EventKind.transfer_in.value: "explicit_transfer_treatment",
+    EventKind.transfer_in.value: "same_owner_carry_or_external_receipt_fmv_basis",
     EventKind.transfer_out.value: "explicit_transfer_treatment",
     EventKind.deposit.value: "explicit_tax_treatment_required",
     EventKind.withdraw.value: "explicit_tax_treatment_required",
@@ -406,7 +406,9 @@ def _methodology(method: str) -> MethodologyMetadata:
         event_treatment=dict(EVENT_TREATMENT_MATRIX),
         transfer_rule=(
             "same_owner requires an opaque transfer_ref and preserves FIFO lot quantity, "
-            "basis, and acquisition date; external or unknown treatment is unresolved"
+            "basis, and acquisition date; external transfer_in defaults to confirmed "
+            "receipt-time fair market value with price provenance; external transfer_out "
+            "and unknown treatment remain unresolved"
         ),
         fee_rule=(
             "fee_usd is allocated exactly once to acquisition basis or disposition proceeds; "
@@ -1614,6 +1616,35 @@ def compute_cost_basis(
                         assumptions=assumptions,
                         counts=counts,
                     )
+            elif (
+                event.transfer_treatment == TransferTreatment.external
+                and event.kind == EventKind.transfer_in
+            ):
+                if principal_outs or not principal_ins:
+                    raise ValueError("external transfer_in requires only principal in legs")
+                _add_acquisition_lots(
+                    book,
+                    event=event,
+                    ins=principal_ins,
+                    outs=[],
+                    fee_addition=acquisition_fee,
+                    override=override,
+                    gaps=gaps,
+                    warnings=warnings,
+                )
+                if override is None:
+                    assumptions.append(
+                        CalculationAssumption(
+                            code="external_transfer_receipt_fmv_basis",
+                            message=(
+                                "external inbound receipt uses persisted fair market value at "
+                                "the confirmed receipt timestamp as provisional acquisition basis; "
+                                "missing price evidence leaves basis unknown"
+                            ),
+                            event_id=event.event_id,
+                            transfer_ref=event.transfer_ref,
+                        )
+                    )
             else:
                 counts.mark_unresolved_transfer(event)
                 _consume_unresolved_transfer(
@@ -1625,9 +1656,7 @@ def compute_cost_basis(
                     gaps=gaps,
                     warnings=warnings,
                     gap_code="unresolved_transfer_treatment",
-                    gap_message=(
-                        "external or unknown transfer treatment cannot produce a tax conclusion"
-                    ),
+                    gap_message="external outbound or unknown transfer treatment is unresolved",
                 )
         elif event.kind in (EventKind.acquire, EventKind.claim):
             if principal_outs or not principal_ins:
