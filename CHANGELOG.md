@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### External inbound cost basis from receipt FMV (#269)
+
+- External `transfer_in` acquisition basis now defaults to the confirmed
+  receipt-timestamp fair market value with price provenance
+  (`external_transfer_receipt_fmv_basis`), instead of carrying same-owner cost.
+  Same-owner transfers still carry original basis.
+- Fail-closed on missing evidence: an unpriced external receipt leaves basis
+  unknown rather than defaulting it to zero, and external `transfer_out` or
+  unknown transfer treatment stays unresolved as a gap.
+- Docs: `docs/ONCHAIN-ACCOUNTING.md`, `CLAUDE.md`. Covered by
+  `tests/test_cost_basis.py` (priced and unpriced external-receipt cases).
+
 ### Accounting methodology 2.0/FIFO operational enablement
 
 - Recorded the 2026-07-17 CCO/CIO/CTO decision approving methodology 2.0/FIFO

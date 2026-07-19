@@ -5,6 +5,13 @@ verification. For the architectural overview see [README.md](README.md); for
 deploy mechanics see [DEPLOY.md](DEPLOY.md); for the public-surface audit see
 [AUDIT.md](AUDIT.md).
 
+- **Latest merged change:** 2026-07-18 ET — `#269` sets external `transfer_in`
+  basis to the confirmed receipt-time fair market value with price provenance
+  (`external_transfer_receipt_fmv_basis`). Unpriced external receipts leave basis
+  unknown, and external `transfer_out`/unknown treatment stays an unresolved gap;
+  same-owner transfers keep original basis. Touches
+  `src/nexus_core/engine/accounting/cost_basis.py`, `docs/ONCHAIN-ACCOUNTING.md`,
+  `CLAUDE.md`; covered by `tests/test_cost_basis.py`.
 - **Last docs closeout:** 2026-07-17 ET — CCO/CIO/CTO approved methodology
   2.0/FIFO for immediate operational use. Complete bounded calculations may set
   `statement_ready=true`; `pw-api#789` owns the authenticated private consumer,
