@@ -47,8 +47,8 @@ dependencies = [
     # The core engine uses no pandas-3-only API (verified), so this is a no-op
     # for the deployed surface. Lift the cap if/when alphalens-reloaded ships
     # pandas-3 support.
-    "pandas>=3.0.3,<4.0",
-    "numpy>=2.5.1",
+    "pandas>=2.2,<3.0",
+    "numpy>=2.4.6",
     "scipy>=1.18.0",
 ]
 
