@@ -291,6 +291,22 @@ def test_health_exempt_from_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     assert statuses == [200, 200, 200, 200, 200]
 
 
+def test_regime_history_503_when_db_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
+    # DATABASE_URL is set but Cloud SQL is momentarily unreachable: the read
+    # raises DatabaseUnavailableError → the route degrades to 503, never 500.
+    from nexus_core.data.db import DatabaseUnavailableError
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg:///x?host=/cloudsql/y")
+
+    async def fake_read(limit: int = 365) -> list[dict[str, object]]:
+        raise DatabaseUnavailableError("regime history is temporarily unavailable")
+
+    monkeypatch.setattr("nexus_core.app.routes.read_regime_history", fake_read)
+    app = create_app(market=_FakeMarket(), macro=_FakeMacro(), enable_mcp=False)
+    with TestClient(app) as client:
+        assert client.get("/api/regime/history").status_code == 503
+
+
 def test_mcp_transport_mounted() -> None:
     app = create_app(market=_FakeMarket(), macro=_FakeMacro(), enable_mcp=True)
     mounted = {getattr(route, "path", None) for route in app.routes}

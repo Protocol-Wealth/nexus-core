@@ -17,15 +17,18 @@ import statistics
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
+from ...disclaimers import TERSE
+
 RebalanceFrequency = Literal["monthly", "annual", "none"]
 
+# Compose from the canonical TERSE base (never re-copy the base text inline) plus
+# the index-blend-specific caveats, so a Marketing-Rule change to TERSE tracks.
 HISTORICAL_BLEND_DISCLAIMER = (
-    "Educational and informational use only. Not investment, tax, legal, or "
-    "financial advice, and not a recommendation. Historical blend results are "
-    "hypothetical and illustrative index-blend calculations. They assume income "
-    "is reinvested and exclude fees, taxes, trading costs, and implementation "
-    "frictions. You cannot invest directly in an index. Past performance does "
-    "not guarantee future results."
+    f"{TERSE} "
+    "Historical blend results are hypothetical and illustrative index-blend "
+    "calculations. They assume income is reinvested and exclude fees, taxes, "
+    "trading costs, and implementation frictions. You cannot invest directly "
+    "in an index."
 )
 
 _REBALANCE_FREQUENCIES: tuple[RebalanceFrequency, ...] = ("monthly", "annual", "none")

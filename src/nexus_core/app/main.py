@@ -78,7 +78,7 @@ from .llms_txt import render_llms_txt
 from .lp import build_lp_router
 from .mcp_guide import render_mcp_guide
 from .mcp_mount import build_mcp_app
-from .mcp_oauth import MCPAuthGate, build_oauth_router
+from .mcp_oauth import MCPAuthGate, _is_transport_path, build_oauth_router
 from .options import build_options_router
 from .planning import build_planning_router
 from .ratelimit import RateLimitMiddleware
@@ -269,10 +269,14 @@ def create_app(
 
     # Added last → outermost: CORS wraps rate-limit responses too, and handles
     # preflight before the limiter sees the request.
+    # Exempt /health (prefix) and the MCP transport only. Reuse
+    # _is_transport_path so the coarse "/mcp" prefix no longer excuses the heavy
+    # /mcp/tools/* planning-compute POST or the /mcp-guide HTML from throttling.
     app.add_middleware(
         RateLimitMiddleware,
         limit_per_min=_int_env("NEXUS_RATE_LIMIT_PER_MIN", 60),
-        exempt_prefixes=("/health", "/mcp"),
+        exempt_prefixes=("/health",),
+        exempt_predicate=_is_transport_path,
     )
     app.add_middleware(
         CORSMiddleware,

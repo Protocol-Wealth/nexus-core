@@ -47,6 +47,7 @@ from ... import __version__
 from ...data.derivatives import DeribitClient, MboumOptionsClient
 from ...data.onchain import DefiLlamaClient
 from ...data.providers import MacroDataProvider, MarketDataProvider
+from ...disclaimers import TERSE
 from ...engine.planning.regime import to_generic_regime
 from ...engine.pricing import (
     BookPosition,
@@ -193,11 +194,9 @@ def build_server(
     mcp = FastMCP(name, mask_error_details=True)
     filters = filters or []
     demo_profile = tool_profile.strip().lower() == "demo"
-    disclaimer = disclaimer or (
-        "For educational and research purposes only. Not investment advice. "
-        "Past performance is not indicative of future results. Consult a "
-        "qualified advisor before making investment decisions."
-    )
+    # Never hand-write a disclaimer: default to the canonical TERSE so any
+    # caller that omits one still emits the single-source regulatory copy.
+    disclaimer = disclaimer or TERSE
     extra_tools = tuple(extra_tools or ())
     ordered_extra_names = [name for name, _description, _fn in extra_tools]
     registered_extra_names = {name for name, _description, _fn in extra_tools}

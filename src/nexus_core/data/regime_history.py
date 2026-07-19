@@ -30,7 +30,7 @@ from typing import Any
 
 import asyncpg
 
-from .db import connect
+from .db import CONNECTION_ERRORS, DatabaseUnavailableError, connect
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS regime_history (
@@ -113,15 +113,23 @@ async def read_regime_history(limit: int = 365) -> list[dict[str, Any]]:
     """Stored daily regime rows, oldest first (the most recent ``limit`` days).
 
     No DDL on this (public, frequent) read path; an absent table — i.e. nothing
-    has been written yet — degrades to an empty list.
+    has been written yet — degrades to an empty list. A *configured but
+    unreachable* database (the connection itself failing, or dropping mid-query)
+    raises :class:`DatabaseUnavailableError` so the route can degrade to 503
+    rather than surface an uncaught 500. ``connect()`` is inside the ``try`` for
+    exactly this reason.
     """
-    conn = await connect()
+    conn: asyncpg.Connection | None = None
     try:
+        conn = await connect()
         rows = await conn.fetch(_SELECT, max(1, limit))
     except asyncpg.UndefinedTableError:
         return []
+    except CONNECTION_ERRORS as exc:
+        raise DatabaseUnavailableError("regime history is temporarily unavailable") from exc
     finally:
-        await conn.close()
+        if conn is not None:
+            await conn.close()
     return [
         {
             "date": row["snapshot_date"].isoformat(),

@@ -49,7 +49,12 @@ def build_snapshots_router() -> APIRouter:
             raise HTTPException(
                 status_code=503, detail="History unavailable: DATABASE_URL not configured"
             )
-        snaps = await read_benchmark_snapshots(limit=days)
+        try:
+            snaps = await read_benchmark_snapshots(limit=days)
+        except db.DatabaseUnavailableError as exc:
+            raise HTTPException(
+                status_code=503, detail="History temporarily unavailable: database unreachable"
+            ) from exc
         response.headers["Cache-Control"] = f"public, max-age={_HISTORY_TTL}"
         if not snaps:
             return {"snapshots": 0, "benchmarks": [], "disclaimer": _DISCLAIMER}

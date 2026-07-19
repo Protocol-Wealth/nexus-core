@@ -29,10 +29,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from nexus_core.disclaimers import TERSE
 from nexus_core.engine.pricing.black_scholes import bs_price, greeks
 
-#: Educational-framing string attached to every illustration.
-DISCLAIMER = "Educational illustration only — not investment advice."
+#: Educational-framing string attached to every illustration. Sourced from the
+#: canonical :data:`nexus_core.disclaimers.TERSE` — never hand-written, so a
+#: Marketing-Rule change to ``TERSE`` propagates to every option-overlay surface.
+DISCLAIMER = TERSE
 
 #: Calendar days per year for annualization of static returns.
 _DAYS_PER_YEAR = 365.0

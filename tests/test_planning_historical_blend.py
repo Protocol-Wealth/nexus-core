@@ -16,7 +16,17 @@ from fastapi.responses import JSONResponse
 
 from nexus_core.app.planning import build_planning_router
 from nexus_core.data.providers import PriceBar
+from nexus_core.disclaimers import TERSE
 from nexus_core.engine.planning import historical_blend, historical_blend_result_schema
+
+
+def test_historical_blend_disclaimer_composes_from_canonical_terse() -> None:
+    from nexus_core.engine.planning import HISTORICAL_BLEND_DISCLAIMER
+
+    # The base text is not re-copied inline — it is the canonical TERSE prefix
+    # plus index-blend-specific caveats.
+    assert HISTORICAL_BLEND_DISCLAIMER.startswith(TERSE)
+    assert "cannot invest directly in an index" in HISTORICAL_BLEND_DISCLAIMER.lower()
 
 
 class _FakeMarket:

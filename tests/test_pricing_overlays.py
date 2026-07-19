@@ -8,6 +8,7 @@ import math
 
 import pytest
 
+from nexus_core.disclaimers import TERSE
 from nexus_core.engine.pricing.black_scholes import bs_price
 from nexus_core.engine.pricing.overlays import (
     DISCLAIMER,
@@ -15,6 +16,12 @@ from nexus_core.engine.pricing.overlays import (
     collar_overlay,
     covered_call_overlay,
 )
+
+
+def test_disclaimer_is_canonical_terse() -> None:
+    # The module must not hand-write regulatory copy — DISCLAIMER is sourced
+    # from the single-source canonical TERSE.
+    assert DISCLAIMER == TERSE
 
 
 @pytest.mark.unit
@@ -166,5 +173,6 @@ class TestEducationalFraming:
         col = collar_overlay(100.0, 95.0, 110.0, 30, put_premium=3.0, call_premium=2.0)
         for ill in (cc, csp, col):
             assert ill.disclaimer == DISCLAIMER
-            assert "not investment advice" in ill.disclaimer.lower()
+            assert ill.disclaimer == TERSE
+            assert "not investment, tax, legal, or financial advice" in ill.disclaimer.lower()
 

@@ -472,7 +472,7 @@ def test_equity_collar_screen_tool() -> None:
     assert row["put_strike"] == 85.0  # 15% below spot on the $1 grid
     assert row["put_strike"] < row["spot"] < row["call_strike"]
     assert row["theoretical"] is True
-    assert "not investment advice" in body["disclaimer"].lower()
+    assert body["disclaimer"] == TERSE  # build_server default is canonical TERSE
 
 
 def test_equity_collar_screen_tool_rejects_bad_inputs() -> None:
@@ -538,7 +538,7 @@ def test_collar_book_tool() -> None:
     assert holdings["AAA"]["fill_haircut"] == 0.5
     assert book["notional_deployed"] > 0.0
     assert book["fill_haircut"] is None  # BBB did not supply executable pricing.
-    assert "not investment advice" in body["disclaimer"].lower()
+    assert body["disclaimer"] == TERSE  # build_server default is canonical TERSE
 
 
 def test_collar_book_tool_rejects_bad_inputs() -> None:

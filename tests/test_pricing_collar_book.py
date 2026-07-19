@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 
+from nexus_core.disclaimers import TERSE
 from nexus_core.engine.pricing import (
     CollarBookPosition,
     assemble_collar_book,
@@ -67,7 +68,7 @@ def test_whole_contract_flooring_and_income_arithmetic() -> None:
     assert result.notional_deployed == 120_000.0
     assert result.cash_residual == 880_000.0
     assert math.isclose(result.portfolio_yield_pct, 2.0 / 100.0 * 365 / 30 * 100, abs_tol=0.01)
-    assert "not investment advice" in result.disclaimer.lower()
+    assert result.disclaimer == TERSE  # canonical single-source disclaimer
 
 
 def test_price_tier_exclusion_950_stock_in_250k_book() -> None:

@@ -21,6 +21,7 @@ from nexus_core.data.derivatives import (
     OptionTicker,
 )
 from nexus_core.data.providers import PriceBar, Quote
+from nexus_core.disclaimers import TERSE
 
 
 class _FakeMarket:
@@ -312,7 +313,7 @@ def test_collar_book_happy_path() -> None:
     assert book["capital_weighted_floor_pct"] is None
     assert book["notional_deployed"] > 0.0
     assert book["counts"]["held"] == 2
-    assert "not investment advice" in book["disclaimer"].lower()
+    assert book["disclaimer"] == TERSE  # canonical single-source disclaimer
 
 
 def test_collar_book_params_respected_and_exclusions_reported() -> None:
