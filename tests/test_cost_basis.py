@@ -416,6 +416,116 @@ def test_unmatched_transfer_in_never_uses_market_as_original_basis() -> None:
     assert result.coverage.unresolved_transfer_count == 1
 
 
+def test_external_transfer_in_uses_confirmed_receipt_fmv_as_provisional_basis() -> None:
+    events = [
+        _ev(
+            "external-receipt",
+            EventKind.transfer_in,
+            1,
+            [_leg("asset", "in", "2", "100")],
+            transfer_ref="external-receipt-1",
+            transfer_treatment=TransferTreatment.external,
+        ),
+        _ev("disp", EventKind.dispose, 2, [_leg("asset", "out", "1", "75")]),
+    ]
+
+    result = compute_cost_basis(events, report_window=_window(1, 3))
+
+    assert result.disposals[0].cost_basis_usd == Decimal("50")
+    assert result.disposals[0].realized_gain_usd == Decimal("25")
+    assert result.disposals[0].acquired_at == 1
+    assert result.open_lots[0].cost_basis_usd == Decimal("50")
+    assert result.open_lots[0].basis_price_source == "caller_price"
+    assert result.open_lots[0].basis_price_as_of == 1
+    assert result.coverage.unresolved_transfer_count == 0
+    assert result.completeness.statement_ready is True
+    assert "external_transfer_receipt_fmv_basis" in {
+        assumption.code for assumption in result.assumptions
+    }
+
+
+def test_external_transfer_in_without_receipt_price_keeps_basis_unknown() -> None:
+    result = compute_cost_basis(
+        [
+            _ev(
+                "unpriced-external-receipt",
+                EventKind.transfer_in,
+                1,
+                [_leg("asset", "in", "1")],
+                transfer_ref="external-receipt-1",
+                transfer_treatment=TransferTreatment.external,
+            )
+        ],
+        report_window=_window(1, 2),
+    )
+
+    assert result.open_lots[0].cost_basis_usd is None
+    assert result.coverage.unresolved_transfer_count == 0
+    assert result.completeness.statement_ready is False
+    assert "unknown_basis" in {gap.code for gap in result.completeness.gaps}
+
+
+def test_external_transfer_in_accepts_a_provenance_bearing_manual_basis_override() -> None:
+    result = compute_cost_basis(
+        [
+            _ev(
+                "external-receipt",
+                EventKind.transfer_in,
+                10,
+                [_leg("asset", "in", "1", "100")],
+                transfer_ref="external-receipt-1",
+                transfer_treatment=TransferTreatment.external,
+            )
+        ],
+        overrides=[
+            BasisOverrideInput(
+                event_id="external-receipt",
+                override_ref="advisor-evidence-1",
+                origin_lot_ref="client-origin-lot-1",
+                cost_basis_usd=Decimal("80"),
+                acquired_at=1,
+                acquisition_sequence=0,
+                acquisition_event_id="client-reported-acquisition",
+                source="client_account_statement",
+                last_verified=date(2026, 7, 18),
+                single_lot_assertion=True,
+            )
+        ],
+        report_window=_window(10, 11),
+    )
+
+    lot = result.open_lots[0]
+    assert lot.cost_basis_usd == Decimal("80")
+    assert lot.acquired_at == 1
+    assert lot.basis_source == "override"
+    assert lot.basis_evidence_source == "client_account_statement"
+    assert lot.basis_last_verified == date(2026, 7, 18)
+    assert result.completeness.statement_ready is True
+
+
+def test_external_transfer_out_remains_unresolved_without_tax_treatment() -> None:
+    result = compute_cost_basis(
+        [
+            _ev("acq", EventKind.acquire, 1, [_leg("asset", "in", "1", "50")]),
+            _ev(
+                "external-send",
+                EventKind.transfer_out,
+                2,
+                [_leg("asset", "out", "1", "75")],
+                transfer_ref="external-send-1",
+                transfer_treatment=TransferTreatment.external,
+            ),
+        ],
+        report_window=_window(1, 3),
+    )
+
+    assert result.coverage.unresolved_transfer_count == 1
+    assert result.completeness.statement_ready is False
+    assert "unresolved_transfer_treatment" in {
+        gap.code for gap in result.completeness.gaps
+    }
+
+
 def test_paired_transfer_source_shortfall_is_counted_as_unresolved() -> None:
     result = compute_cost_basis(
         [

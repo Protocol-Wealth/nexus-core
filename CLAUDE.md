@@ -24,8 +24,10 @@
   conserves authoritative basis/fee totals across partial lots and transfers,
   supports full-history or method-pinned complete opening-state replay, and
   returns root-lot/event/transaction/evidence/price lineage with structured
-  completeness. Ambiguous DeFi and external/unknown transfer treatments fail
-  closed. Calculation completeness is not a closing-valuation or deliverable
+  completeness. Confirmed external inbound receipts default to receipt-time
+  fair-market-value basis with price provenance; same-owner transfers carry
+  original basis, while external outbound, unknown, and ambiguous DeFi
+  treatments fail closed. Calculation completeness is not a closing-valuation or deliverable
   attestation; the private composer applies section-specific gates. See
   `docs/ONCHAIN-ACCOUNTING.md`.
 - **Transport boundary:** the deployed image reuses the accounting handler
