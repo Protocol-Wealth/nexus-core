@@ -6,11 +6,18 @@ from __future__ import annotations
 
 import pytest
 
+from nexus_core.disclaimers import TERSE
 from nexus_core.engine.pricing.crypto_overlays import (
+    DISCLAIMER,
     crypto_collar,
     crypto_covered_call,
     crypto_protective_put,
 )
+
+
+def test_disclaimer_is_canonical_terse() -> None:
+    # No hand-written regulatory copy — DISCLAIMER is sourced from canonical TERSE.
+    assert DISCLAIMER == TERSE
 
 
 def test_inverse_covered_call_hand_values() -> None:

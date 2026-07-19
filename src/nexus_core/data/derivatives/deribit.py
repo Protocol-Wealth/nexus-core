@@ -37,6 +37,7 @@ from typing import Any
 
 import httpx
 
+from ...disclaimers import TERSE
 from ..http import fetch_json
 
 logger = logging.getLogger(__name__)
@@ -81,8 +82,9 @@ _UNDERLIERS: dict[str, _Underlier] = {
     "AVAX": _Underlier("avax_usd", linear=True),
 }
 
-#: Educational-framing disclaimer attached to structured option outputs.
-DISCLAIMER = "Educational illustration only — not investment advice."
+#: Educational-framing disclaimer attached to structured option outputs. Sourced
+#: from the canonical :data:`nexus_core.disclaimers.TERSE` — never hand-written.
+DISCLAIMER = TERSE
 
 
 @dataclass

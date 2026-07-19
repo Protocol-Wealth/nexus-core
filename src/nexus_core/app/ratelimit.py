@@ -15,7 +15,7 @@ public read-only API; a global limit would need a shared store (Redis).
 from __future__ import annotations
 
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -33,7 +33,13 @@ class RateLimitMiddleware:
         limit_per_min: Allowed requests per IP per 60-second window. A value
             of ``0`` or less disables the limiter.
         exempt_prefixes: Path prefixes excused from rate limiting (e.g. the
-            health probe and the streaming MCP mount).
+            health probe). A plain prefix match — use ``exempt_predicate`` when
+            a prefix would over-exempt (e.g. ``/mcp`` must not also excuse the
+            heavy ``/mcp/tools/*`` compute POST).
+        exempt_predicate: Optional per-path predicate excused from rate
+            limiting, applied in addition to ``exempt_prefixes``. Lets the
+            caller reuse exact transport-path logic (e.g.
+            ``mcp_oauth._is_transport_path``) that a coarse prefix cannot express.
     """
 
     def __init__(
@@ -42,10 +48,12 @@ class RateLimitMiddleware:
         *,
         limit_per_min: int = 60,
         exempt_prefixes: Iterable[str] = (),
+        exempt_predicate: Callable[[str], bool] | None = None,
     ) -> None:
         self._app = app
         self._limit = limit_per_min
         self._exempt = tuple(exempt_prefixes)
+        self._exempt_predicate = exempt_predicate
         self._hits: dict[str, list[float]] = {}
         self._request_count = 0
 
@@ -55,7 +63,9 @@ class RateLimitMiddleware:
             return
 
         path: str = scope.get("path", "")
-        if any(path.startswith(prefix) for prefix in self._exempt):
+        if any(path.startswith(prefix) for prefix in self._exempt) or (
+            self._exempt_predicate is not None and self._exempt_predicate(path)
+        ):
             await self._app(scope, receive, send)
             return
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 
+from nexus_core.disclaimers import TERSE
 from nexus_core.engine.pricing import (
     CollarScreenPosition,
     evaluate_collar_position,
@@ -48,7 +49,7 @@ def test_put_call_strike_geometry() -> None:
     assert r.downside_protection_pct == r.floor_pct
     assert r.cap_pct > 0.0
     assert r.theoretical is True
-    assert "not investment advice" in r.disclaimer.lower()
+    assert r.disclaimer == TERSE  # canonical single-source disclaimer
 
 
 def test_call_strike_targets_delta() -> None:

@@ -19,6 +19,12 @@ from nexus_core.data.derivatives import (
     OptionInstrument,
     OptionTicker,
 )
+from nexus_core.disclaimers import TERSE
+
+
+def test_disclaimer_is_canonical_terse() -> None:
+    # Deribit must not hand-write regulatory copy — DISCLAIMER is the canonical TERSE.
+    assert DISCLAIMER == TERSE
 
 
 def _client(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.Client:

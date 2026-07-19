@@ -90,7 +90,12 @@ def build_router(
             raise HTTPException(
                 status_code=503, detail="History unavailable: DATABASE_URL not configured"
             )
-        rows = await read_regime_history(limit=days)
+        try:
+            rows = await read_regime_history(limit=days)
+        except db.DatabaseUnavailableError as exc:
+            raise HTTPException(
+                status_code=503, detail="History temporarily unavailable: database unreachable"
+            ) from exc
         response.headers["Cache-Control"] = f"public, max-age={_REGIME_TTL}"
         return with_disclaimer({"days": len(rows), "history": rows})
 

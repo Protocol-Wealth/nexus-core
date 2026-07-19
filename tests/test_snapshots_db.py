@@ -14,9 +14,11 @@ import datetime
 import json
 from typing import Any
 
+import asyncpg
 import pytest
 
 from nexus_core.data import snapshots
+from nexus_core.data.db import DatabaseUnavailableError
 
 
 class _FakeConn:
@@ -65,3 +67,45 @@ def test_read_parses_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     out = asyncio.run(snapshots.read_benchmark_snapshots(limit=30))
     assert out[0] == {"date": "2026-01-01", "prices": {"BTC": 40000, "USDC": 1.0}}
     assert out[1]["prices"]["BTC"] == 44000  # already-dict JSONB handled too
+
+
+def test_read_absent_table_degrades_to_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _MissingTableConn(_FakeConn):
+        async def fetch(self, query: str, *args: Any) -> list[Any]:
+            raise asyncpg.UndefinedTableError("relation does not exist")
+
+    fake = _MissingTableConn()
+
+    async def fake_connect(**_kw: Any) -> _MissingTableConn:
+        return fake
+
+    monkeypatch.setattr(snapshots, "connect", fake_connect)
+    # Nothing written yet is an expected empty, not an error.
+    assert asyncio.run(snapshots.read_benchmark_snapshots(limit=30)) == []
+
+
+def test_read_unreachable_db_raises_unavailable_not_500(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A configured-but-unreachable Cloud SQL: connect() itself fails. The read
+    # must raise DatabaseUnavailableError (→ route 503), never an uncaught 500.
+    async def fake_connect(**_kw: Any) -> Any:
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(snapshots, "connect", fake_connect)
+    with pytest.raises(DatabaseUnavailableError):
+        asyncio.run(snapshots.read_benchmark_snapshots(limit=30))
+
+
+def test_read_mid_query_drop_raises_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The connection drops mid-fetch (InterfaceError) — also degrades to 503.
+    class _DroppingConn(_FakeConn):
+        async def fetch(self, query: str, *args: Any) -> list[Any]:
+            raise asyncpg.InterfaceError("connection was closed")
+
+    fake = _DroppingConn()
+
+    async def fake_connect(**_kw: Any) -> _DroppingConn:
+        return fake
+
+    monkeypatch.setattr(snapshots, "connect", fake_connect)
+    with pytest.raises(DatabaseUnavailableError):
+        asyncio.run(snapshots.read_benchmark_snapshots(limit=30))

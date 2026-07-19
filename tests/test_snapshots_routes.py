@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from nexus_core.app import snapshots as snap_mod
 from nexus_core.app.snapshots import build_snapshots_router
+from nexus_core.data.db import DatabaseUnavailableError
 
 
 def _client() -> TestClient:
@@ -26,6 +27,18 @@ def _client() -> TestClient:
 
 def test_history_503_without_db(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    assert _client().get("/api/benchmarks/history").status_code == 503
+
+
+def test_history_503_when_db_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
+    # DATABASE_URL is set but Cloud SQL is momentarily unreachable: the read
+    # raises DatabaseUnavailableError → the route degrades to 503, never 500.
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg:///x?host=/cloudsql/y")
+
+    async def fake_read(limit: int = 365) -> list[dict[str, Any]]:
+        raise DatabaseUnavailableError("benchmark history is temporarily unavailable")
+
+    monkeypatch.setattr(snap_mod, "read_benchmark_snapshots", fake_read)
     assert _client().get("/api/benchmarks/history").status_code == 503
 
 

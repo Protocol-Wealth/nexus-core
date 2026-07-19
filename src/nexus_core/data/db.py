@@ -21,6 +21,26 @@ import asyncpg
 
 _URL_ENV = "DATABASE_URL"
 
+#: Errors that mean a *configured* database is unreachable or failed mid-call
+#: (connection refused / reset / timeout, protocol error, mid-query drop) — as
+#: opposed to a missing table, which is a distinct, expected "no data yet" state.
+#: A configured-but-unreachable Cloud SQL must degrade to 503, never surface as
+#: an uncaught 500. Read paths catch this set; ``ping`` uses it too.
+CONNECTION_ERRORS: tuple[type[Exception], ...] = (
+    OSError,
+    asyncpg.PostgresError,
+    asyncpg.InterfaceError,
+)
+
+
+class DatabaseUnavailableError(RuntimeError):
+    """A configured database was unreachable on a read path.
+
+    Read helpers raise this after catching :data:`CONNECTION_ERRORS`; HTTP
+    routes map it to a 503, matching the ``is_configured()`` gate so a momentary
+    Cloud SQL outage degrades cleanly instead of propagating an uncaught 500.
+    """
+
 
 def database_url() -> str | None:
     """The configured ``DATABASE_URL``, or ``None``."""
@@ -62,11 +82,18 @@ async def ping(*, timeout: float = 5.0) -> bool:
     try:
         conn = await asyncpg.connect(_asyncpg_dsn(url), timeout=timeout)
         return bool(await conn.fetchval("SELECT 1") == 1)
-    except (OSError, asyncpg.PostgresError, asyncpg.InterfaceError):
+    except CONNECTION_ERRORS:
         return False
     finally:
         if conn is not None:
             await conn.close()
 
 
-__all__ = ["connect", "database_url", "is_configured", "ping"]
+__all__ = [
+    "CONNECTION_ERRORS",
+    "DatabaseUnavailableError",
+    "connect",
+    "database_url",
+    "is_configured",
+    "ping",
+]
