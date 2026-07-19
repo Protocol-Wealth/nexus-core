@@ -28,6 +28,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from ...data.providers import MarketDataProvider
@@ -94,7 +95,11 @@ def build_planning_router(
             return _error(404, f"unknown tool '{tool_id}'; available: {', '.join(available)}")
 
         try:
-            payload = handler(body)
+            # Handlers do blocking synchronous work (CPU-bound Monte Carlo /
+            # numpy plus sync market-data reads). Offload to the threadpool so a
+            # slow tool never stalls the ASGI event loop for unrelated requests
+            # on this worker.
+            payload = await run_in_threadpool(handler, body)
         except PlanningInputError as exc:
             return _error(400, exc.public_message)
         except PlanningInfeasibleError as exc:
