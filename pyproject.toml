@@ -142,7 +142,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
-    "ruff>=0.15.21",
+    "ruff>=0.15.22",
     "mypy>=2.3.0",
     "pip-licenses>=5.5.5",
 ]
