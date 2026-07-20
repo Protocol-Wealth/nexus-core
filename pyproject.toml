@@ -48,7 +48,7 @@ dependencies = [
     # for the deployed surface. Lift the cap if/when alphalens-reloaded ships
     # pandas-3 support.
     "pandas>=2.2,<3.0",
-    "numpy>=2.4.6",
+    "numpy>=2.5.1",
     "scipy>=1.18.0",
 ]
 
