@@ -71,7 +71,7 @@ risk = [
 
 # Derivatives pricing
 pricing = [
-    "QuantLib>=1.42.1",            # Modified BSD
+    "QuantLib>=1.43",            # Modified BSD
     "financepy>=1.0.1",            # MIT
 ]
 
