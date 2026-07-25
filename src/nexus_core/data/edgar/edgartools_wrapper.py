@@ -18,7 +18,7 @@ Typical use::
 
 Install::
 
-    pip install nexus-core[edgar]
+    pip install pw-nexus-core[edgar]
 
 Attribution:
     edgartools — Copyright 2023+ Dwight Gunning (MIT).
@@ -82,7 +82,7 @@ def configure_identity(name: str, email: str) -> None:
     user-agent; compliance with the fair-use policy prevents IP blocks.
     """
     if set_identity is None:
-        raise ImportError("edgartools not installed. Install with: pip install nexus-core[edgar]")
+        raise ImportError("edgartools not installed. Install with: pip install pw-nexus-core[edgar]")
     set_identity(f"{name} {email}")
 
 
@@ -94,7 +94,7 @@ def get_latest_filing(ticker: str, *, form: str = "10-K") -> Filing | None:
         form: SEC form code. Common: ``10-K``, ``10-Q``, ``8-K``, ``DEF 14A``.
     """
     if Company is None:
-        raise ImportError("edgartools not installed. Install with: pip install nexus-core[edgar]")
+        raise ImportError("edgartools not installed. Install with: pip install pw-nexus-core[edgar]")
 
     company = Company(ticker)
     filings = company.get_filings(form=form)
@@ -108,7 +108,7 @@ def get_latest_filing(ticker: str, *, form: str = "10-K") -> Filing | None:
 def get_filings(ticker: str, *, form: str = "10-K", limit: int = 10) -> list[Filing]:
     """Return up to ``limit`` filings for ``ticker`` of the given form type."""
     if Company is None:
-        raise ImportError("edgartools not installed. Install with: pip install nexus-core[edgar]")
+        raise ImportError("edgartools not installed. Install with: pip install pw-nexus-core[edgar]")
 
     company = Company(ticker)
     filings = company.get_filings(form=form)
