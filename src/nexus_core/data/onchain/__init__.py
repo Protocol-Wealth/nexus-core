@@ -22,7 +22,7 @@ Concrete clients:
   CoinGecko's coin-id catalogue.
 
 All live clients need only the core ``httpx`` dependency. Reference libraries for
-future richer direct-RPC readers (``pip install nexus-core[onchain]``):
+future richer direct-RPC readers (``pip install pw-nexus-core[onchain]``):
 
 - web3.py (MIT) — https://github.com/ethereum/web3.py
 """

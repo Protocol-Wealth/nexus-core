@@ -100,7 +100,7 @@ def black_litterman_posterior(
         from pypfopt import BlackLittermanModel
     except ImportError as exc:
         raise RuntimeError(
-            "PyPortfolioOpt not installed. Install with: pip install nexus-core[optimization]"
+            "PyPortfolioOpt not installed. Install with: pip install pw-nexus-core[optimization]"
         ) from exc
 
     if not views:
