@@ -21,7 +21,7 @@ modifying this module.
 
 Requires ``fastmcp>=2.0.0``. Install via::
 
-    pip install nexus-core[mcp]
+    pip install pw-nexus-core[mcp]
 """
 
 from __future__ import annotations
@@ -186,7 +186,7 @@ def build_server(
         A configured ``FastMCP`` instance. Call ``.run()`` to start.
     """
     if FastMCP is None:
-        raise ImportError("fastmcp is required. Install with: pip install nexus-core[mcp]")
+        raise ImportError("fastmcp is required. Install with: pip install pw-nexus-core[mcp]")
 
     # mask_error_details=True: if any tool body ever raises an unexpected
     # exception, FastMCP returns a generic ToolError instead of leaking str(e)

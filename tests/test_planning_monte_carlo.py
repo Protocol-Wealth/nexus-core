@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 import pytest
 
+from nexus_core import __version__
 from nexus_core.engine.planning import GuardrailParams, monte_carlo_decumulation
 from nexus_core.engine.planning.monte_carlo import _T_DOF, _portfolio_returns, _wilson_interval
 from nexus_core.engine.planning.regime import GENERIC_REGIMES
@@ -76,7 +77,7 @@ def test_default_scenario_valid_structure() -> None:
     assert r["runManifest"]["paths"] == 3000
     assert r["runManifest"]["seed"] == 12345
     assert r["runManifest"]["manifestVersion"] == "monte_carlo_run_manifest_0.1.0"
-    assert r["runManifest"]["engineVersion"] == "0.1.0"
+    assert r["runManifest"]["engineVersion"] == __version__
     assert len(r["runManifest"]["assumptionsHash"]) == 64
     assert r["runManifest"]["successProbabilityCiMaxReportHalfWidth"] == 0.015
     assert isinstance(r["runManifest"]["successProbabilityCiWithinReportTolerance"], bool)

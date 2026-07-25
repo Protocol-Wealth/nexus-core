@@ -47,7 +47,7 @@ def discrete_allocate(
         from pypfopt import DiscreteAllocation
     except ImportError as exc:
         raise RuntimeError(
-            "PyPortfolioOpt not installed. Install with: pip install nexus-core[optimization]"
+            "PyPortfolioOpt not installed. Install with: pip install pw-nexus-core[optimization]"
         ) from exc
 
     da_kwargs: dict[str, Any] = {

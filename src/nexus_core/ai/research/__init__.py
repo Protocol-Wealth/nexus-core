@@ -8,5 +8,5 @@ Third-party library:
 - FinRobot (Apache 2.0) - https://github.com/AI4Finance-Foundation/FinRobot
   Multi-agent workflows with Financial Chain-of-Thought prompting
 
-Install with: pip install nexus-core[ai]
+Install with: pip install pw-nexus-core[ai]
 """

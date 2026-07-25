@@ -295,15 +295,14 @@ different signal sources should still re-fit.)
 
 ## Installation
 
-> **Install from the source repository.** A Protocol Wealth–controlled
-> distribution is not yet published to PyPI — the bare `nexus-core` name on PyPI
-> is **not** ours — so until a controlled distribution is published, install
-> directly from this repository (the git-pinned form below).
+> **Package name:** the official PyPI distribution is `pw-nexus-core`. The bare
+> `nexus-core` name on PyPI is an unrelated project and is **not** maintained by
+> Protocol Wealth. Tagged releases are also installable directly from GitHub.
 
 ### Full install (all capabilities)
 
 ```bash
-pip install "nexus-core[all] @ git+https://github.com/Protocol-Wealth/nexus-core.git"
+pip install "pw-nexus-core[all]==1.0.2"
 ```
 
 ### Modular installs (reduce dep footprint)
@@ -316,15 +315,15 @@ FinancePy) · `edgar` (edgartools, Arelle, sec-parser) · `market` (yfinance) ·
 alphalens). Omit the bracket entirely for core only (regime + scoring).
 
 ```bash
-pip install "nexus-core[serve] @ git+https://github.com/Protocol-Wealth/nexus-core.git"
+pip install "pw-nexus-core[serve]==1.0.2"
 ```
 
 ### From source
 
+Install the same reviewed tag directly from GitHub:
+
 ```bash
-git clone https://github.com/Protocol-Wealth/nexus-core.git
-cd nexus-core
-pip install -e ".[all]"
+pip install "pw-nexus-core[all] @ git+https://github.com/Protocol-Wealth/nexus-core.git@v1.0.2"
 ```
 
 ## Quick Start
