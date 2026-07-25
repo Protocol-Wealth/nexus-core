@@ -31,7 +31,7 @@ Third-party libraries:
     - Riskfolio-Lib (BSD-3) — https://github.com/dcajasn/Riskfolio-Lib
     - skfolio (BSD-3) — https://github.com/skfolio/skfolio (planned)
 
-Install with: ``pip install nexus-core[optimization]``
+Install with: ``pip install pw-nexus-core[optimization]``
 """
 
 from __future__ import annotations

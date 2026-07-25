@@ -9,7 +9,7 @@ nexus-core deployment.
 
 Install with::
 
-    pip install nexus-core[market]
+    pip install pw-nexus-core[market]
 
 yfinance scrapes a public, undocumented Yahoo endpoint; treat it as
 best-effort. Every method returns ``None`` / an empty list rather than raising
@@ -47,7 +47,7 @@ class YFinanceMarketData:
         if ticker_factory is None:
             if yf is None:
                 raise ImportError(
-                    "yfinance is required. Install with: pip install nexus-core[market]"
+                    "yfinance is required. Install with: pip install pw-nexus-core[market]"
                 )
             ticker_factory = yf.Ticker
         self._ticker_factory = ticker_factory
