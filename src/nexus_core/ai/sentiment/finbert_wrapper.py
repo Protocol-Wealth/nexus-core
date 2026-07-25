@@ -17,7 +17,7 @@ Attribution:
 
 Install::
 
-    pip install nexus-core[ai]
+    pip install pw-nexus-core[ai]
 
 The ``ai`` extra pulls in torch + transformers (~2GB). For lightweight
 deployments consider calling a hosted inference endpoint instead.
@@ -80,7 +80,7 @@ class FinBERTClassifier:
             return
         if hf_pipeline is None:
             raise ImportError(
-                "transformers not installed. Install with: pip install nexus-core[ai]"
+                "transformers not installed. Install with: pip install pw-nexus-core[ai]"
             )
         self._pipeline = hf_pipeline(
             "sentiment-analysis",

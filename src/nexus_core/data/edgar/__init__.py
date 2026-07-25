@@ -12,7 +12,7 @@ Third-party libraries:
     - sec-parser (MIT) — https://github.com/alphanome-ai/sec-parser
     - sec-edgar-downloader (MIT) — https://github.com/jadchaar/sec-edgar-downloader
 
-Install with: ``pip install nexus-core[edgar]``
+Install with: ``pip install pw-nexus-core[edgar]``
 """
 
 from __future__ import annotations

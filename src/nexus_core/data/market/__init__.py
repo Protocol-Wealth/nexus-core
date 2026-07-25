@@ -12,7 +12,7 @@ Concrete :class:`~nexus_core.data.providers.MarketDataProvider` implementations:
 - :class:`CachedMarketData` — TTL cache over a provider (cuts upstream quota use).
 - :class:`UsageTrackingMarketData` — per-provider call counter for monitoring.
 
-Third-party libraries (install with ``pip install nexus-core[market]``):
+Third-party libraries (install with ``pip install pw-nexus-core[market]``):
 
 - yfinance (Apache 2.0) - https://github.com/ranaroussi/yfinance
 

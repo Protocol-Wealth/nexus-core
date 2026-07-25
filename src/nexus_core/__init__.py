@@ -10,6 +10,6 @@ Patent Pending: USPTO Application #64/034,229
 See NOTICE and THIRD_PARTY_LICENSES.md for third-party attributions.
 """
 
-__version__ = "0.1.0"
+__version__ = "1.0.2"
 __license__ = "Apache-2.0"
 __author__ = "Protocol Wealth, LLC"
