@@ -11,7 +11,7 @@ PyPortfolioOpt (MIT) provides the optimization primitives; this wrapper adds:
 
 Install::
 
-    pip install nexus-core[optimization]
+    pip install pw-nexus-core[optimization]
 
 Attribution:
     PyPortfolioOpt — Copyright 2018-2024 Robert Andrew Martin (MIT).
@@ -84,7 +84,7 @@ def optimize(
     """
     if pd is None:
         raise ImportError(
-            "PyPortfolioOpt not installed. Install with: pip install nexus-core[optimization]"
+            "PyPortfolioOpt not installed. Install with: pip install pw-nexus-core[optimization]"
         )
 
     mu = expected_returns.mean_historical_return(prices)
@@ -204,7 +204,7 @@ def optimize_from_moments(
     """
     if pd is None:
         raise ImportError(
-            "PyPortfolioOpt not installed. Install with: pip install nexus-core[optimization]"
+            "PyPortfolioOpt not installed. Install with: pip install pw-nexus-core[optimization]"
         )
     if objective not in MOMENT_OBJECTIVES:
         raise ValueError(

@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=83.0.0", "wheel"]
+requires = ["setuptools==83.0.0", "wheel==0.47.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nexus-core"
-version = "0.1.0"
+name = "pw-nexus-core"
+version = "1.0.2"
 description = "Open source regime-adaptive financial analysis engine with MCP tool orchestration"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -25,7 +25,7 @@ keywords = [
     "fintech",
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Financial and Insurance Industry",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
@@ -99,7 +99,7 @@ mcp = [
 # optimize_allocation planning tool on the public surface (the heavier
 # Riskfolio-Lib / skfolio backends stay in the [optimization] extra).
 serve = [
-    "nexus-core[market,mcp]",
+    "pw-nexus-core[market,mcp]",
     "PyPortfolioOpt>=1.6.0",       # MIT — optimize_allocation planning tool
 ]
 
@@ -142,6 +142,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
+    "jsonschema>=4.26.0",
     "ruff>=0.15.21",
     "mypy>=2.3.0",
     "pip-licenses>=5.5.5",
@@ -149,7 +150,7 @@ dev = [
 
 # All capabilities (excluding dev)
 all = [
-    "nexus-core[optimization,risk,pricing,edgar,market,mcp,ai,backtest,compliance,onchain,planning]",
+    "pw-nexus-core[optimization,risk,pricing,edgar,market,mcp,ai,backtest,compliance,onchain,planning]",
 ]
 
 [project.urls]
@@ -180,7 +181,7 @@ target-version = "py312"
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "PL"]
 # Ignored rules:
 #   E501 - line length handled by formatter
-#   PLR0911/0912/0913/0915 - branch/statement/argument count (domain code
+#   PLR0911/0912/0913/0915/0917 - branch/statement/argument count (domain code
 #       with many threshold comparisons is inherently branchy)
 #   PLR2004 - magic values (thresholds are explicit on purpose)
 #   UP042 - StrEnum is 3.11+ only; str + Enum works on all supported versions
@@ -194,6 +195,7 @@ ignore = [
     "PLR0912",
     "PLR0913",
     "PLR0915",
+    "PLR0917",
     "PLR2004",
     "PLC0415",
     "UP042",

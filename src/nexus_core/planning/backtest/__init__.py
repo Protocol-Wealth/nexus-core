@@ -8,5 +8,5 @@ Third-party:
 - zipline-reloaded (Apache 2.0) - https://github.com/stefan-jansen/zipline-reloaded
 - alphalens (Apache 2.0) - https://github.com/quantopian/alphalens
 
-Install with: pip install nexus-core[backtest]
+Install with: pip install pw-nexus-core[backtest]
 """
