@@ -29,7 +29,7 @@
 Everything here is an **educational illustration** over public market parameters
 — not investment advice, a recommendation, or a suitability determination.
 
-For richer fixed-income / exotic pricing, ``pip install nexus-core[pricing]``
+For richer fixed-income / exotic pricing, ``pip install pw-nexus-core[pricing]``
 adds QuantLib + FinancePy; the vanilla-option math here needs neither.
 """
 

@@ -34,7 +34,7 @@ def _require_riskfolio() -> Any:
         return rp
     except ImportError as exc:
         raise RiskfolioNotInstalledError(
-            "Riskfolio-Lib not installed. Install with: pip install nexus-core[optimization]"
+            "Riskfolio-Lib not installed. Install with: pip install pw-nexus-core[optimization]"
         ) from exc
 
 
