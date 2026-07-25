@@ -154,7 +154,7 @@ _PAGE = """\
 
   <h2>Option B — Run it locally (stdio)</h2>
   <p>Install from source (Python 3.12+), then run the stdio server:</p>
-  <pre><code>pip install "nexus-core[mcp] @ git+{repo}.git"
+  <pre><code>pip install "pw-nexus-core[mcp]=={version}"
 
 # optional: a free FRED API key sharpens the macro signals
 export FRED_API_KEY=your_key

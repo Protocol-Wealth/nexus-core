@@ -9,5 +9,5 @@ Third-party libraries:
 - pyfolio-reloaded (Apache 2.0) - https://github.com/stefan-jansen/pyfolio-reloaded
 - ffn (MIT) - https://github.com/pmorissette/ffn
 
-Install with: pip install nexus-core[risk]
+Install with: pip install pw-nexus-core[risk]
 """

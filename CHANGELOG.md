@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-07-25
+
+### PyPI distribution
+
+- Prepared the Python distribution as `pw-nexus-core` version `1.0.2` while
+  preserving the `nexus_core` import package and `nexus-core` CLI command.
+- Added tag-bound PyPI Trusted Publishing through
+  `.github/workflows/publish-pypi.yml`, with separate build and publish jobs
+  and no long-lived PyPI credential.
+- Corrected optional-dependency installation guidance so it cannot resolve to
+  the unrelated `nexus-core` project on PyPI.
+- Existing GitHub tags `v1.0.0` and `v1.0.1` predate this PyPI identity
+  alignment and are not PyPI releases; the first intended PyPI tag is
+  `v1.0.2`.
+
 ### External inbound cost basis from receipt FMV (#269)
 
 - External `transfer_in` acquisition basis now defaults to the confirmed
@@ -1365,3 +1380,5 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 ## [0.0.1] - 2026-04-12
 
 - Initial public release of docs
+
+[1.0.2]: https://github.com/Protocol-Wealth/nexus-core/compare/v1.0.1...v1.0.2
