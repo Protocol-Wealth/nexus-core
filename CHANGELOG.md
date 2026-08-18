@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`TatumClient.get_logs()`** — `eth_getLogs` support on the EVM client, with
+  int block numbers hex-encoded and tags such as `"latest"` passed through.
+  Optional `address` and `topics` filters are omitted when unset. No client-side
+  range cap is imposed: gateways enforce their own limits, and a stricter cap
+  here would refuse queries the gateway would have answered.
+
+  Contributed by **William Gantt**
+  ([@WillGantt](https://github.com/WillGantt)) as a Software Engineering
+  Contractor at Protocol Wealth, summer 2026. See `CONTRIBUTORS.md`.
+
 ## [1.0.2] - 2026-07-25
 
 ### PyPI distribution
