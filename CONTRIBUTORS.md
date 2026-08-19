@@ -14,5 +14,9 @@ GitHub handle.
   — `eth_getLogs` support on the Tatum EVM client
   (`src/nexus_core/data/onchain/tatum.py`)
 
+- **Justin Nguyen** ([@jnguyen-design](https://github.com/jnguyen-design))
+  — optional Upstash Redis cache with graceful degradation
+  (`src/nexus_core/data/cache.py`)
+
 Contributions made as a Software Engineering Contractor at Protocol Wealth,
 summer 2026, against synthetic data and public information only.
