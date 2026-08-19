@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Optional Upstash Redis cache (`data/cache.py`).** Cache-free by default: when
+  `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` are unset the cache is a
+  silent no-op and callers fall through to the provider — a cache is an
+  optimisation, never a dependency. Every upstream failure resolves to a miss
+  rather than raising, so a degraded cache cannot become an outage. A TTL is
+  required on writes. Uses the REST API over the existing `httpx` dependency, so
+  no package is added.
+
+  Contributed by **Justin Nguyen**
+  ([@jnguyen-design](https://github.com/jnguyen-design)) as a Software
+  Engineering Contractor at Protocol Wealth, summer 2026. See `CONTRIBUTORS.md`.
+
 - **`TatumClient.get_logs()`** — `eth_getLogs` support on the EVM client, with
   int block numbers hex-encoded and tags such as `"latest"` passed through.
   Optional `address` and `topics` filters are omitted when unset. No client-side
