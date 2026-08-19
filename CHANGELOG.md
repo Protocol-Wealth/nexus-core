@@ -9,9 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Typed response models across `/api/lp/*`.** The last untyped route module;
-  every `/api/lp` body now has a published OpenAPI schema instead of a bare
-  `additionalProperties: true` object. Serialized bytes unchanged across all five
+- **Typed response models across `/api/lp/*`.** The last of the five on-chain and
+  market-data route modules to get them (wallet, chain, vaults, solana, lp); every
+  `/api/lp` body now has a published OpenAPI schema instead of a bare
+  `additionalProperties: true` object. `routes.py`, `benchmarks.py`, `layers.py`
+  and `options.py` still return untyped dictionaries and are not in this sweep. Serialized bytes unchanged across all five
   endpoints (6,682 bytes total, identical), verified by capturing the responses
   before and after and diffing them.
 
