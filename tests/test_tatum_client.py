@@ -7,6 +7,7 @@ Hermetic — every JSON-RPC request is served by an ``httpx.MockTransport`` hand
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 
 import httpx
@@ -15,6 +16,7 @@ import pytest
 from nexus_core.data.onchain import TatumClient, is_solana_address
 
 _EVM = "0x" + "a" * 40
+_TRANSFER_TOPIC = "0x" + "d" * 64
 _SOL = "GsbwXfJraMomNxBcjK7xK2xQx5MQgQ3rEXrx2nKw1234"  # plausible base58
 
 
@@ -76,7 +78,12 @@ def test_solana_balance_unwraps_value() -> None:
         assert request.url.host == "solana-mainnet.gateway.tatum.io"
         assert "getBalance" in request.read().decode()
         return httpx.Response(
-            200, json={"jsonrpc": "2.0", "id": 1, "result": {"context": {"slot": 1}, "value": 2_500_000_000}}
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"context": {"slot": 1}, "value": 2_500_000_000},
+            },
         )
 
     bal = TatumClient(api_key="k", http_client=_client(handler)).native_balance("solana", _SOL)
@@ -97,14 +104,20 @@ def test_evm_bad_hex_result_degrades() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": "not-hex"})
 
-    assert TatumClient(api_key="k", http_client=_client(handler)).native_balance("ethereum", _EVM) is None
+    assert (
+        TatumClient(api_key="k", http_client=_client(handler)).native_balance("ethereum", _EVM)
+        is None
+    )
 
 
 def test_rpc_error_payload_degrades() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "error": {"code": -32000}})
 
-    assert TatumClient(api_key="k", http_client=_client(handler)).native_balance("ethereum", _EVM) is None
+    assert (
+        TatumClient(api_key="k", http_client=_client(handler)).native_balance("ethereum", _EVM)
+        is None
+    )
 
 
 def test_multi_chain_native_filters_zero_and_non_evm() -> None:
@@ -149,4 +162,69 @@ def test_nfpm_tokens_owed_short_result_degrades() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"result": "0x" + "00" * 32})  # only 1 word
 
-    assert TatumClient(api_key="k", http_client=_client(handler)).nfpm_tokens_owed("ethereum", 1) is None
+    assert (
+        TatumClient(api_key="k", http_client=_client(handler)).nfpm_tokens_owed("ethereum", 1)
+        is None
+    )
+
+
+def test_get_logs_builds_the_filter_and_returns_rows() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read().decode())
+        assert body["method"] == "eth_getLogs"
+        (log_filter,) = body["params"]
+        assert log_filter == {
+            "fromBlock": "0x12d687",
+            "toBlock": "latest",
+            "address": _EVM,
+            "topics": [_TRANSFER_TOPIC],
+        }
+        return httpx.Response(
+            200,
+            json={"jsonrpc": "2.0", "id": 1, "result": [{"address": _EVM, "data": "0x"}]},
+        )
+
+    rows = TatumClient(api_key="k", http_client=_client(handler)).get_logs(
+        "ethereum",
+        from_block=1_234_567,
+        to_block="latest",
+        address=_EVM,
+        topics=[_TRANSFER_TOPIC],
+    )
+    assert rows == [{"address": _EVM, "data": "0x"}]
+
+
+def test_get_logs_omits_optional_filter_keys() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        (log_filter,) = json.loads(request.read().decode())["params"]
+        assert log_filter == {"fromBlock": "0x1", "toBlock": "0x2"}
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": []})
+
+    rows = TatumClient(api_key="k", http_client=_client(handler)).get_logs(
+        "ethereum", from_block=1, to_block=2
+    )
+    assert rows == []
+
+
+def test_get_logs_rejects_non_evm_chains() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover
+        raise AssertionError("no request should be issued for a non-EVM chain")
+
+    assert (
+        TatumClient(api_key="k", http_client=_client(handler)).get_logs(
+            "solana", from_block=1, to_block=2
+        )
+        is None
+    )
+
+
+def test_get_logs_returns_none_when_the_result_is_not_a_list() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": "0xdeadbeef"})
+
+    assert (
+        TatumClient(api_key="k", http_client=_client(handler)).get_logs(
+            "ethereum", from_block=1, to_block=2
+        )
+        is None
+    )
