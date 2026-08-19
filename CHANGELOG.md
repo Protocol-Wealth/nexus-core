@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Typed response models on `/api/vaults` and `/api/vaults/chains`.**
+  `VaultSearchResult`, `VaultRow` and `VaultChains` replace hand-built
+  `dict[str, Any]` bodies. Serialized bytes unchanged, verified by byte-comparing
+  a payload that exercises every nullable field (1,134 bytes, identical). The six
+  nullable vault fields are declared required-but-nullable so an absent APY or
+  TVL still emits `null` rather than vanishing from the row, and
+  `apy_breakdown` stays a free-form mapping because its windows come from the
+  provider. Adds the first route tests for this surface.
+
+  Applies a pattern contributed by **Justin Nguyen**
+  ([@jnguyen-design](https://github.com/jnguyen-design)). See `CONTRIBUTORS.md`.
+
 - **Typed response model on `/api/wallet/{address}`.** `WalletSnapshot` replaces
   the hand-built `dict[str, Any]`, giving the endpoint a published OpenAPI schema.
   **The serialized bytes are unchanged** — field order matches the previous dict
