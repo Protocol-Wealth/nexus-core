@@ -27,9 +27,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, Query, Response
+from pydantic import BaseModel, ConfigDict
 
 from ..data.market import CoinGeckoMarketData
 from ..data.onchain import (
@@ -75,6 +76,192 @@ _POSITIONS_NOTE = (
     "+ liquidity; fees as of the position's last interaction). USD valuation needs "
     "per-token prices — pass them to the per-position analytics route."
 )
+
+
+class ChainCoverage(BaseModel):
+    """One chain/protocol/version combination with LP analytics."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    chain: str
+    protocol: str
+    version: str
+
+
+class ChainList(BaseModel):
+    """Response body for ``GET /api/lp/chains``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    chains: list[ChainCoverage]
+    disclaimer: str
+
+
+class TokenRef(BaseModel):
+    """One side of a pool: contract address, symbol, and ERC-20 decimals."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    address: str
+    symbol: str
+    decimals: int
+
+
+class UncollectedFees(BaseModel):
+    """Fees earned but not yet collected, in TOKEN units, plus their provenance."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    token0: float
+    token1: float
+    source: str
+
+
+class OwnedPosition(BaseModel):
+    """One open position from ``GET …/positions``.
+
+    ``liquidity`` is a ``str`` on purpose — Uniswap V3 liquidity is a uint128 and
+    a typical value (1e18) is far above JSON's safely-representable integer
+    range, so it has always gone over the wire quoted. Declaring it ``int`` here
+    would unquote it and hand every JavaScript client a silently rounded number.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    token_id: str
+    chain: str
+    pool_address: str
+    fee_tier: int
+    token0: TokenRef
+    token1: TokenRef
+    tick_lower: int
+    tick_upper: int
+    current_tick: int
+    in_range: bool
+    liquidity: str
+    amount0: float
+    amount1: float
+    uncollected_fees: UncollectedFees
+
+
+class PositionsByOwnerResponse(BaseModel):
+    """Response body for ``GET /api/lp/uniswap-v3/{chain}/positions``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    chain: str
+    owner: str
+    count: int
+    positions: list[OwnedPosition]
+    note: str
+    disclaimer: str
+
+
+class PositionAnalyticsBody(BaseModel):
+    """Field-for-field mirror of the :class:`PositionAnalytics` dataclass.
+
+    Order matters: the routes spread ``asdict(result)`` into this model, and the
+    declaration order here is the key order on the wire.
+
+    Two type choices are load-bearing. ``liquidity`` stays a ``str`` (see
+    :class:`OwnedPosition`). ``impermanent_loss_usd``/``_pct`` stay nullable and
+    are never excluded — the Aerodrome route reports both as ``null`` because
+    on-chain-only mode has no deposit baseline, and dropping the keys would turn
+    a documented "not available" into a missing field.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    token_id: str
+    chain: str
+    pool: str
+    token0_symbol: str
+    token1_symbol: str
+    fee_tier: int
+
+    in_range: bool
+    current_tick: int
+    tick_lower: int
+    tick_upper: int
+    liquidity: str
+
+    amount0: float
+    amount1: float
+    position_value_usd: float
+
+    uncollected_fees0: float
+    uncollected_fees1: float
+    uncollected_fees_usd: float
+
+    fee_apr_estimate: float
+    reward_apr: float
+    total_apr_estimate: float
+
+    impermanent_loss_usd: float | None
+    impermanent_loss_pct: float | None
+
+    range_width_pct: float
+    current_price: float
+    price_token0_usd: float
+    price_token1_usd: float
+
+
+class AnalyticsResponse(PositionAnalyticsBody):
+    """Position analytics plus fee provenance and the disclaimer, in that order."""
+
+    uncollected_fees_source: str
+    disclaimer: str
+
+
+class BenchmarkPosition(PositionAnalyticsBody):
+    """The ``position`` block of the vs-benchmark view (no nested disclaimer)."""
+
+    uncollected_fees_source: str
+
+
+class BenchmarkWindow(BaseModel):
+    """Hold-strategy benchmark returns over the requested window.
+
+    ``returns_pct`` is keyed by benchmark name ("ETH", "ETH-USDC 60/40", …), so
+    it stays a free-form mapping. A fixed model would silently drop any
+    composition added to ``BENCHMARK_COMPOSITIONS`` later.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    days: int
+    returns_pct: dict[str, float]
+
+
+class BenchmarkComparison(BaseModel):
+    """The position's headline numbers next to the benchmark returns."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    position_il_pct: float | None
+    position_total_apr_estimate: float
+    benchmark_returns_pct: dict[str, float]
+    note: str
+
+
+class VsBenchmarkResponse(BaseModel):
+    """Response body for ``GET …/{token_id}/vs-benchmark``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    position: BenchmarkPosition
+    benchmarks: BenchmarkWindow
+    comparison: BenchmarkComparison
+    disclaimer: str
+
+
+class AerodromeResponse(PositionAnalyticsBody):
+    """Response body for ``GET /api/lp/aerodrome/{token_id}/analytics``."""
+
+    protocol: str
+    data_mode: str
+    note: str
+    disclaimer: str
 
 
 def build_lp_router(
@@ -131,13 +318,13 @@ def build_lp_router(
         )
         return result, ("rpc_tokens_owed" if owed is not None else "unavailable")
 
-    def _list_positions(chain: str, owner: str, limit: int) -> list[dict[str, Any]]:
+    def _list_positions(chain: str, owner: str, limit: int) -> list[OwnedPosition]:
         """Enumerate an address's open positions → per-position on-chain state.
 
         Token amounts + uncollected fees in TOKEN units (no USD — that needs the
         per-token prices the analytics route takes).
         """
-        rows: list[dict[str, Any]] = []
+        rows: list[OwnedPosition] = []
         for pos in thegraph.fetch_v3_positions_by_owner(chain, owner, first=limit):
             amount0, amount1 = get_amounts_for_liquidity(
                 pos.sqrt_price_x96,
@@ -152,34 +339,34 @@ def build_lp_router(
             )
             uncollected0, uncollected1 = owed if owed is not None else (0.0, 0.0)
             rows.append(
-                {
-                    "token_id": pos.token_id,
-                    "chain": pos.chain,
-                    "pool_address": pos.pool_address,
-                    "fee_tier": pos.fee_tier,
-                    "token0": {
-                        "address": pos.token0_address,
-                        "symbol": pos.token0_symbol,
-                        "decimals": pos.decimals0,
-                    },
-                    "token1": {
-                        "address": pos.token1_address,
-                        "symbol": pos.token1_symbol,
-                        "decimals": pos.decimals1,
-                    },
-                    "tick_lower": pos.tick_lower,
-                    "tick_upper": pos.tick_upper,
-                    "current_tick": pos.current_tick,
-                    "in_range": is_in_range(pos.current_tick, pos.tick_lower, pos.tick_upper),
-                    "liquidity": str(pos.liquidity),
-                    "amount0": amount0,
-                    "amount1": amount1,
-                    "uncollected_fees": {
-                        "token0": uncollected0,
-                        "token1": uncollected1,
-                        "source": "rpc_tokens_owed" if owed is not None else "unavailable",
-                    },
-                }
+                OwnedPosition(
+                    token_id=pos.token_id,
+                    chain=pos.chain,
+                    pool_address=pos.pool_address,
+                    fee_tier=pos.fee_tier,
+                    token0=TokenRef(
+                        address=pos.token0_address,
+                        symbol=pos.token0_symbol,
+                        decimals=pos.decimals0,
+                    ),
+                    token1=TokenRef(
+                        address=pos.token1_address,
+                        symbol=pos.token1_symbol,
+                        decimals=pos.decimals1,
+                    ),
+                    tick_lower=pos.tick_lower,
+                    tick_upper=pos.tick_upper,
+                    current_tick=pos.current_tick,
+                    in_range=is_in_range(pos.current_tick, pos.tick_lower, pos.tick_upper),
+                    liquidity=str(pos.liquidity),
+                    amount0=amount0,
+                    amount1=amount1,
+                    uncollected_fees=UncollectedFees(
+                        token0=uncollected0,
+                        token1=uncollected1,
+                        source="rpc_tokens_owed" if owed is not None else "unavailable",
+                    ),
+                )
             )
         return rows
 
@@ -193,27 +380,32 @@ def build_lp_router(
                 status_code=503, detail="LP analytics unavailable: THEGRAPH_API_KEY not configured"
             )
 
-    @router.get("/chains", summary="Chains/versions with LP analytics")
-    def chains() -> dict[str, Any]:
+    @router.get(
+        "/chains",
+        summary="Chains/versions with LP analytics",
+        response_model=ChainList,
+    )
+    def chains() -> ChainList:
         """LP analytics coverage (Uniswap V3 per supported chain)."""
-        return {
-            "chains": [
-                {"chain": c, "protocol": "uniswap", "version": "v3"}
+        return ChainList(
+            chains=[
+                ChainCoverage(chain=c, protocol="uniswap", version="v3")
                 for c in TheGraphClient.supported_chains()
             ],
-            "disclaimer": _DISCLAIMER,
-        }
+            disclaimer=_DISCLAIMER,
+        )
 
     @router.get(
         "/uniswap-v3/{chain}/positions",
         summary="Uniswap V3 positions owned by an address",
+        response_model=PositionsByOwnerResponse,
     )
     def positions_by_owner(
         response: Response,
         chain: Annotated[str, Path(description="Chain key, e.g. ethereum")],
         owner: Annotated[str, Query(description="EVM address (0x…) that owns the positions")],
         limit: Annotated[int, Query(ge=1, le=200, description="Max positions to return")] = 100,
-    ) -> dict[str, Any]:
+    ) -> PositionsByOwnerResponse:
         """List the open Uniswap V3 positions an address owns.
 
         Per position: pool, fee tier, range, in-range, current token amounts, and
@@ -224,18 +416,19 @@ def build_lp_router(
             raise HTTPException(status_code=400, detail="owner must be a 0x EVM address")
         positions = _list_positions(chain, owner, limit)
         response.headers["Cache-Control"] = f"public, max-age={_LP_TTL}"
-        return {
-            "chain": chain.lower(),
-            "owner": owner.lower(),
-            "count": len(positions),
-            "positions": positions,
-            "note": _POSITIONS_NOTE,
-            "disclaimer": _DISCLAIMER,
-        }
+        return PositionsByOwnerResponse(
+            chain=chain.lower(),
+            owner=owner.lower(),
+            count=len(positions),
+            positions=positions,
+            note=_POSITIONS_NOTE,
+            disclaimer=_DISCLAIMER,
+        )
 
     @router.get(
         "/uniswap-v3/{chain}/{token_id}/analytics",
         summary="Uniswap V3 position analytics",
+        response_model=AnalyticsResponse,
     )
     def analytics(
         response: Response,
@@ -243,7 +436,7 @@ def build_lp_router(
         token_id: Annotated[str, Path(description="Uniswap V3 position NFT tokenId")],
         price_token0_usd: Annotated[float, Query(ge=0, description="USD price of token0")],
         price_token1_usd: Annotated[float, Query(ge=0, description="USD price of token1")],
-    ) -> dict[str, Any]:
+    ) -> AnalyticsResponse:
         """Value, IL-vs-HODL, fee APR, uncollected fees, and reward APR."""
         _guard(chain)
         computed = _compute(chain, token_id, price_token0_usd, price_token1_usd)
@@ -253,11 +446,14 @@ def build_lp_router(
             )
         result, source = computed
         response.headers["Cache-Control"] = f"public, max-age={_LP_TTL}"
-        return {**asdict(result), "uncollected_fees_source": source, "disclaimer": _DISCLAIMER}
+        return AnalyticsResponse(
+            **asdict(result), uncollected_fees_source=source, disclaimer=_DISCLAIMER
+        )
 
     @router.get(
         "/uniswap-v3/{chain}/{token_id}/vs-benchmark",
         summary="Uniswap V3 position vs hold-strategy benchmarks",
+        response_model=VsBenchmarkResponse,
     )
     def vs_benchmark(
         response: Response,
@@ -266,7 +462,7 @@ def build_lp_router(
         price_token0_usd: Annotated[float, Query(ge=0, description="USD price of token0")],
         price_token1_usd: Annotated[float, Query(ge=0, description="USD price of token1")],
         days: Annotated[int, Query(ge=1, le=365, description="Benchmark lookback window")] = 90,
-    ) -> dict[str, Any]:
+    ) -> VsBenchmarkResponse:
         """The position's analytics alongside hold-strategy benchmark returns."""
         _guard(chain)
         computed = _compute(chain, token_id, price_token0_usd, price_token1_usd)
@@ -275,30 +471,33 @@ def build_lp_router(
                 status_code=404, detail=f"No Uniswap V3 position '{token_id}' on '{chain}'"
             )
         result, source = computed
-        benchmark_returns = {b.name: b.total_return_pct for b in fetch_benchmark_series(coingecko, days)}
-        response.headers["Cache-Control"] = f"public, max-age={_LP_TTL}"
-        return {
-            "position": {**asdict(result), "uncollected_fees_source": source},
-            "benchmarks": {"days": days, "returns_pct": benchmark_returns},
-            "comparison": {
-                "position_il_pct": result.impermanent_loss_pct,
-                "position_total_apr_estimate": result.total_apr_estimate,
-                "benchmark_returns_pct": benchmark_returns,
-                "note": _COMPARISON_NOTE,
-            },
-            "disclaimer": _DISCLAIMER,
+        benchmark_returns = {
+            b.name: b.total_return_pct for b in fetch_benchmark_series(coingecko, days)
         }
+        response.headers["Cache-Control"] = f"public, max-age={_LP_TTL}"
+        return VsBenchmarkResponse(
+            position=BenchmarkPosition(**asdict(result), uncollected_fees_source=source),
+            benchmarks=BenchmarkWindow(days=days, returns_pct=benchmark_returns),
+            comparison=BenchmarkComparison(
+                position_il_pct=result.impermanent_loss_pct,
+                position_total_apr_estimate=result.total_apr_estimate,
+                benchmark_returns_pct=benchmark_returns,
+                note=_COMPARISON_NOTE,
+            ),
+            disclaimer=_DISCLAIMER,
+        )
 
     @router.get(
         "/aerodrome/{token_id}/analytics",
         summary="Aerodrome Slipstream position analytics (Base, on-chain RPC)",
+        response_model=AerodromeResponse,
     )
     def aerodrome(
         response: Response,
         token_id: Annotated[str, Path(description="Aerodrome Slipstream position NFT tokenId")],
         price_token0_usd: Annotated[float, Query(ge=0, description="USD price of token0")],
         price_token1_usd: Annotated[float, Query(ge=0, description="USD price of token1")],
-    ) -> dict[str, Any]:
+    ) -> AerodromeResponse:
         """Value, in-range, amounts, and uncollected fees for a Base Slipstream position."""
         if not slipstream.is_configured():
             raise HTTPException(
@@ -336,15 +535,30 @@ def build_lp_router(
             reward_apr=0.0,
         )
         response.headers["Cache-Control"] = f"public, max-age={_LP_TTL}"
-        return {
+        return AerodromeResponse(
             **asdict(result),
-            "protocol": "aerodrome-slipstream",
-            "data_mode": "onchain_rpc",
-            "note": _AERODROME_NOTE,
-            "disclaimer": _DISCLAIMER,
-        }
+            protocol="aerodrome-slipstream",
+            data_mode="onchain_rpc",
+            note=_AERODROME_NOTE,
+            disclaimer=_DISCLAIMER,
+        )
 
     return router
 
 
-__all__ = ["build_lp_router"]
+__all__ = [
+    "AerodromeResponse",
+    "AnalyticsResponse",
+    "BenchmarkComparison",
+    "BenchmarkPosition",
+    "BenchmarkWindow",
+    "ChainCoverage",
+    "ChainList",
+    "OwnedPosition",
+    "PositionAnalyticsBody",
+    "PositionsByOwnerResponse",
+    "TokenRef",
+    "UncollectedFees",
+    "VsBenchmarkResponse",
+    "build_lp_router",
+]
