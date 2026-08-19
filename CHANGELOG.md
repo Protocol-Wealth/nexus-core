@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Typed response models across `/api/lp/*`.** The last untyped route module;
+  every `/api/lp` body now has a published OpenAPI schema instead of a bare
+  `additionalProperties: true` object. Serialized bytes unchanged across all five
+  endpoints (6,682 bytes total, identical), verified by capturing the responses
+  before and after and diffing them.
+
+  Three type choices are load-bearing and each has a test that fails if it is
+  changed. `liquidity` stays a `str`: Uniswap V3 liquidity is a uint128 and a
+  typical value (1e18) is well past JSON's safely representable integer range, so
+  unquoting it would hand every JavaScript client a silently rounded number.
+  `impermanent_loss_usd`/`_pct` stay required-but-nullable, because the Aerodrome
+  on-chain-only route reports both as `null` by design and excluding them would
+  turn a documented "not available" into a missing key. `returns_pct` stays a
+  free-form mapping, since its keys are benchmark composition names
+  ("ETH-USDC 60/40") that a fixed model would silently drop.
+
+  Integer fields are asserted with `type(v) is int` rather than a substring of the
+  response text — `"fee_tier":3000` is a prefix of `"fee_tier":3000.0`, so a
+  literal `in` check passes for exactly the mutation it claims to catch. A further
+  test asserts the response model mirrors the `PositionAnalytics` dataclass field
+  for field, so a new dataclass field fails in CI by name rather than as a 500 in
+  production.
+
+  Applies a pattern contributed by **Justin Nguyen**
+  ([@jnguyen-design](https://github.com/jnguyen-design)). See `CONTRIBUTORS.md`.
+
 - **Typed response models across `/api/chain/*`.** Serialized bytes unchanged
   (2,128 bytes, identical). `raw` is declared `int` deliberately: it is a wei or
   lamport value, so declaring it `float` renders `1500000000000000000` as
