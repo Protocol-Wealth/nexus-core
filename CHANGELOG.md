@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Typed response models across `/api/chain/*`.** Serialized bytes unchanged
+  (2,128 bytes, identical). `raw` is declared `int` deliberately: it is a wei or
+  lamport value, so declaring it `float` renders `1500000000000000000` as
+  `1.5e+18` — a silent wire change and a precision loss. A test reads the raw
+  response text to pin that. `balances` stays keyed by chain name. Adds the first
+  route tests for this surface.
+
+  Applies a pattern contributed by **Justin Nguyen**
+  ([@jnguyen-design](https://github.com/jnguyen-design)). See `CONTRIBUTORS.md`.
+
 - **Typed response models on `/api/vaults` and `/api/vaults/chains`.**
   `VaultSearchResult`, `VaultRow` and `VaultChains` replace hand-built
   `dict[str, Any]` bodies. Serialized bytes unchanged, verified by byte-comparing
