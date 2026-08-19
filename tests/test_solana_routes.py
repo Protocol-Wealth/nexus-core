@@ -51,7 +51,9 @@ def test_price_invalid_mint_400() -> None:
 def test_price_unknown_mint_404() -> None:
     # Valid base58 mint, but Jupiter returns no price for it.
     other = "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R"
-    r = TestClient(_app(lambda _req: httpx.Response(200, json={}))).get(f"/api/solana/price/{other}")
+    r = TestClient(_app(lambda _req: httpx.Response(200, json={}))).get(
+        f"/api/solana/price/{other}"
+    )
     assert r.status_code == 404
 
 
@@ -71,3 +73,36 @@ def test_prices_empty_400() -> None:
 def test_prices_too_many_400() -> None:
     many = ",".join([_SOL] * 51)
     assert TestClient(_app()).get(f"/api/solana/prices?mints={many}").status_code == 400
+
+
+def test_absent_price_metadata_serializes_as_null() -> None:
+    """A mint Jupiter knows little about must keep its keys, valued null.
+
+    `liquidity_usd` and `price_change_24h_pct` are frequently absent for thin
+    tokens. Dropping them would turn `price["liquidity_usd"]` from `None` into a
+    KeyError for every such token.
+    """
+    body = TestClient(_app()).get(f"/api/solana/price/{_USDC}").json()
+    assert "liquidity_usd" in body and body["liquidity_usd"] is None
+    assert "price_change_24h_pct" in body and body["price_change_24h_pct"] is None
+
+
+def test_price_field_order_is_unchanged() -> None:
+    """Field order is part of the wire output."""
+    body = TestClient(_app()).get(f"/api/solana/price/{_SOL}").json()
+    assert list(body.keys()) == [
+        "mint",
+        "usd_price",
+        "decimals",
+        "price_change_24h_pct",
+        "liquidity_usd",
+        "disclaimer",
+    ]
+
+
+def test_batch_preserves_every_mint_key() -> None:
+    """`prices` is keyed by caller-supplied mints; the model must not narrow it."""
+    body = TestClient(_app()).get(f"/api/solana/prices?mints={_SOL},{_USDC}").json()
+    assert set(body["prices"].keys()) == {_SOL, _USDC}
+    assert list(body.keys()) == ["prices", "count", "disclaimer"]
+    assert body["count"] == 2

@@ -21,6 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Applies a pattern contributed by **Justin Nguyen**
   ([@jnguyen-design](https://github.com/jnguyen-design)). See `CONTRIBUTORS.md`.
 
+- **Typed response models on `/api/solana/price/{mint}` and `/api/solana/prices`.**
+  Serialized bytes unchanged (1,207 bytes, identical) against a payload with a
+  fully-populated mint and a sparse one. The three nullable price fields stay
+  required-but-nullable, and the batch `prices` map stays keyed by
+  caller-supplied mint rather than being narrowed to fixed fields.
+
+  Applies a pattern contributed by **Justin Nguyen**
+  ([@jnguyen-design](https://github.com/jnguyen-design)). See `CONTRIBUTORS.md`.
+
 - **Typed response model on `/api/wallet/{address}`.** `WalletSnapshot` replaces
   the hand-built `dict[str, Any]`, giving the endpoint a published OpenAPI schema.
   **The serialized bytes are unchanged** — field order matches the previous dict
