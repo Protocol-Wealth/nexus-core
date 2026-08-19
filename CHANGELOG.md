@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Typed response model on `/api/wallet/{address}`.** `WalletSnapshot` replaces
+  the hand-built `dict[str, Any]`, giving the endpoint a published OpenAPI schema.
+  **The serialized bytes are unchanged** — field order matches the previous dict
+  exactly, verified by byte-comparing the response before and after (527 bytes,
+  identical). `chains` stays a free-form mapping because its keys are
+  provider-supplied chain identifiers; narrowing it would silently drop chains.
+  Unmodelled fields are rejected rather than dropped, so producer drift fails
+  loudly.
+
+  Applies a pattern contributed by **Justin Nguyen**
+  ([@jnguyen-design](https://github.com/jnguyen-design)), who replaced untyped
+  passthrough dictionaries with validated request/response models while a
+  Software Engineering Contractor at Protocol Wealth, summer 2026. See
+  `CONTRIBUTORS.md`.
+
 - **Optional Upstash Redis cache (`data/cache.py`).** Cache-free by default: when
   `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` are unset the cache is a
   silent no-op and callers fall through to the provider — a cache is an

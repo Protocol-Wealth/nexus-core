@@ -16,7 +16,9 @@ GitHub handle.
 
 - **Justin Nguyen** ([@jnguyen-design](https://github.com/jnguyen-design))
   — optional Upstash Redis cache with graceful degradation
-  (`src/nexus_core/data/cache.py`)
+  (`src/nexus_core/data/cache.py`); and the typed
+  request/response pattern now applied to the wallet route
+  (`src/nexus_core/app/wallet.py`)
 
 Contributions made as a Software Engineering Contractor at Protocol Wealth,
 summer 2026, against synthetic data and public information only.
