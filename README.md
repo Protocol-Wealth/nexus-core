@@ -19,8 +19,11 @@ Adopters are responsible for adding their own PII controls, access control, inpu
 
 Provided as-is under Apache-2.0. Educational use only — nothing here is investment advice.
 
-Current live status is tracked in [CURRENT-STATE.md](CURRENT-STATE.md). Future
-work is issue-linked in [ROADMAP.md](ROADMAP.md) and GitHub Issues.
+Current live status and planned work are published at
+[pwos.app/build](https://pwos.app/build); shipped changes at
+[pwos.app/changelog](https://pwos.app/changelog). Open work is tracked in
+[GitHub Issues](https://github.com/Protocol-Wealth/nexus-core/issues), which is
+authoritative — query it rather than a snapshot.
 
 As of the 2026-07-16 ET closeout, PR #264 is merged as commit `e5f4d84` and
 deployed on Cloud Run revision `nexus-core-00070-zhx`. The hosted production
@@ -425,8 +428,7 @@ Python 3.12 · FastAPI · FastMCP · `httpx` · `asyncpg` · PostgreSQL (Cloud S
 
 ## Documentation
 
-- [Current state](CURRENT-STATE.md) — point-in-time live surface and status
-- [Roadmap](ROADMAP.md) — done vs next
+- [Live and planned work](https://pwos.app/build) — current surface status and forward lanes; open work is in [GitHub Issues](https://github.com/Protocol-Wealth/nexus-core/issues), which is authoritative
 - [Validation](VALIDATION.md) — latest local gates and live smoke evidence
 - [Changelog](CHANGELOG.md)
 - [Architecture](docs/ARCHITECTURE.md)

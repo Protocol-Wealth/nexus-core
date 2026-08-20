@@ -252,8 +252,9 @@ native MCP and the REST planning gateway. The current handler registry has 34
 tools spanning Monte Carlo and deterministic cash flow, goals and education,
 income/withdrawal/tax analysis, Social Security and inherited IRA analysis,
 historical/performance/risk context, allocation and rebalancing, Roth/IRMAA
-analysis, and report-input assembly. The authoritative current list is in
-`CURRENT-STATE.md` and the gateway discovery response.
+analysis, and report-input assembly. The authoritative current list is the
+gateway discovery response (`GET /api/planning/tools`,
+`app/planning/gateway.py:61`) — query the running service, not a doc.
 
 The gateway (`app/planning/gateway.py`) rejects identity-shaped keys anywhere in
 the request body and echoes `contractVersion: "0.1.0"` on success. The composite

@@ -355,7 +355,7 @@ Hard NOs. Each is enforced by review + tooling where possible:
 
 Recently shipped (see `CHANGELOG.md`): multi-chain Uniswap V3 LP (base/optimism/polygon added to ethereum); position `vs-benchmark` (pair LP IL with hold benchmarks — "was LPing worth it?"); Jupiter Solana SPL prices (`/api/solana`, keyless); **Aerodrome Slipstream LP on Base via on-chain RPC** (`/api/lp/aerodrome/{token_id}/analytics`, partial — value/in-range/amounts/uncollected fees; no IL/fee-APR/gauge-APR without an indexer).
 
-Next surfaces (see `CHANGELOG.md` / `ROADMAP` for detail; tracked in #199):
+Next surfaces (see `CHANGELOG.md` and [pwos.app/build](https://pwos.app/build) for detail; tracked in #199):
 - **Aerodrome Slipstream — full coverage via Envio** — the on-chain RPC path is **live** (partial: value, in-range, amounts, uncollected fees; `data_mode: onchain_rpc`). No canonical Slipstream V3-schema subgraph exists on The Graph (name-matching ones are Revert-automation + ICHI-vault subgraphs), and the on-chain-only path cannot derive IL (needs deposit history), fee APR (needs pool volume), or AERO gauge reward APR. An **Envio** client would add those; the pure engine + Slipstream NFPM (`0x827922686190790b37229fd06084350E74485b72`, decode-compatible) are already wired.
 - **Arbitrum Uniswap V3** — needs a correct V3-schema subgraph ID (the published one is incompatible).
 - **Base subgraph data quality** — the public Base V3 deployment has spam-token TVL contamination (pollutes discovery + pool-aggregate fee APR; per-position value/IL stays accurate) → consider self-hosting a cleaner indexer.
