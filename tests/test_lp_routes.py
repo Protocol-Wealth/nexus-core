@@ -155,7 +155,13 @@ def test_lp_bad_chain_400() -> None:
     assert r.status_code == 400
 
 
-_OWNER = "0x698d11bce7f9094beb4bffc9739f270923443135"
+# Synthetic, documentation-only address. This repository is PUBLIC and these
+# tests run entirely against MockTransport, so a fixture owner needs only to be
+# FORMAT-valid — any 0x + 40 hex will do, and `test_lp_positions_bad_owner_400`
+# below covers the invalid-format case. Never put a real wallet address in a
+# fixture: it is an identifier, it outlives the test in git history, and no
+# assertion here can tell the difference.
+_OWNER = "0x00000000000000000000000000000000decafbad"
 
 
 def test_lp_positions_by_owner() -> None:
