@@ -1,0 +1,36 @@
+# Gitleaks config for nexus-core.
+#
+# Extends the stock ruleset rather than replacing it, so every default detector
+# still runs. The additions below are the credentials that matter most for a
+# PUBLIC package that publishes to PyPI.
+#
+# NOTE FOR ANYONE EDITING: a `[[rules]]` block whose `id` matches a DEFAULT rule
+# does not narrow that rule, it overrides it — and an override with no `regex`
+# silently disables the detector while the scan still reports "no leaks found".
+# Every id below is new, so these are additive. If you need an exception to a
+# stock rule, use an `[[allowlists]]` block with `targetRules`, and set
+# `condition = "AND"` so a path alone does not excuse a finding.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "nexus-pypi-upload-token"
+description = "PyPI upload token (pypi-AgEI...)"
+regex = '''pypi-AgEI[A-Za-z0-9\-_]{50,}'''
+tags = ["pypi", "supply-chain"]
+
+[[rules]]
+id = "nexus-anthropic-key"
+description = "Anthropic API key"
+regex = '''sk-ant-[A-Za-z0-9\-_]{20,}'''
+tags = ["llm"]
+
+[[allowlists]]
+description = "Test fixtures and docs. Synthetic credentials belong there; real ones must not."
+condition = "OR"
+paths = [
+  '''(^|/)tests?/''',
+  '''(^|/)conftest\.py$''',
+  '''.*\.md$''',
+]

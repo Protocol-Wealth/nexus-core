@@ -1,0 +1,64 @@
+name: Gitleaks
+
+# Catches accidental secret commits. This repo is PUBLIC and publishes to PyPI,
+# which changes what a leak costs: a credential pushed here is world-readable
+# immediately and scraped within minutes, and a leaked PyPI token is a
+# supply-chain problem rather than only an account problem. Deleting the commit
+# does not undo either, because the history is public too.
+#
+# Every other Protocol Wealth repo with branch protection already requires a
+# check named "Scan for committed secrets" — pw-infrastructure, pw-api, pw-os-v2
+# and pw-portal-v2. nexus-core had no secret scanning of any kind. This closes
+# that gap using the same shape rather than a new one, so there is one pattern
+# in the org to maintain and not two.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 10 * * 1' # Monday 10:00 UTC
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    # The job NAME is the required-check context. It must stay exactly
+    # "Scan for committed secrets" to match the other PW repos and to remain
+    # the name branch protection is configured against — renaming it silently
+    # turns the gate off while the workflow keeps reporting green.
+    name: Scan for committed secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: ${{ github.event_name == 'schedule' && 0 || 1 }}
+
+      # Install the binary directly — gitleaks-action@v2 requires a paid licence
+      # for GitHub orgs; the binary is MIT-licensed. Version pinned to match the
+      # rest of the org.
+      - name: Install gitleaks
+        run: |
+          GITLEAKS_VERSION=8.24.3
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /tmp
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Run gitleaks
+        run: |
+          # --no-git avoids shallow-clone revision-range errors on PR events.
+          # The weekly schedule uses full history (fetch-depth: 0 above), which
+          # is what catches a secret committed and then removed in a later
+          # commit — the PR-time scan cannot see that.
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            gitleaks detect --source . --config .gitleaks.toml --redact --verbose
+          else
+            gitleaks detect --source . --config .gitleaks.toml --redact --verbose --no-git
+          fi
