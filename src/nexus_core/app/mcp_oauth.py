@@ -89,13 +89,22 @@ def _client_secret_digests() -> list[str]:
 
 
 def client_credentials_enabled() -> bool:
-    """True when at least one machine credential is configured.
+    """True when the machine grant is configured AND can actually work.
 
     OFF BY DEFAULT. With the variable unset the grant is neither advertised in
     the authorization-server metadata nor accepted at the token endpoint, so a
     deployment that has not opted in is byte-for-byte unchanged.
+
+    BOTH CONDITIONS, NOT JUST THE SECRET. Without a signing key there is no
+    OAuth at all: /token answers 404 temporarily_unavailable and MCPAuthGate
+    lets everything through unauthenticated. A partial rollout that sets the
+    secret first — the natural order, since the secret is the new variable —
+    would otherwise advertise a grant that cannot mint anything, and a
+    discovery-driven client picks its grant from that document. It would
+    select client_credentials and fail, on a server whose transport was in
+    fact wide open.
     """
-    return bool(_client_secret_digests())
+    return bool(_client_secret_digests()) and signing_key() is not None
 
 
 def _client_secret_ok(presented: str) -> bool:
@@ -331,6 +340,36 @@ def build_oauth_router() -> APIRouter:
             params["state"] = state
         return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
 
+    def _issue_access_only(key: bytes, audience: str) -> dict[str, Any]:
+        """An access token with NO refresh token, for the machine grant.
+
+        RFC 6749 §4.4.3: "A refresh token SHOULD NOT be included." The reason
+        is a revocation hole, and it is not theoretical here.
+
+        The refresh branch validates the REFRESH TOKEN's signature and nothing
+        else — it never rechecks the client secret, because in the
+        authorization_code flow there is no secret to recheck. So a machine
+        client handed a refresh token could trade it for a new access token
+        AND a new 30-day refresh token, indefinitely. Removing the compromised
+        secret from NEXUS_MCP_CLIENT_SECRETS would stop it minting NEW tokens
+        and do nothing whatsoever about the chain already running: rotation
+        would look like revocation and not be it.
+
+        A machine client does not need one. It holds the secret and can mint a
+        fresh access token whenever it likes, which is the same round trip a
+        refresh would have cost.
+        """
+        now = int(time.time())
+        access = make_token(
+            key, {"typ": "access", "aud": audience, "scope": _SCOPE, "iat": now, "exp": now + _ACCESS_TTL}
+        )
+        return {
+            "access_token": access,
+            "token_type": "Bearer",
+            "expires_in": _ACCESS_TTL,
+            "scope": _SCOPE,
+        }
+
     def _issue_tokens(key: bytes, audience: str) -> dict[str, Any]:
         now = int(time.time())
         access = make_token(
@@ -403,8 +442,11 @@ def build_oauth_router() -> APIRouter:
             # valid — this service answers on both a custom domain and a
             # run.app URL, so that is a live trap, not a hypothetical one.
             # Mint and use over the same origin.
+            # ACCESS TOKEN ONLY — see _issue_access_only. A refresh token here
+            # would survive removal of the secret that minted it, turning
+            # rotation into something that only looks like revocation.
             return JSONResponse(
-                _issue_tokens(key, f"{_issuer(request)}/mcp"),
+                _issue_access_only(key, f"{_issuer(request)}/mcp"),
                 headers={"Cache-Control": "no-store"},
             )
 

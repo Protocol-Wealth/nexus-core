@@ -274,6 +274,11 @@ def test_client_credentials_mints_a_usable_access_token(
     body = r.json()
     assert body["token_type"] == "Bearer"
     assert body["scope"] == "mcp"
+    # NO REFRESH TOKEN. RFC 6749 §4.4.3 says one SHOULD NOT be included, and
+    # the reason here is a revocation hole: the refresh branch validates the
+    # refresh token's signature and never rechecks the client secret, so a
+    # refresh chain would outlive removal of the secret that started it.
+    assert "refresh_token" not in body
 
     # THE TOKEN MUST SATISFY THE GATE, not merely parse. Asserting only that a
     # token came back would pass just as happily on a token the transport
@@ -383,3 +388,76 @@ def test_sha256_entries_and_rotation_are_accepted(monkeypatch: pytest.MonkeyPatc
     # NEGATIVE CONTROL: the list is not simply accepting everything.
     bad = c.post("/token", data={"grant_type": "client_credentials", "client_secret": "neither"})
     assert bad.status_code == 401
+
+
+def test_machine_grant_issues_no_refresh_token_so_revocation_is_real(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Removing the secret must actually end that client's access.
+
+    THE HOLE THIS CLOSES. If client_credentials returned a refresh token, a
+    holder could trade it for a new access token AND a new 30-day refresh
+    token, forever. The refresh branch checks only the refresh token's
+    signature — it never rechecks the client secret, because in the
+    authorization_code flow there is no secret to recheck. So rotating
+    NEXUS_MCP_CLIENT_SECRETS would stop NEW mints and do nothing about the
+    chain already running: rotation that looks like revocation and is not.
+    """
+    monkeypatch.setenv("NEXUS_MCP_CLIENT_SECRETS", _SECRET)
+    c = _client()
+    body = c.post(
+        "/token", data={"grant_type": "client_credentials", "client_secret": _SECRET}
+    ).json()
+    assert "refresh_token" not in body
+
+    # POSITIVE CONTROL: the authorization_code flow still DOES issue one, so
+    # this test is about the machine grant specifically and not about refresh
+    # tokens having been removed everywhere.
+    redirect_uri = "https://claude.ai/cb"
+    client_id = c.post("/register", json={"redirect_uris": [redirect_uri]}).json()["client_id"]
+    verifier, challenge = _pkce()
+    auth = c.get(
+        "/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "resource": "http://testserver/mcp",
+        },
+        follow_redirects=False,
+    )
+    assert auth.status_code == 302
+    code = parse_qs(urlparse(auth.headers["location"]).query)["code"][0]
+    human = c.post(
+        "/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_verifier": verifier,
+        },
+    ).json()
+    assert "refresh_token" in human, "the human flow must be unaffected"
+
+
+def test_grant_stays_off_when_the_signing_key_is_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A partial rollout must not advertise a grant that cannot work.
+
+    Setting the secret first is the natural order — it is the new variable.
+    Without MCP_OAUTH_SIGNING_KEY there is no OAuth at all: /token answers 404
+    and MCPAuthGate lets everything through. Advertising client_credentials in
+    that state sends a discovery-driven client to a grant that can mint
+    nothing, on a server whose transport is in fact wide open.
+    """
+    monkeypatch.setenv("NEXUS_MCP_CLIENT_SECRETS", _SECRET)
+    monkeypatch.delenv("MCP_OAUTH_SIGNING_KEY", raising=False)
+    c = _client()
+
+    meta = c.get("/.well-known/oauth-authorization-server").json()
+    assert "client_credentials" not in meta["grant_types_supported"]
+    assert meta["token_endpoint_auth_methods_supported"] == ["none"]
