@@ -50,12 +50,69 @@ _CODE_TTL = 60  # seconds — authorization code lifetime
 _ACCESS_TTL = 3600  # seconds — access token lifetime
 _REFRESH_TTL = 60 * 60 * 24 * 30  # 30 days
 _SCOPE = "mcp"
+# Machine-to-machine credentials for the client_credentials grant. Unset = off.
+_ENV_CLIENT_SECRETS = "NEXUS_MCP_CLIENT_SECRETS"
 
 
 def signing_key() -> bytes | None:
     """The HMAC signing key from the environment, or ``None`` when OAuth is off."""
     raw = os.environ.get(_ENV_KEY)
     return raw.encode("utf-8") if raw else None
+
+
+def _client_secret_digests() -> list[str]:
+    """Configured ``client_credentials`` secrets, as sha256 hex digests.
+
+    Mirrors the ``NEXUS_API_KEYS`` idiom in ``access_gate``: comma-separated
+    raw secrets for operational convenience, or ``sha256:<hex>`` entries when
+    the deployment would rather not hold raw material in an env var. Several
+    are accepted so a secret can be rotated without a window where neither the
+    old nor the new one works.
+
+    DELIBERATELY A SEPARATE VARIABLE FROM ``NEXUS_API_KEYS``. Those keys are
+    documented as protecting the REST calculation surfaces; letting them also
+    mint MCP transport tokens would silently widen what an existing credential
+    unlocks, invisibly to anyone reading the current docs, and would make the
+    two impossible to revoke independently. One extra variable buys separate
+    blast radii.
+    """
+    digests: list[str] = []
+    for raw in os.environ.get(_ENV_CLIENT_SECRETS, "").split(","):
+        entry = raw.strip()
+        if not entry:
+            continue
+        if entry.lower().startswith("sha256:"):
+            digests.append(entry.split(":", 1)[1].strip().lower())
+        else:
+            digests.append(hashlib.sha256(entry.encode("utf-8")).hexdigest())
+    return digests
+
+
+def client_credentials_enabled() -> bool:
+    """True when at least one machine credential is configured.
+
+    OFF BY DEFAULT. With the variable unset the grant is neither advertised in
+    the authorization-server metadata nor accepted at the token endpoint, so a
+    deployment that has not opted in is byte-for-byte unchanged.
+    """
+    return bool(_client_secret_digests())
+
+
+def _client_secret_ok(presented: str) -> bool:
+    """Constant-time membership test for a presented client secret.
+
+    ``compare_digest`` on the HEX DIGESTS, never on the raw secrets: comparing
+    raw values leaks length, and digests are fixed-width. The loop does not
+    break early on a match for the same reason.
+    """
+    if not presented:
+        return False
+    candidate = hashlib.sha256(presented.encode("utf-8")).hexdigest()
+    matched = False
+    for digest in _client_secret_digests():
+        if hmac.compare_digest(candidate, digest):
+            matched = True
+    return matched
 
 
 def is_enabled() -> bool:
@@ -171,9 +228,19 @@ def build_oauth_router() -> APIRouter:
             "token_endpoint": f"{issuer}/token",
             "registration_endpoint": f"{issuer}/register",
             "response_types_supported": ["code"],
-            "grant_types_supported": ["authorization_code", "refresh_token"],
+            # ADVERTISED ONLY WHEN CONFIGURED. A client picks its grant from
+            # this document, so listing client_credentials on a deployment with
+            # no secrets set would send every machine client down a path that
+            # can only answer invalid_client.
+            "grant_types_supported": (
+                ["authorization_code", "refresh_token", "client_credentials"]
+                if client_credentials_enabled()
+                else ["authorization_code", "refresh_token"]
+            ),
             "code_challenge_methods_supported": ["S256"],
-            "token_endpoint_auth_methods_supported": ["none"],
+            "token_endpoint_auth_methods_supported": (
+                ["none", "client_secret_post"] if client_credentials_enabled() else ["none"]
+            ),
             "scopes_supported": [_SCOPE],
         }
 
@@ -308,6 +375,39 @@ def build_oauth_router() -> APIRouter:
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
             return JSONResponse(_issue_tokens(key, str(refresh.get("aud"))), headers={"Cache-Control": "no-store"})
 
+        if grant_type == "client_credentials":
+            # THE NON-INTERACTIVE PATH. authorization_code needs a browser and a
+            # human, which is correct for a person connecting an app and wrong
+            # for a CLI, a coding agent, or a cron job — those had no way in at
+            # all, so every headless consumer needed someone to click through a
+            # browser flow on its behalf.
+            #
+            # No PKCE and no redirect_uri: both bind a code to the user-agent
+            # that requested it, and there is no user-agent here. The client
+            # secret is the whole proof.
+            if not client_credentials_enabled():
+                return JSONResponse({"error": "unsupported_grant_type"}, status_code=400)
+            if not _client_secret_ok(str(form.get("client_secret", ""))):
+                # 401 + invalid_client is what RFC 6749 §5.2 requires, and it is
+                # deliberately indistinguishable from "no such client": telling
+                # a caller which half was wrong is a probing oracle.
+                return JSONResponse(
+                    {"error": "invalid_client"},
+                    status_code=401,
+                    headers={"Cache-Control": "no-store"},
+                )
+            # AUDIENCE COMES FROM THIS REQUEST, and it must, because MCPAuthGate
+            # recomputes it from the Host header of the request that PRESENTS
+            # the token. A token minted through one hostname and presented at
+            # another fails the audience check and 401s while looking perfectly
+            # valid — this service answers on both a custom domain and a
+            # run.app URL, so that is a live trap, not a hypothetical one.
+            # Mint and use over the same origin.
+            return JSONResponse(
+                _issue_tokens(key, f"{_issuer(request)}/mcp"),
+                headers={"Cache-Control": "no-store"},
+            )
+
         return JSONResponse({"error": "unsupported_grant_type"}, status_code=400)
 
     return router
@@ -379,6 +479,7 @@ __all__ = [
     "MCPAuthGate",
     "access_token_audience",
     "build_oauth_router",
+    "client_credentials_enabled",
     "is_enabled",
     "make_token",
     "read_token",
