@@ -11,10 +11,14 @@ session.
 Stack: Python 3.12, FastAPI + FastMCP, sync `httpx`, `asyncpg`, `mypy --strict`,
 `ruff`. Version `0.1.0`. CI-gated test suite.
 
-> **For the current handoff read [NEXT-SESSION.md](NEXT-SESSION.md)** (latest
-> forward state) and **[CURRENT-STATE.md](CURRENT-STATE.md)** (live snapshot).
-> This file retains earlier-cycle operator detail; where it disagrees with those
-> two, they win. Live status was refreshed 2026-07-01: `/health` is healthy,
+> **This file is a DATED SNAPSHOT, not current state.** For live and planned
+> work read [pwos.app/build](https://pwos.app/build); for what shipped,
+> [pwos.app/changelog](https://pwos.app/changelog); for open issues, PRs and CI,
+> GitHub is authoritative — re-query it. `CURRENT-STATE.md` was retired
+> 2026-08-20 because a committed file claiming to hold live state goes stale
+> silently, which is exactly what the paragraph below demonstrates. Where this
+> file disagrees with those surfaces, the surfaces win.
+> Live status was last refreshed 2026-07-01: `/health` is healthy,
 > `/mcp/tools` reports contractVersion `0.1.0` with 23 planning tools, GitHub has
 > no open PRs and seven open issues (#197-#203), and `ruff` + `mypy --strict`
 > remain CI-enforced. Local source as of 2026-07-06 adds collar-book

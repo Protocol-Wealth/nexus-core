@@ -7,6 +7,104 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Typed response models across `/api/lp/*`.** The last of the five on-chain and
+  market-data route modules to get them (wallet, chain, vaults, solana, lp); every
+  `/api/lp` body now has a published OpenAPI schema instead of a bare
+  `additionalProperties: true` object. `routes.py`, `benchmarks.py`, `layers.py`
+  and `options.py` still return untyped dictionaries and are not in this sweep. Serialized bytes unchanged across all five
+  endpoints (6,682 bytes total, identical), verified by capturing the responses
+  before and after and diffing them.
+
+  Three type choices are load-bearing and each has a test that fails if it is
+  changed. `liquidity` stays a `str`: Uniswap V3 liquidity is a uint128 and a
+  typical value (1e18) is well past JSON's safely representable integer range, so
+  unquoting it would hand every JavaScript client a silently rounded number.
+  `impermanent_loss_usd`/`_pct` stay required-but-nullable, because the Aerodrome
+  on-chain-only route reports both as `null` by design and excluding them would
+  turn a documented "not available" into a missing key. `returns_pct` stays a
+  free-form mapping, since its keys are benchmark composition names
+  ("ETH-USDC 60/40") that a fixed model would silently drop.
+
+  Integer fields are asserted with `type(v) is int` rather than a substring of the
+  response text — `"fee_tier":3000` is a prefix of `"fee_tier":3000.0`, so a
+  literal `in` check passes for exactly the mutation it claims to catch. A further
+  test asserts the response model mirrors the `PositionAnalytics` dataclass field
+  for field, so a new dataclass field fails in CI by name rather than as a 500 in
+  production.
+
+  Applies a pattern contributed by **Justin Nguyen**
+  ([@jnguyen-design](https://github.com/jnguyen-design)). See `CONTRIBUTORS.md`.
+
+- **Typed response models across `/api/chain/*`.** Serialized bytes unchanged
+  (2,128 bytes, identical). `raw` is declared `int` deliberately: it is a wei or
+  lamport value, so declaring it `float` renders `1500000000000000000` as
+  `1.5e+18` — a silent wire change and a precision loss. A test reads the raw
+  response text to pin that. `balances` stays keyed by chain name. Adds the first
+  route tests for this surface.
+
+  Applies a pattern contributed by **Justin Nguyen**
+  ([@jnguyen-design](https://github.com/jnguyen-design)). See `CONTRIBUTORS.md`.
+
+- **Typed response models on `/api/vaults` and `/api/vaults/chains`.**
+  `VaultSearchResult`, `VaultRow` and `VaultChains` replace hand-built
+  `dict[str, Any]` bodies. Serialized bytes unchanged, verified by byte-comparing
+  a payload that exercises every nullable field (1,134 bytes, identical). The six
+  nullable vault fields are declared required-but-nullable so an absent APY or
+  TVL still emits `null` rather than vanishing from the row, and
+  `apy_breakdown` stays a free-form mapping because its windows come from the
+  provider. Adds the first route tests for this surface.
+
+  Applies a pattern contributed by **Justin Nguyen**
+  ([@jnguyen-design](https://github.com/jnguyen-design)). See `CONTRIBUTORS.md`.
+
+- **Typed response models on `/api/solana/price/{mint}` and `/api/solana/prices`.**
+  Serialized bytes unchanged (1,207 bytes, identical) against a payload with a
+  fully-populated mint and a sparse one. The three nullable price fields stay
+  required-but-nullable, and the batch `prices` map stays keyed by
+  caller-supplied mint rather than being narrowed to fixed fields.
+
+  Applies a pattern contributed by **Justin Nguyen**
+  ([@jnguyen-design](https://github.com/jnguyen-design)). See `CONTRIBUTORS.md`.
+
+- **Typed response model on `/api/wallet/{address}`.** `WalletSnapshot` replaces
+  the hand-built `dict[str, Any]`, giving the endpoint a published OpenAPI schema.
+  **The serialized bytes are unchanged** — field order matches the previous dict
+  exactly, verified by byte-comparing the response before and after (527 bytes,
+  identical). `chains` stays a free-form mapping because its keys are
+  provider-supplied chain identifiers; narrowing it would silently drop chains.
+  Unmodelled fields are rejected rather than dropped, so producer drift fails
+  loudly.
+
+  Applies a pattern contributed by **Justin Nguyen**
+  ([@jnguyen-design](https://github.com/jnguyen-design)), who replaced untyped
+  passthrough dictionaries with validated request/response models while a
+  Software Engineering Contractor at Protocol Wealth, summer 2026. See
+  `CONTRIBUTORS.md`.
+
+- **Optional Upstash Redis cache (`data/cache.py`).** Cache-free by default: when
+  `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` are unset the cache is a
+  silent no-op and callers fall through to the provider — a cache is an
+  optimisation, never a dependency. Every upstream failure resolves to a miss
+  rather than raising, so a degraded cache cannot become an outage. A TTL is
+  required on writes. Uses the REST API over the existing `httpx` dependency, so
+  no package is added.
+
+  Contributed by **Justin Nguyen**
+  ([@jnguyen-design](https://github.com/jnguyen-design)) as a Software
+  Engineering Contractor at Protocol Wealth, summer 2026. See `CONTRIBUTORS.md`.
+
+- **`TatumClient.get_logs()`** — `eth_getLogs` support on the EVM client, with
+  int block numbers hex-encoded and tags such as `"latest"` passed through.
+  Optional `address` and `topics` filters are omitted when unset. No client-side
+  range cap is imposed: gateways enforce their own limits, and a stricter cap
+  here would refuse queries the gateway would have answered.
+
+  Contributed by **William Gantt**
+  ([@WillGantt](https://github.com/WillGantt)) as a Software Engineering
+  Contractor at Protocol Wealth, summer 2026. See `CONTRIBUTORS.md`.
+
 ## [1.0.2] - 2026-07-25
 
 ### PyPI distribution

@@ -212,8 +212,13 @@ nexus-core/
 ## Development
 
 ```bash
+pip install -e ".[dev,serve]"     # WHAT CI INSTALLS — the only combination that can run step 6's gate
 pip install -e ".[serve]"         # Deployed surface (market + mcp extras) — what nexusmcp.site runs
-pip install -e ".[dev]"           # Dev tooling only (pytest, pytest-asyncio, pytest-cov, ruff, mypy, pip-licenses)
+pip install -e ".[dev]"           # Dev tooling ONLY (pytest, pytest-asyncio, pytest-cov, ruff, mypy, pip-licenses)
+                                  #   NOT ENOUGH TO RUN THE SUITE. Without [serve] there is no fastmcp, so
+                                  #   `mypy --strict` reports 38 untyped-decorator errors in mcp/server/app.py,
+                                  #   and no python-multipart, so the OAuth /token form tests fail. Both look
+                                  #   like real defects on a clean checkout and neither is one.
 pip install -e ".[all]"           # All capability extras (heavy: torch, transformers, QuantLib, zipline)
 pip install -e "."                # Core only (regime + scoring + market/macro/onchain HTTP clients)
 
@@ -276,7 +281,7 @@ external integrations degrade gracefully to `None`/empty/503 when their key is a
 
 ### Environment variables
 
-`FRED_API_KEY`, `MBOUM_API_KEY`, `MARKETSTACK_API_KEY`, `COINGECKO_API_KEY`, `EIA_API_KEY`, `BEA_API_KEY`, `DEBANK_API_KEY` (`/api/wallet`), `TATUM_API_KEY` (`/api/chain` + LP uncollected fees), `VAULTSFYI_API_KEY` (`/api/vaults`), `THEGRAPH_API_KEY` (`/api/lp`), `DATABASE_URL` (persistence + `/api/benchmarks/history`; 503 when unset), `MCP_OAUTH_SIGNING_KEY` (optional stateless transparent OAuth for hosted `/mcp`; omit locally to keep `/mcp` open), `NEXUS_PUBLIC_MCP_PROFILE` (`full` default or `demo`), `NEXUS_ACCESS_MODE` (`public` default or `restricted`), `NEXUS_API_KEYS` (raw keys or `sha256:<hex>` digests), `NEXUS_RATE_LIMIT_PER_MIN` (default 60), `NEXUS_CORS_ORIGINS` (default `*`).
+`FRED_API_KEY`, `MBOUM_API_KEY`, `MARKETSTACK_API_KEY`, `COINGECKO_API_KEY`, `EIA_API_KEY`, `BEA_API_KEY`, `DEBANK_API_KEY` (`/api/wallet`), `TATUM_API_KEY` (`/api/chain` + LP uncollected fees), `VAULTSFYI_API_KEY` (`/api/vaults`), `THEGRAPH_API_KEY` (`/api/lp`), `DATABASE_URL` (persistence + `/api/benchmarks/history`; 503 when unset), `MCP_OAUTH_SIGNING_KEY` (optional stateless transparent OAuth for hosted `/mcp`; omit locally to keep `/mcp` open), `NEXUS_PUBLIC_MCP_PROFILE` (`full` default or `demo`), `NEXUS_ACCESS_MODE` (`public` default or `restricted`), `NEXUS_API_KEYS` (raw keys or `sha256:<hex>` digests), `NEXUS_RATE_LIMIT_PER_MIN` (default 60), `NEXUS_CORS_ORIGINS` (default `*`), `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (optional response cache; unset means cache-free, never a 503).
 
 ## Security Posture
 
@@ -355,7 +360,7 @@ Hard NOs. Each is enforced by review + tooling where possible:
 
 Recently shipped (see `CHANGELOG.md`): multi-chain Uniswap V3 LP (base/optimism/polygon added to ethereum); position `vs-benchmark` (pair LP IL with hold benchmarks — "was LPing worth it?"); Jupiter Solana SPL prices (`/api/solana`, keyless); **Aerodrome Slipstream LP on Base via on-chain RPC** (`/api/lp/aerodrome/{token_id}/analytics`, partial — value/in-range/amounts/uncollected fees; no IL/fee-APR/gauge-APR without an indexer).
 
-Next surfaces (see `CHANGELOG.md` / `ROADMAP` for detail; tracked in #199):
+Next surfaces (see `CHANGELOG.md` and [pwos.app/build](https://pwos.app/build) for detail; tracked in #199):
 - **Aerodrome Slipstream — full coverage via Envio** — the on-chain RPC path is **live** (partial: value, in-range, amounts, uncollected fees; `data_mode: onchain_rpc`). No canonical Slipstream V3-schema subgraph exists on The Graph (name-matching ones are Revert-automation + ICHI-vault subgraphs), and the on-chain-only path cannot derive IL (needs deposit history), fee APR (needs pool volume), or AERO gauge reward APR. An **Envio** client would add those; the pure engine + Slipstream NFPM (`0x827922686190790b37229fd06084350E74485b72`, decode-compatible) are already wired.
 - **Arbitrum Uniswap V3** — needs a correct V3-schema subgraph ID (the published one is incompatible).
 - **Base subgraph data quality** — the public Base V3 deployment has spam-token TVL contamination (pollutes discovery + pool-aggregate fee APR; per-position value/IL stays accurate) → consider self-hosting a cleaner indexer.

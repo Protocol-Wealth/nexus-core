@@ -2,8 +2,9 @@
 
 > **Historical reference, not current state.** This file preserves an earlier
 > operator handoff and is no longer maintained as a second status source. Read
-> [CURRENT-STATE.md](CURRENT-STATE.md) for deployed truth,
-> [ROADMAP.md](ROADMAP.md) plus GitHub Issues for current work, and
+> [pwos.app/build](https://pwos.app/build) for live and planned work,
+> [pwos.app/changelog](https://pwos.app/changelog) for what shipped, GitHub
+> Issues for current work — GitHub is authoritative, so re-query it — and
 > [VALIDATION.md](VALIDATION.md) for executed checks. Where this archived material
 > differs, those sources win.
 

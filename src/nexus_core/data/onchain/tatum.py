@@ -84,6 +84,11 @@ _NFPM: dict[str, str] = {
 _NFPM_POSITIONS_SELECTOR = "0x99fbab88"
 
 
+def _as_block_tag(value: int | str) -> str:
+    """Hex-encode an int block number; pass tags and hex strings through."""
+    return hex(value) if isinstance(value, int) else value
+
+
 def is_solana_address(address: str) -> bool:
     """True for a plausible Solana (base58, 32–44 char) public key."""
     return 32 <= len(address) <= 44 and all(c in _BASE58 for c in address)
@@ -210,6 +215,41 @@ class TatumClient:
             return None
         result = self._rpc(meta, "eth_call", [{"to": to, "data": data}, "latest"])
         return result if isinstance(result, str) else None
+
+    def get_logs(
+        self,
+        chain: str,
+        *,
+        from_block: int | str,
+        to_block: int | str,
+        address: str | None = None,
+        topics: list[Any] | None = None,
+    ) -> list[dict[str, Any]] | None:
+        """Event logs matching a filter on an EVM chain (``None`` on any failure).
+
+        Block bounds accept ints, which are hex-encoded here, or strings passed
+        through unchanged so tags like ``"latest"`` and already-hex values work.
+
+        NO CLIENT-SIDE RANGE CAP IS IMPOSED, deliberately. Gateways enforce their
+        own span and result limits and reject what they will not serve. A
+        stricter cap here would be a constraint of our own invention rather than
+        a real one, and it would silently refuse queries the gateway would have
+        answered. An over-wide range surfaces as ``None``, like any other
+        upstream failure.
+        """
+        meta = _CHAINS.get(chain.lower())
+        if meta is None or meta.family != "evm":
+            return None
+        log_filter: dict[str, Any] = {
+            "fromBlock": _as_block_tag(from_block),
+            "toBlock": _as_block_tag(to_block),
+        }
+        if address:
+            log_filter["address"] = address
+        if topics:
+            log_filter["topics"] = topics
+        result = self._rpc(meta, "eth_getLogs", [log_filter])
+        return result if isinstance(result, list) else None
 
     def nfpm_tokens_owed(
         self, chain: str, token_id: str | int, *, decimals0: int = 18, decimals1: int = 18

@@ -1,9 +1,10 @@
 # Archived contributor next-steps — nexus-core
 
 > **Historical reference, not a prioritized backlog.** This file preserves the
-> detailed 2026-07-07 contributor handoff. Current work is owned by
-> [ROADMAP.md](ROADMAP.md) and GitHub Issues; deployed truth is in
-> [CURRENT-STATE.md](CURRENT-STATE.md), and checks are recorded in
+> detailed 2026-07-07 contributor handoff. Current work is owned by GitHub
+> Issues, which is authoritative and should be re-queried; live and planned
+> design work is at [pwos.app/build](https://pwos.app/build) and what shipped at
+> [pwos.app/changelog](https://pwos.app/changelog); checks are recorded in
 > [VALIDATION.md](VALIDATION.md). Read [`CLAUDE.md`](CLAUDE.md) for operating
 > rules. Where the material below differs, those current sources win.
 

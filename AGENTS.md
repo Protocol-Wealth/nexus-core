@@ -76,6 +76,12 @@ flow for remote MCP clients; omit it for local open `/mcp`.
   # Copyright 2026 Protocol Wealth, LLC and contributors.
   ```
 - **DCO sign-off on every commit:** `git commit -s`. Conventional-commit prefixes.
+  *Verifying this on a pull request:* read the PR head, not the checkout —
+  `gh api repos/$REPO/pulls/$N/commits --jq '.[].commit.message'`. A CI checkout
+  of a PR lands on `refs/pull/N/merge`, an ephemeral merge commit GitHub
+  synthesizes, so `git show -s --format='%(trailers)' HEAD` returns empty for
+  every PR regardless of what the author signed. That has produced four false
+  "missing DCO sign-off" findings here (#296, #297, #302, #303).
 - **Sync handlers + sync `httpx`.** REST handlers are sync `def` (FastAPI
   threadpools them). Only `asyncpg` DB code is `async`.
 - **Heavy/optional deps are lazy-imported** inside functions and gated behind a
