@@ -212,8 +212,13 @@ nexus-core/
 ## Development
 
 ```bash
+pip install -e ".[dev,serve]"     # WHAT CI INSTALLS — the only combination that can run step 6's gate
 pip install -e ".[serve]"         # Deployed surface (market + mcp extras) — what nexusmcp.site runs
-pip install -e ".[dev]"           # Dev tooling only (pytest, pytest-asyncio, pytest-cov, ruff, mypy, pip-licenses)
+pip install -e ".[dev]"           # Dev tooling ONLY (pytest, pytest-asyncio, pytest-cov, ruff, mypy, pip-licenses)
+                                  #   NOT ENOUGH TO RUN THE SUITE. Without [serve] there is no fastmcp, so
+                                  #   `mypy --strict` reports 38 untyped-decorator errors in mcp/server/app.py,
+                                  #   and no python-multipart, so the OAuth /token form tests fail. Both look
+                                  #   like real defects on a clean checkout and neither is one.
 pip install -e ".[all]"           # All capability extras (heavy: torch, transformers, QuantLib, zipline)
 pip install -e "."                # Core only (regime + scoring + market/macro/onchain HTTP clients)
 

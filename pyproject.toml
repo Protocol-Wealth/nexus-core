@@ -36,6 +36,16 @@ classifiers = [
 # ─── Core dependencies (required) ───────────────────────────────────
 dependencies = [
     "fastapi>=0.139.2",
+    # REQUIRED BY THE OAUTH TOKEN ENDPOINT, not optional and not test-only.
+    # app/mcp_oauth.py's /token calls request.form(); Starlette raises
+    # "The `python-multipart` library must be installed to use form parsing"
+    # without it — on urlencoded bodies too, not just multipart. A clean
+    # install from this file alone therefore cannot serve the
+    # authorization_code flow at all; the deployed service works only because
+    # requirements-serve.lock pins it transitively.
+    # Apache-2.0 (verified: License-Expression in the package metadata, and
+    # pip-licenses on the installed 0.0.32).
+    "python-multipart>=0.0.9",
     "uvicorn>=0.51.0",
     "pydantic>=2.13.4",
     "httpx>=0.28.1",

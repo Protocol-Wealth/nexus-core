@@ -104,6 +104,7 @@ runs without any of them, degrading each integration gracefully to
 | `NEXUS_PUBLIC_MCP_PROFILE` | `full` (default) or `demo`; full includes the de-identified planning and accounting adapters, while demo registers only closed-world native MCP tools | no |
 | `NEXUS_ACCESS_MODE` | `public` (default) or `restricted`; restricted gates `/api/*` and planning JSON gateway paths | no |
 | `NEXUS_API_KEYS` | Comma-separated raw service keys or `sha256:<hex>` digests accepted in restricted mode | yes when restricted |
+| `NEXUS_MCP_CLIENT_SECRETS` | **SECRET-BEARING — mount from Secret Manager, never as plain config.** Comma-separated raw secrets or `sha256:<hex>` digests that may mint an `/mcp` access token via the OAuth `client_credentials` grant — the non-interactive path for CLIs, coding agents and cron. A raw entry is bearer-equivalent: anyone holding it can mint transport tokens, so prefer the `sha256:<hex>` form and keep raw material out of the environment, exactly as for `NEXUS_API_KEYS`. Unset disables the grant entirely (not advertised, not accepted); it also stays off unless `MCP_OAUTH_SIGNING_KEY` is set, since without it there is no OAuth to grant. **Separate from `NEXUS_API_KEYS` on purpose**: those gate the REST surfaces, and one variable for both would mean neither could be revoked without the other | no (secret when set) |
 | `NEXUS_RATE_LIMIT_PER_MIN` | Per-IP request budget (default `60`) | no |
 | `NEXUS_CORS_ORIGINS` | Comma-separated CORS allow-list (default `*`) | no |
 | `PORT` | Listen port (Cloud Run injects this; default `8080`) | no |
