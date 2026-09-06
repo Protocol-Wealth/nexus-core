@@ -103,7 +103,7 @@ _PAGE = """\
   </ul>
 
   <h2>Try it</h2>
-  <pre style="background:#111830;border:1px solid #1f2a48;border-radius:10px;padding:1rem 1.15rem;overflow-x:auto;font-size:.85rem;color:#d6def5"><code># current macro regime
+  <pre style="background:#111830;border:1px solid #1f2a48;border-radius:10px;padding:1rem 1.15rem;overflow-x:auto;font-size:.85rem;color:#d6def5;white-space:pre-wrap;overflow-wrap:break-word"><code># current macro regime
 curl https://nexusmcp.site/health
 curl -H "Authorization: Bearer $NEXUS_SERVICE_API_KEY" \\
   https://nexusmcp.site/api/regime

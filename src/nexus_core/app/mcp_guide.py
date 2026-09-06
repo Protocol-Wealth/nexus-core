@@ -52,6 +52,11 @@ _PAGE = """\
   pre {{
     background: #111830; border: 1px solid #1f2a48; border-radius: 10px;
     padding: 1rem 1.15rem; overflow-x: auto; font-size: .85rem; color: #d6def5;
+    /* These blocks are commands meant to be copied and run. Scrolling hid the
+       tail of the longest one entirely -- two thirds of it on a phone -- and a
+       reader cannot copy what they cannot see. Wrapping shows all of it; the
+       shell continuations already break at whitespace. */
+    white-space: pre-wrap; overflow-wrap: break-word;
   }}
   pre code {{ background: none; padding: 0; color: inherit; }}
   .note {{

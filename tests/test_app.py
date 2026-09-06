@@ -186,6 +186,22 @@ def test_landing_has_curl_quickstart() -> None:
     assert "/api/planning/tools/glide_path" in html
 
 
+def test_code_blocks_wrap_rather_than_hide_their_tail() -> None:
+    """A command a reader cannot see is a command they cannot run.
+
+    These blocks exist to be copied. With ``overflow-x: auto`` alone the
+    longest curl line ran past the box and was clipped: 290px hidden at
+    1440px wide, and 660px -- two thirds of the command -- on a 390px
+    phone. Nothing signalled that the block scrolled.
+    """
+    for html in (render_landing(mcp_enabled=True), render_mcp_guide()):
+        # Positive control: there IS a styled pre block here to assert about,
+        # so a passing test cannot mean "matched nothing".
+        assert "<pre" in html
+        assert "overflow-x" in html
+        assert "pre-wrap" in html, "code blocks clip their tail again"
+
+
 def test_mcp_guide_has_troubleshooting() -> None:
     html = render_mcp_guide()
     assert "Tools not showing up" in html
