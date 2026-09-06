@@ -137,16 +137,30 @@ nexus-core --version
 
 `serve` honors `HOST`/`PORT` env (Cloud Run supplies `PORT`). `snapshot` writes the day's benchmark prices to Cloud SQL and exits.
 
-## Endpoint Surface (read-only; MOSTLY GATED)
+## Endpoint Surface (read-only; SPLIT ACCESS — open, key-gated, and OAuth)
 
 `GET` unless noted. Cache lifetimes are set in handlers and respected by the
 Cloudflare edge.
 
-**These are NOT public.** `access_gate.py` protects `/api/*` and `/mcp/tools*`
-whenever `NEXUS_ACCESS_MODE=restricted`, which is how production runs. Verified
-live 2026-08-31: `/api/accounting/tools`, `/api/market/quote/BTC` and
-`/api/vaults` all return `401 {"error":"unauthorized"}` unauthenticated, and
-`POST /mcp` returns `{"error":"invalid_token"}`.
+**THE ACCESS MODEL IS SPLIT — do not read it as one answer.** Three groups,
+verified live 2026-09-06:
+
+| group | example | unauthenticated |
+|---|---|---|
+| open | `/`, `/health`, the docs | `200` |
+| service-key gated | `/api/*`, legacy `/mcp/tools*` | `401 {"error":"unauthorized"}` |
+| native MCP, OAuth | `POST /mcp` | `{"error":"invalid_token"}` **plus** a `WWW-Authenticate: Bearer resource_metadata=".../.well-known/oauth-protected-resource/mcp"` header |
+
+`access_gate.py` protects `/api/*` and `/mcp/tools*` whenever
+`NEXUS_ACCESS_MODE=restricted`, which is how production runs.
+
+**`invalid_token` on `POST /mcp` is not evidence the surface is private.** It is
+the OAuth handshake STARTING: the `WWW-Authenticate` header points at the
+resource-metadata document, and a remote MCP client that completes the flow gets
+in with no service key and no login. Native MCP is effectively a public demo
+surface by design — the landing page says so. Citing that response as proof of
+privacy misleads an agent about which endpoints actually need credentials, which
+is the opposite of what this section exists to prevent.
 
 The heading previously read "(public, read-only)". Do not restore that: the
 code DEFAULT is `public`, but the deployed environment overrides it, and
