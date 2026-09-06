@@ -3,131 +3,27 @@
 > Repo: `Protocol-Wealth/nexus-core` · License: Apache 2.0 · Patent Pending: USPTO #64/034,229 · OIN member.
 > Open-source extraction of the [Protocol Wealth research engine](https://nexusmcp.site); nothing in this repo is client-specific or proprietary to PW.
 
-**Current state (2026-07-17 ET — accounting v2 operationally approved; consumer enablement in progress):**
-- **Live deployment:** commit `e5f4d84` is on `origin/main`; Cloud Run revision
-  `nexus-core-00070-zhx` is Ready and serves 100% traffic. Custom-domain, direct,
-  and regional Cloud Run `/health` returned `200`, `/health/db` returned `200`,
-  and unauthenticated `/api/accounting/tools` returned the expected service-key
-  `401` under `NEXUS_ACCESS_MODE=restricted`.
-- **Deployed accounting contract `0.2.0`:** P0-P4 are merged through PRs
-  #254-#258 and the #260 hardening is merged through PR #262. The
-  REST gateway exposes `describe`, `price_history`, `decode_onchain_events`,
-  `compute_cost_basis`, and `onchain_pnl_report`. Inputs are de-identified
-  public-chain/market facts with opaque references; identity-shaped keys fail
-  closed, unknown price/basis stays explicit, and accounting/tax disclaimers are
-  canonical. The deployed image was built from the reviewed merge tree. No
-  production service-key value was read during closeout, so an authenticated v2
-  version handshake was not rerun.
-- **Accounting methodology `2.0.0`:** the deployed contract scopes FIFO by account,
-  handles explicitly linked same-owner transfers without gain, allocates fees
-  once plus any separate fee-asset disposal, uses calendar holding periods,
-  conserves authoritative basis/fee totals across partial lots and transfers,
-  supports full-history or method-pinned complete opening-state replay, and
-  returns root-lot/event/transaction/evidence/price lineage with structured
-  completeness. Confirmed external inbound receipts default to receipt-time
-  fair-market-value basis with price provenance; same-owner transfers carry
-  original basis, while external outbound, unknown, and ambiguous DeFi
-  treatments fail closed. Calculation completeness is not a closing-valuation or deliverable
-  attestation; the private composer applies section-specific gates. See
-  `docs/ONCHAIN-ACCOUNTING.md`.
-- **Transport boundary:** the deployed image reuses the accounting handler
-  registry and configured REST historian to register `price_history`,
-  `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report` in
-  native MCP full mode. It preserves recursive identity rejection, contract and
-  disclaimer envelopes, and stable `ToolError` mapping. Accounting's internal
-  `describe` is omitted; the native top-level `describe` reports the accounting
-  category and contract `0.2.0`. Production stays on
-  `NEXUS_PUBLIC_MCP_PROFILE=demo`; live OAuth `tools/list` returned
-  `classify_layer`, `collar_book`, `describe`, `health`, and `option_price`, with
-  accounting absent.
-- **Private boundary:** P0-P4 are calculation substrate, not private delivery controls.
-  Custodian ingestion, wallet/client linkage, statement assembly/rendering,
-  advisor review, release, tax-return preparation, and books-and-records retention
-  remain in the private `pw-api`/PWOS plane. Issues #248, #259, and #260 are
-  closed as technically complete; `pw-api#789` owns consumer compatibility and
-  private delivery. CCO/CIO/CTO approved methodology 2.0/FIFO for operational
-  use on 2026-07-17, so complete bounded calculations may be statement-ready;
-  post-deployment partner review is evidence rather than a runtime gate.
-- **Validation:** exact source-head CI run `29522873818` passed ruff, strict
-  mypy, and `1563` tests at `89.78%` coverage; SPDX, license-compliance, and both
-  CodeQL checks also passed. Standalone Codex accepted exact head `87afc45`, all
-  inline review threads were resolved before merge, and the complete live OAuth
-  MCP handshake passed after deployment.
+## Where state lives
 
-**Historical snapshot (2026-07-10 ET — public agent-discovery + Markdown negotiation):**
-- **Deployed:** Cloud Run revision `nexus-core-00064-fqx` serves 100% traffic on
-  `nexusmcp.site` (behavior-verified). The agent-discovery well-known surfaces are
-  live (`#232`): an SEP MCP Server Card at `/.well-known/mcp/server-card.json`, an
-  RFC 9727 API catalogue at `/.well-known/api-catalog`, `robots.txt` (AI-crawler
-  rules + Content-Signal + sitemap pointer), `sitemap.xml`, and an RFC 8288 `Link`
-  header on the landing page. isitagentready.com scores the site **71 / Level 2
-  Bot-Aware**. Source: `app/agent_discovery.py`, wired in `app/main.py`.
-- **Markdown content negotiation (`#233`):** `GET /` returns a Markdown rendering
-  when a client sends `Accept: text/markdown`; HTML stays the default for browsers.
-  The parser honors RFC 9110 quality values (a `q=0` rejects Markdown; Markdown is
-  chosen only when named more specifically than a bare `*/*`), and `Vary: Accept`
-  keeps the Cloudflare edge from cross-serving. Source:
-  `app/landing.py::accept_prefers_markdown` + `render_landing_markdown`.
-- **Card `serverInfo.description`:** the MCP Server Card carries a stable,
-  profile-agnostic engine description that does NOT overclaim MCP tool exposure
-  (the demo transport exposes only `option_price`/`collar_book`/`classify_layer`/
-  `health`/`describe` — all closed-world, no live vendor call);
-  the exact tool set is deferred to the `instructions` field + `tools/list`.
-  `policy.posture` stays the canonical `disclaimers.TERSE`. The
-  `protocolwealthllc.com` mirror of this card is reconciled field-for-field
-  (pw-website `#290`/`#291`).
-- **N/A for this read-only, publish-not-crawl surface** (deliberate, not gaps):
-  Auth.md, Web Bot Auth, Agent Skills (that modality is AskPWBot's on pw-website),
-  WebMCP, agentic commerce.
+**This file answers ONE question: how does an agent operate in this repo.** It
+is loaded on every turn, so it stays lean by construction. It previously
+carried a 126-line dated "Current state" block plus three "Historical
+snapshot" sections; those were stripped 2026-08-31 because they had gone
+stale and were actively misleading — see the note under Security Posture.
 
-**Historical snapshot (2026-07-07 ET — private consumer boundary closeout):**
-- **Access model:** hosted Nexus is a split surface. Native `/mcp` remains a
-  public OAuth-compatible demo endpoint with `NEXUS_PUBLIC_MCP_PROFILE=demo`.
-  REST/JSON calculation paths (`/api/*`, `/api/planning/tools/*`, legacy
-  `/mcp/tools/*`) are gated by `NEXUS_ACCESS_MODE=restricted` +
-  `NEXUS_API_KEYS`; `pw-api` supplies `NEXUS_SERVICE_API_KEY` server-to-server.
-  PWOS/PWPortal browser clients must not carry Nexus credentials.
-- **Private research ingestion handoff:** PWOS `/market-data` owns CSV/XLSX
-  research-screen ingestion. PR #993 in `pw-os-v2` is merged and advisor-verified
-  with `Saved 380 research rows (7c30414f)`. Raw Seeking Alpha workbooks,
-  Schwab/custodian files, client assignments, tracking records, and chat
-  attachments stay private in PWOS/pw-api. Nexus may receive only de-identified
-  candidate symbols, screened fields, and caller-supplied option-chain facts for
-  public-safe calculation.
+**Never add a dated state block here.** Estate doctrine retired that shape
+everywhere (`CURRENT-STATE.md` / `ROADMAP.md`, 2026-08-18), and PR #306
+retired those files in this repo without removing the same shape from this
+one.
 
-**Historical snapshot (2026-07-06 ET / 2026-07-07 UTC — restricted REST + demo MCP):**
-- **Live deployed:** commit `d3d0b2f` is on `origin/main`; Cloud Run revision
-  `nexus-core-00061-xhs` serves 100% traffic. Hosted Nexus keeps transparent
-  OAuth active for `/mcp`, runs `NEXUS_PUBLIC_MCP_PROFILE=demo`, and gates
-  `/api/*`, `/api/planning/tools/*`, and legacy `/mcp/tools/*` with
-  `NEXUS_ACCESS_MODE=restricted` + `NEXUS_API_KEYS`. Anonymous
-  `/api/planning/tools` returns 401; the pw-api service bearer key returns the
-  27-tool planning contract; OAuth MCP `tools/list` returns only
-  `option_price`, `collar_book`, `health`, and `describe` (plus `classify_layer`
-  as of the durability-layer surface — pure compute over the published EMF layer
-  maps, no vendor call).
-- **Collar-book executable-fill update:** the multi-name collar-book worksheet
-  accepts per-share executable pricing (`executable_net_credit` or `call_bid`
-  minus `put_ask`) through the engine plus REST/MCP parsers and reports
-  `stock_price`, `shares`, per-line `fill_haircut`, executable income/yield,
-  and portfolio-level executable yield only when every held line has executable
-  pricing. This is worksheet arithmetic over caller-supplied
-  public-safe/pre-screened data; it is not a live-chain attestation, custodian
-  execution record, client-specific recommendation, or order surface.
-- **Validation run:** targeted collar-book engine, route, and MCP parser tests
-  plus strict mypy/ruff on the touched source passed; full FastAPI TestClient
-  route suites hit a local WSL/sandbox anyio threadpool hang, so CI or a
-  non-sandboxed Python environment remains the full route-harness gate.
+| Question | Where |
+|---|---|
+| What is live in production right now | Cloud Run, and the service itself — probe it |
+| What shipped, and when | [`CHANGELOG.md`](./CHANGELOG.md) |
+| What is planned | GitHub Issues — `gh issue list` |
+| Design record, live + planned | [pwos.app/build](https://pwos.app/build) |
+| Issues, PRs, CI | **GitHub — authoritative. Re-query it.** |
 
-**Historical snapshot (2026-07-01 — docs/status audit):**
-- **Live deployment verified:** `https://nexusmcp.site/health` returns `{"status":"ok","service":"nexus-core","version":"0.1.0"}` and `https://nexusmcp.site/mcp/tools` returns contractVersion `0.1.0` with **23 planning tool ids**: `monte_carlo_decumulation`, `analyze_goals`, `project_cash_flow`, `glide_path`, `tax_aware_withdrawal`, `correlation_matrix`, `capital_market_assumptions`, `regime_return_generator`, `roth_conversion`, `sequence_of_returns_stress`, `rmd`, `tax_bracket_headroom`, `social_security_claiming`, `regime_conditioned_swr`, `portfolio_xray`, `optimize_allocation`, `fire`, `risk_metrics`, `rebalance`, `build_planning_report`, `irmaa_headroom`, `analyze_roth_conversion`, and `sequence_conversions`. GitHub has **no open PRs** and seven open issues (#197-#203) tracking public-safe planning/report extraction, planning assumptions provenance, LP/indexer expansion, crypto-options follow-ups, agent analytics, governance/tooling cleanup, and equity-research gates.
-- **Dependency status:** `requirements-serve.lock` pins `pandas==2.3.3`; keep `pyproject.toml` on `pandas>=2.2,<3.0` until `alphalens-reloaded` supports pandas 3.x. Dependabot's pandas 3.x bump conflicted with the documented `[all]`/`[backtest]` installability boundary.
-
-**Historical snapshot (2026-06-24 — Guyton-Klinger dynamic withdrawals):**
-- **`monte_carlo_decumulation` gained an optional `guardrails` config (Guyton-Klinger dynamic withdrawals).** When supplied, the simulation replaces the static `net_spend_by_year` draw (from the first decumulation year onward) with a path-dependent withdrawal governed by the three GK rules — the withdrawal rule (inflation raise, frozen after a down year when the rate is elevated), the capital-preservation rule (cut when the rate climbs `band` above the path's initial rate; suspended in the final `preservationFinalYears`), and the prosperity rule (raise when the rate falls `band` below). The rules run **vectorized across paths** in the existing year-loop (a `_guardrail_step` helper + a `GuardrailParams` dataclass in `engine/planning/monte_carlo.py`), so the non-guardrail path is **byte-identical** to before. The response gains `withdrawalRule` / `spendingByYear` (p10/p50/p90 realized-spend bands) / `guardrailActivity` only when `guardrails` is set. Gateway parsing + validation in `app/planning/tools.py` (`guardrails` body field). `mypy --strict` + `ruff` clean; +13 tests; full suite green. This is the engine half — the pwos chat-tool/report wiring (passing `guardrails`) is the follow-on consumer change.
-
-**Historical snapshot (2026-06-21 — goal engine reconciliation):**
-- **The prior dirty `goals.py` work is merged on main via PR #174, and PR #175 adds priority/shared-pool allocation.** `analyze_goals` is now the deterministic per-goal funding foundation plus the first shared-pool priority allocator. Future L1 Goal Graph work should extend this implementation rather than build beside it: persisted goal-analysis artifacts, solve-for, temporal waterfall behavior, and richer assumption/effective-input echoes belong on top of the existing tested goal logic. Keep client identity, advisor review, audit ledger, and intake conversion in pw-api/PWOS, not in nexus-core.
 
 ## What This Is
 
@@ -241,9 +137,35 @@ nexus-core --version
 
 `serve` honors `HOST`/`PORT` env (Cloud Run supplies `PORT`). `snapshot` writes the day's benchmark prices to Cloud SQL and exits.
 
-## Endpoint Surface (public, read-only)
+## Endpoint Surface (read-only; SPLIT ACCESS — open, key-gated, and OAuth)
 
-`GET` unless noted. Cache lifetimes are set in handlers and respected by the Cloudflare edge.
+`GET` unless noted. Cache lifetimes are set in handlers and respected by the
+Cloudflare edge.
+
+**THE ACCESS MODEL IS SPLIT — do not read it as one answer.** Three groups,
+verified live 2026-09-06:
+
+| group | example | unauthenticated |
+|---|---|---|
+| open | `/`, `/health`, the docs | `200` |
+| service-key gated | `/api/*`, legacy `/mcp/tools*` | `401 {"error":"unauthorized"}` |
+| native MCP, OAuth | `POST /mcp` | `{"error":"invalid_token"}` **plus** a `WWW-Authenticate: Bearer resource_metadata=".../.well-known/oauth-protected-resource/mcp"` header |
+
+`access_gate.py` protects `/api/*` and `/mcp/tools*` whenever
+`NEXUS_ACCESS_MODE=restricted`, which is how production runs.
+
+**`invalid_token` on `POST /mcp` is not evidence the surface is private.** It is
+the OAuth handshake STARTING: the `WWW-Authenticate` header points at the
+resource-metadata document, and a remote MCP client that completes the flow gets
+in with no service key and no login. Native MCP is effectively a public demo
+surface by design — the landing page says so. Citing that response as proof of
+privacy misleads an agent about which endpoints actually need credentials, which
+is the opposite of what this section exists to prevent.
+
+The heading previously read "(public, read-only)". Do not restore that: the
+code DEFAULT is `public`, but the deployed environment overrides it, and
+reading the default as the deployed state is exactly the mistake this note
+exists to stop. Check the service, not `access_mode()`.
 
 | Path | Notes |
 |------|-------|
@@ -285,7 +207,10 @@ external integrations degrade gracefully to `None`/empty/503 when their key is a
 
 ## Security Posture
 
-- **Public read-only. No public write endpoints** — the daily snapshot is a Cloud Run Job, not an HTTP route.
+- **Read-only. No write endpoints at all** — the daily snapshot is a Cloud Run
+  Job, not an HTTP route. The surface is NOT public: see the Endpoint Surface
+  note above. This bullet used to open "Public read-only", which was false
+  against a service that has been refusing unauthenticated `/api/*` calls.
 - **Private-only Cloud SQL** — no public IP, reached only over the VPC.
 - **In-process rate limiter** (`app/ratelimit.py`) resolves the client IP spoofing-resistantly (`CF-Connecting-IP`, else rightmost `X-Forwarded-For`); `/health` and `/mcp` are exempt.
 - **Cloudflare** methods rule blocks non-GET/POST/OPTIONS + edge rate-limit on cost endpoints.
@@ -358,14 +283,9 @@ Hard NOs. Each is enforced by review + tooling where possible:
 
 ## Roadmap
 
-Recently shipped (see `CHANGELOG.md`): multi-chain Uniswap V3 LP (base/optimism/polygon added to ethereum); position `vs-benchmark` (pair LP IL with hold benchmarks — "was LPing worth it?"); Jupiter Solana SPL prices (`/api/solana`, keyless); **Aerodrome Slipstream LP on Base via on-chain RPC** (`/api/lp/aerodrome/{token_id}/analytics`, partial — value/in-range/amounts/uncollected fees; no IL/fee-APR/gauge-APR without an indexer).
+Tracked in GitHub Issues and the design record at [pwos.app/build](https://pwos.app/build);
+shipped work is in [`CHANGELOG.md`](./CHANGELOG.md).
 
-Next surfaces (see `CHANGELOG.md` and [pwos.app/build](https://pwos.app/build) for detail; tracked in #199):
-- **Aerodrome Slipstream — full coverage via Envio** — the on-chain RPC path is **live** (partial: value, in-range, amounts, uncollected fees; `data_mode: onchain_rpc`). No canonical Slipstream V3-schema subgraph exists on The Graph (name-matching ones are Revert-automation + ICHI-vault subgraphs), and the on-chain-only path cannot derive IL (needs deposit history), fee APR (needs pool volume), or AERO gauge reward APR. An **Envio** client would add those; the pure engine + Slipstream NFPM (`0x827922686190790b37229fd06084350E74485b72`, decode-compatible) are already wired.
-- **Arbitrum Uniswap V3** — needs a correct V3-schema subgraph ID (the published one is incompatible).
-- **Base subgraph data quality** — the public Base V3 deployment has spam-token TVL contamination (pollutes discovery + pool-aggregate fee APR; per-position value/IL stays accurate) → consider self-hosting a cleaner indexer.
-- **Uniswap V4 via Envio (Unichain).**
-- **Solana CLMM (Raydium/Orca)** — Q64.64 sibling engine; Jupiter price layer already shipped.
-- **Subgraph health-gate** (`_meta` block-lag → degraded).
-- **Position-PnL persisted history.**
-- **Enrich Tatum Solana balance with Jupiter USD.**
+A roadmap list previously lived here and drifted from both. A plan in a
+per-turn file is read as current by every agent that loads it, which is the
+same failure as the dated state block above.
