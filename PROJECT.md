@@ -36,7 +36,7 @@ habits that are safe there are not safe here.
 | API | FastAPI + Uvicorn |
 | Models | Pydantic 2 |
 | Database | asyncpg |
-| Analysis | pandas (`>=2.2,<4.0`), numpy, scikit-learn, cvxpy, PyPortfolioOpt |
+| Analysis | pandas (`>=2.2,<4.0`), numpy, cvxpy, PyPortfolioOpt |
 | HTTP | httpx |
 | Logging | structlog |
 | Tooling | ruff, mypy, pytest |
@@ -93,11 +93,14 @@ Because it is public and Apache-2.0:
 ## 6. COMMANDS
 
 ```bash
-pip install -e ".[dev]"
-ruff check .
-mypy src
-pytest
+pip install -e ".[dev,serve]"   # [dev] alone has no fastmcp — see CLAUDE.md § Development
+ruff check src/ tests/
+mypy --strict src/nexus_core/
+pytest -q --cov=src/nexus_core --cov-report=term-missing --cov-fail-under=80
 ```
+
+These are the `quality` job's steps in `.github/workflows/ci.yml`, which is the
+authority if they ever diverge — run what the gate runs, not something like it.
 
 ---
 
@@ -109,8 +112,21 @@ Required status checks on `main`:
 - `Scan dependency licenses`
 - `Verify SPDX-License-Identifier on .py files`
 
-Branch protection is strict. Dependabot covers **pip and github-actions**;
-minor/patch auto-merges once every check passes, majors never do.
+`main` is PR-only: protection requires a pull request with **zero** required
+approvals and applies to admins. The `strict` flag — "require branches to be up to
+date before merging" — is **off**, so a PR does not have to be rebased onto `main`
+to merge. Read the live settings rather than this line:
+
+```bash
+gh api repos/Protocol-Wealth/nexus-core/branches/main/protection \
+  --jq '{strict: .required_status_checks.strict,
+          contexts: .required_status_checks.contexts,
+          approvals: .required_pull_request_reviews.required_approving_review_count,
+          admins: .enforce_admins.enabled}'
+```
+
+Dependabot covers **pip and github-actions**; minor/patch auto-merges once every
+check passes, majors never do.
 
 ---
 
