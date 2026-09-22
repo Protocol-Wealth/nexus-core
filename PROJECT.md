@@ -1,130 +1,111 @@
 # PROJECT.md — nexus-core
 
-> Loads after `AGENTS.md`. AGENTS.md defines the universal PW standards; this
-> file records only what is specific to this repository. Where the two conflict,
-> AGENTS.md wins.
+> Loads after `AGENTS.md`. `~/projects/AGENTS.md` is the universal standard.
+> This file is the operating contract for this repository. Where they conflict,
+> `~/projects/AGENTS.md` wins, then this repo's `AGENTS.md`.
 
-**Version:** 1.0.0 | **Created:** 2026-08-03
-
----
-
-## 1. WHAT THIS REPO IS — AND WHY IT IS DIFFERENT
+## 1. What this repo is
 
 A regime-adaptive financial analysis engine with MCP tool orchestration,
-published to PyPI as **`pw-nexus-core`**.
+published to PyPI as `pw-nexus-core`.
 
-**This repository is PUBLIC.** Apache-2.0, patent pending, OIN member,
-accepting outside contributions. That single fact governs everything else:
+**This repository is public.** Apache-2.0, patent pending, accepting outside
+contributions. That fact governs everything else:
 
-- Anything committed here is **world-readable, permanently**, including from
-  git history after deletion.
-- **No client data, no PII, no account identifiers, no firm-internal
-  configuration.** Not in code, not in tests, not in fixtures, not in commit
-  messages.
-- Issues and PRs are public. Do not reference client situations in them.
+- Anything committed here is world-readable, including from git history after deletion.
+- No client data, no PII, no account identifiers, and no firm-internal
+  configuration. Not in code, tests, fixtures, or commit messages.
+- Issues and pull requests are public. Do not reference client situations in them.
 
-Every other active PW repo is private. This one is the exception, and the
-habits that are safe there are not safe here.
+Every other active Protocol Wealth repository is private. Habits that are safe
+there are not safe here.
 
----
+## 2. Tech stack
 
-## 2. TECH STACK
+Declared in `pyproject.toml`. Do not copy version ranges into this file.
 
 | | |
 |---|---|
-| Language | Python **>=3.12** (CI matrixes 3.12) |
+| Language | Python. CI uses 3.12 (`.github/workflows/ci.yml`). |
 | API | FastAPI + Uvicorn |
 | Models | Pydantic 2 |
 | Database | asyncpg |
-| Analysis | pandas (`>=2.2,<4.0`), numpy, scikit-learn, cvxpy, PyPortfolioOpt |
+| Analysis | pandas, numpy, PyPortfolioOpt. No scikit-learn. |
 | HTTP | httpx |
 | Logging | structlog |
 | Tooling | ruff, mypy, pytest |
 
-Note the pandas range admits the **3.x major line**, and CI resolves it — a dep
-bump here genuinely exercises pandas 3 rather than merely permitting it.
+## 3. Directory map
 
----
-
-## 3. DIRECTORY MAP
-
-`AGENTS.md` (Layout) is the agent-facing map for these layers.
+`AGENTS.md` (Layout) is the agent-facing map. These paths exist:
 
 | Layer | Path |
 |---|---|
-| Package root | `src/nexus_core/` — 181 modules |
+| Package root | `src/nexus_core/` |
 | HTTP app | `src/nexus_core/app/` |
-| Analysis engine | `src/nexus_core/engine/` |
+| Analysis engine | `src/nexus_core/engine/` (planning lives under `engine/planning/`) |
 | MCP tools | `src/nexus_core/mcp/` |
-| Planning / rebalancing | `src/nexus_core/planning/`, `src/nexus_core/rebalancing/` |
+| Planning / rebalancing packages | `src/nexus_core/planning/`, `src/nexus_core/rebalancing/` |
 | Compliance | `src/nexus_core/compliance/` |
 | Data adapters | `src/nexus_core/data/` |
 | Scheduled jobs | `src/nexus_core/jobs/` |
 | CLI | `src/nexus_core/cli.py` |
-| Tests | `tests/` — 122 test modules |
+| Tests | `tests/` |
 
----
-
-## 4. RELEASE
+## 4. Release
 
 **Merging does not publish.** `publish-pypi.yml` triggers only on
-`release: published` and `workflow_dispatch`, so a dependency bump landing on
-`main` cannot ship to PyPI by itself.
+`release: published` and `workflow_dispatch`. A dependency bump on `main`
+does not ship to PyPI by itself.
 
-That workflow is **not exercised by PR CI** — a green PR says nothing about
-whether the release path still works. Actions in it are SHA-pinned with version
-comments; a bump to those pins is unverifiable until the next real release.
+That workflow is not exercised by pull-request CI. A green pull request says
+nothing about whether the release path still works. Actions in it are
+SHA-pinned. A bump of those pins is unverifiable until the next real release.
 
----
-
-## 5. COMPLIANCE OBLIGATIONS SPECIFIC TO THIS REPO
+## 5. Compliance obligations specific to this repo
 
 Because it is public and Apache-2.0:
 
-- **Every `.py` file needs an SPDX-License-Identifier.** Enforced by a required
-  check; a new file without one fails CI.
-- **Dependency licences are scanned.** A dependency with an incompatible licence
-  fails the build, not a review.
-- Advisory output carries disclaimers (`src/nexus_core/disclaimers.py`) — that
-  text is regulated, and per `~/projects/AGENTS.md` §0.3, client-facing regulatory language is not an agent decision.
+- Every `.py` file needs an SPDX-License-Identifier. A required check fails
+  the pull request without one.
+- Dependency licences are scanned. An incompatible licence fails the build.
+- Advisory output carries disclaimers from `src/nexus_core/disclaimers.py`.
+  Per `~/projects/AGENTS.md` §0.3, client-facing regulatory language is not
+  an agent decision.
 
----
-
-## 6. COMMANDS
+## 6. Commands
 
 ```bash
-pip install -e ".[dev]"
-ruff check .
-mypy src
+pip install -e ".[dev,serve]"
+ruff check src/ tests/
+mypy --strict src/nexus_core/
 pytest
 ```
 
----
+`[dev]` alone does not install `fastmcp`. CI installs `.[dev,serve]`.
 
-## 7. CI GATES
+## 7. CI gates
 
-Required status checks on `main`:
+Required status checks:
 
-- `ruff + mypy + pytest`
-- `Scan dependency licenses`
-- `Verify SPDX-License-Identifier on .py files`
+```bash
+gh api repos/Protocol-Wealth/nexus-core/branches/main/protection \
+  --jq '.required_status_checks.contexts'
+```
 
-Branch protection is strict. Dependabot security updates stay on for pip
-and github-actions. Version-update pull requests are off, and nothing
-auto-merges them.
+`.github/dependabot.yml` keeps Dependabot security updates for pip and
+github-actions. Version-update pull requests are off. There is no
+Dependabot auto-merge workflow.
 
----
+## 8. Things to watch
 
-## 8. THINGS TO WATCH
-
-- **Public is forever.** The single highest-consequence mistake available in
-  this repo is committing something that should have been private. Treat every
-  fixture and every test as published.
+- **Public is forever.** The highest-consequence mistake in this repo is
+  committing something that should have been private. Treat every fixture
+  and every test as published.
 - **`NEXUS_API_KEYS` accepts raw keys with no length or entropy floor**
-  (`access_gate.py`). Tracked in #288 — do not assume the format is validated.
-- **Release-path changes are unverifiable pre-merge.** See §4. If you touch
-  `publish-pypi.yml`, watch the next release.
-
----
+  (`src/nexus_core/app/access_gate.py`). Tracked in GitHub issue #288.
+  Do not assume the format is validated.
+- **Release-path changes are unverifiable before merge.** See §4. If you
+  touch `publish-pypi.yml`, watch the next release.
 
 *Changes to this file should be reviewed like code.*
