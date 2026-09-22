@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **2026-09-21:** Repository agent instructions now live in `AGENTS.md`, and
+  root `CLAUDE.md` was removed after its still-current facts moved.
+
 ### Added
 
 - **Typed response models across `/api/lp/*`.** The last of the five on-chain and
