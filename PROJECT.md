@@ -93,10 +93,9 @@ gh api repos/Protocol-Wealth/nexus-core/branches/main/protection \
   --jq '.required_status_checks.contexts'
 ```
 
-Dependabot opens pull requests for pip and github-actions
-(`.github/dependabot.yml`). `.github/workflows/dependabot-auto-merge.yml`
-auto-merges semver minor and patch updates after the other checks pass.
-Major updates do not auto-merge.
+`.github/dependabot.yml` keeps Dependabot security updates for pip and
+github-actions. Version-update pull requests are off. There is no
+Dependabot auto-merge workflow.
 
 ## 8. Things to watch
 
