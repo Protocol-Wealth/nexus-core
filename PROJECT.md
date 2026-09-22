@@ -48,7 +48,7 @@ bump here genuinely exercises pandas 3 rather than merely permitting it.
 
 ## 3. DIRECTORY MAP
 
-`CLAUDE.md` §5 scopes sub-agents by layer against this section.
+`AGENTS.md` (Layout) is the agent-facing map for these layers.
 
 | Layer | Path |
 |---|---|
@@ -86,7 +86,7 @@ Because it is public and Apache-2.0:
 - **Dependency licences are scanned.** A dependency with an incompatible licence
   fails the build, not a review.
 - Advisory output carries disclaimers (`src/nexus_core/disclaimers.py`) — that
-  text is regulated, and per `CLAUDE.md` §2 it is not delegable to another agent.
+  text is regulated, and per `~/projects/AGENTS.md` §0.3, client-facing regulatory language is not an agent decision.
 
 ---
 
