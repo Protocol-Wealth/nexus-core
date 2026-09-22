@@ -51,12 +51,13 @@ dependencies = [
     "httpx>=0.28.1",
     "structlog>=26.1.0",
     "asyncpg>=0.31.0",
-    # alphalens-reloaded (the [backtest] extra) caps pandas<3.0 — pandas 3.0
-    # broke it and there is no pandas-3-compatible release — so the whole
-    # project pins pandas<3.0 to keep [all]/[backtest] installable + working.
-    # The core engine uses no pandas-3-only API (verified), so this is a no-op
-    # for the deployed surface. Lift the cap if/when alphalens-reloaded ships
-    # pandas-3 support.
+    # [dev,serve] (what CI installs) resolves pandas 3.x, the current release.
+    # [all] cannot take pandas 3: alphalens-reloaded 0.4.6 and
+    # pyfolio-reloaded >=0.9.9 both require pandas<3, so a full install
+    # resolves 2.3.3, the newest 2.x. The floor stays >=2.2 and the cap stays
+    # <4 so CI can keep pandas 3 while [all] stays installable. Raising the
+    # floor to >=3 makes [all] unsatisfiable. #287 widened an earlier <3 cap
+    # to <4; that did not add pandas-3 support to the backtest extra.
     "pandas>=2.2,<4.0",
     "numpy>=2.5.1",
     "scipy>=1.18.0",

@@ -109,8 +109,9 @@ Required status checks on `main`:
 - `Scan dependency licenses`
 - `Verify SPDX-License-Identifier on .py files`
 
-Branch protection is strict. Dependabot covers **pip and github-actions**;
-minor/patch auto-merges once every check passes, majors never do.
+Branch protection is strict. Dependabot security updates stay on for pip
+and github-actions. Version-update pull requests are off, and nothing
+auto-merges them.
 
 ---
 
