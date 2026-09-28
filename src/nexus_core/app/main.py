@@ -60,7 +60,7 @@ from ..data.providers import MacroDataProvider, MarketDataProvider
 from ..disclaimers import FULL as _FULL_DISCLAIMER
 from ..engine.accounting import PriceHistorian, build_default_historian
 from ..engine.regime import RegimeEngine
-from .access_gate import NexusAccessGate
+from .access_gate import NexusAccessGate, validate_access_keys
 from .accounting import build_accounting_router
 from .agent_discovery import (
     api_catalog_link_header,
@@ -219,6 +219,7 @@ def create_app(
         enable_mcp: Whether to mount the MCP-over-HTTP transport. Set ``False``
             in tests that only exercise the REST API.
     """
+    validate_access_keys()
     if market is None:
         market = build_market_provider()
     if macro is None:

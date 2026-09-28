@@ -22,6 +22,8 @@ from typing import Any
 
 _MODE_ENV = "NEXUS_ACCESS_MODE"
 _KEYS_ENV = "NEXUS_API_KEYS"
+_SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
+_MIN_RAW_KEY_LENGTH = 32
 _AUDIT_ID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
@@ -48,11 +50,20 @@ def _key_digests() -> list[str]:
             continue
         if item.lower().startswith("sha256:"):
             digest = item.split(":", 1)[1].strip().lower()
+            if not _SHA256_HEX_RE.fullmatch(digest):
+                raise ValueError(f"{_KEYS_ENV} contains an invalid sha256 digest")
         else:
+            if len(item) < _MIN_RAW_KEY_LENGTH:
+                raise ValueError(f"{_KEYS_ENV} raw keys must be at least 32 characters")
             digest = hashlib.sha256(item.encode("utf-8")).hexdigest()
-        if digest:
-            digests.append(digest)
+        digests.append(digest)
     return digests
+
+
+def validate_access_keys() -> None:
+    """Reject invalid restricted-mode key configuration during app construction."""
+    if access_mode() == "restricted" and not _key_digests():
+        raise ValueError(f"{_KEYS_ENV} requires at least one key in restricted mode")
 
 
 def _is_protected_path(path: str) -> bool:
