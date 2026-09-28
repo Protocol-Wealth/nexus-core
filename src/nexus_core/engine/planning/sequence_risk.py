@@ -114,8 +114,7 @@ def sequence_of_returns_stress(
         "bestFirst": outcomes["bestFirst"],
         "asGiven": outcomes["asGiven"],
         "sequenceRiskGap": round(
-            outcomes["bestFirst"]["terminalBalance"]
-            - outcomes["worstFirst"]["terminalBalance"],
+            outcomes["bestFirst"]["terminalBalance"] - outcomes["worstFirst"]["terminalBalance"],
             2,
         ),
     }

@@ -501,7 +501,8 @@ def build_lp_router(
         """Value, in-range, amounts, and uncollected fees for a Base Slipstream position."""
         if not slipstream.is_configured():
             raise HTTPException(
-                status_code=503, detail="Aerodrome analytics unavailable: TATUM_API_KEY not configured"
+                status_code=503,
+                detail="Aerodrome analytics unavailable: TATUM_API_KEY not configured",
             )
         fetched = slipstream.fetch_position(token_id)
         if fetched is None:

@@ -19,15 +19,21 @@ from starlette.testclient import TestClient
 from nexus_core.app.ratelimit import RateLimitMiddleware, _client_ip
 
 
-def _scope(headers: list[tuple[bytes, bytes]], client: tuple[str, int] | None = None) -> dict[str, Any]:
+def _scope(
+    headers: list[tuple[bytes, bytes]], client: tuple[str, int] | None = None
+) -> dict[str, Any]:
     return {"type": "http", "headers": headers, "client": client}
 
 
 def test_prefers_cf_connecting_ip() -> None:
-    ip = _client_ip(_scope([
-        (b"cf-connecting-ip", b"203.0.113.7"),
-        (b"x-forwarded-for", b"1.1.1.1, 2.2.2.2"),
-    ]))
+    ip = _client_ip(
+        _scope(
+            [
+                (b"cf-connecting-ip", b"203.0.113.7"),
+                (b"x-forwarded-for", b"1.1.1.1, 2.2.2.2"),
+            ]
+        )
+    )
     assert ip == "203.0.113.7"
 
 
@@ -40,8 +46,7 @@ def test_rightmost_xff_when_no_cf() -> None:
 def test_rotating_leftmost_xff_resolves_to_same_ip() -> None:
     # The attack: rotate the leftmost (spoofable) entry; the real client (rightmost) is fixed.
     ips = {
-        _client_ip(_scope([(b"x-forwarded-for", f"9.9.9.{n}, 5.5.5.5".encode())]))
-        for n in range(5)
+        _client_ip(_scope([(b"x-forwarded-for", f"9.9.9.{n}, 5.5.5.5".encode())])) for n in range(5)
     }
     assert ips == {"5.5.5.5"}  # all map to one key — no bucket escape
 

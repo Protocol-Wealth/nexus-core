@@ -78,6 +78,7 @@ Because it is public and Apache-2.0:
 ```bash
 pip install -e ".[dev,serve]"
 ruff check src/ tests/
+ruff format --check src/ tests/
 mypy --strict src/nexus_core/
 pytest
 ```

@@ -91,10 +91,13 @@ def _slip_handler(request: httpx.Request) -> httpx.Response:
         return f"{v & _M:064x}"
 
     if sel == "0x99fbab88":  # positions
-        words = (
-            ["00" * 32, "00" * 32, _WETH[2:].rjust(64, "0"), _USDC[2:].rjust(64, "0"), wi(100)]
-            + [wi(-1000), wi(1000), wi(10**18), "00" * 32, "00" * 32, wi(10**17), wi(5 * 10**6)]
-        )
+        words = [
+            "00" * 32,
+            "00" * 32,
+            _WETH[2:].rjust(64, "0"),
+            _USDC[2:].rjust(64, "0"),
+            wi(100),
+        ] + [wi(-1000), wi(1000), wi(10**18), "00" * 32, "00" * 32, wi(10**17), wi(5 * 10**6)]
         return httpx.Response(200, json={"result": "0x" + "".join(words)})
     if sel == "0x28af8d0b":  # getPool
         return httpx.Response(200, json={"result": "0x" + "aa".rjust(64, "0")})
@@ -136,7 +139,9 @@ def test_lp_chains() -> None:
 
 def test_lp_analytics_fields() -> None:
     client = TestClient(_app())
-    r = client.get("/api/lp/uniswap-v3/ethereum/123/analytics?price_token0_usd=1&price_token1_usd=2000")
+    r = client.get(
+        "/api/lp/uniswap-v3/ethereum/123/analytics?price_token0_usd=1&price_token1_usd=2000"
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["token_id"] == "123"
@@ -151,7 +156,9 @@ def test_lp_analytics_fields() -> None:
 
 
 def test_lp_bad_chain_400() -> None:
-    r = TestClient(_app()).get("/api/lp/uniswap-v3/solana/1/analytics?price_token0_usd=1&price_token1_usd=1")
+    r = TestClient(_app()).get(
+        "/api/lp/uniswap-v3/solana/1/analytics?price_token0_usd=1&price_token1_usd=1"
+    )
     assert r.status_code == 400
 
 
@@ -220,7 +227,9 @@ def test_lp_missing_position_404() -> None:
             slipstream=_slip(),
         )
     )
-    r = TestClient(app).get("/api/lp/uniswap-v3/ethereum/999/analytics?price_token0_usd=1&price_token1_usd=1")
+    r = TestClient(app).get(
+        "/api/lp/uniswap-v3/ethereum/999/analytics?price_token0_usd=1&price_token1_usd=1"
+    )
     assert r.status_code == 404
 
 
@@ -284,13 +293,32 @@ def test_lp_vs_benchmark() -> None:
 # first would hide exactly the difference being asserted.
 
 _ANALYTICS_KEYS = [
-    "token_id", "chain", "pool", "token0_symbol", "token1_symbol", "fee_tier",
-    "in_range", "current_tick", "tick_lower", "tick_upper", "liquidity",
-    "amount0", "amount1", "position_value_usd",
-    "uncollected_fees0", "uncollected_fees1", "uncollected_fees_usd",
-    "fee_apr_estimate", "reward_apr", "total_apr_estimate",
-    "impermanent_loss_usd", "impermanent_loss_pct",
-    "range_width_pct", "current_price", "price_token0_usd", "price_token1_usd",
+    "token_id",
+    "chain",
+    "pool",
+    "token0_symbol",
+    "token1_symbol",
+    "fee_tier",
+    "in_range",
+    "current_tick",
+    "tick_lower",
+    "tick_upper",
+    "liquidity",
+    "amount0",
+    "amount1",
+    "position_value_usd",
+    "uncollected_fees0",
+    "uncollected_fees1",
+    "uncollected_fees_usd",
+    "fee_apr_estimate",
+    "reward_apr",
+    "total_apr_estimate",
+    "impermanent_loss_usd",
+    "impermanent_loss_pct",
+    "range_width_pct",
+    "current_price",
+    "price_token0_usd",
+    "price_token1_usd",
 ]
 
 
@@ -335,12 +363,23 @@ def test_lp_benchmark_returns_keep_every_composition_key() -> None:
     The names carry spaces and slashes ("ETH-USDC 60/40"). A fixed model would
     drop any composition it did not declare, silently and without an error.
     """
-    body = TestClient(_app()).get(
-        "/api/lp/uniswap-v3/ethereum/123/vs-benchmark"
-        "?price_token0_usd=1&price_token1_usd=2000&days=90"
-    ).json()
-    expected = {"BTC", "ETH", "SOL", "ETH-USDC 50/50", "ETH-BTC 50/50",
-                "ETH-USDC 60/40", "ETH-USDC 70/30"}
+    body = (
+        TestClient(_app())
+        .get(
+            "/api/lp/uniswap-v3/ethereum/123/vs-benchmark"
+            "?price_token0_usd=1&price_token1_usd=2000&days=90"
+        )
+        .json()
+    )
+    expected = {
+        "BTC",
+        "ETH",
+        "SOL",
+        "ETH-USDC 50/50",
+        "ETH-BTC 50/50",
+        "ETH-USDC 60/40",
+        "ETH-USDC 70/30",
+    }
     assert set(body["benchmarks"]["returns_pct"]) == expected
     assert set(body["comparison"]["benchmark_returns_pct"]) == expected
 
@@ -384,9 +423,11 @@ def test_lp_integer_fields_do_not_become_floats() -> None:
 
 def test_lp_float_fields_do_not_become_ints() -> None:
     """The mirror: a zero-valued float must not render as a bare ``0``."""
-    text = TestClient(_app()).get(
-        "/api/lp/uniswap-v3/ethereum/123/analytics?price_token0_usd=1&price_token1_usd=2000"
-    ).text
+    text = (
+        TestClient(_app())
+        .get("/api/lp/uniswap-v3/ethereum/123/analytics?price_token0_usd=1&price_token1_usd=2000")
+        .text
+    )
     assert '"amount0":0.0' in text
     assert '"amount0":0,' not in text
 
@@ -412,15 +453,29 @@ def test_lp_response_key_order_is_unchanged() -> None:
     assert list(bench["position"]) == [*_ANALYTICS_KEYS, "uncollected_fees_source"]
     assert list(bench["benchmarks"]) == ["days", "returns_pct"]
     assert list(bench["comparison"]) == [
-        "position_il_pct", "position_total_apr_estimate", "benchmark_returns_pct", "note",
+        "position_il_pct",
+        "position_total_apr_estimate",
+        "benchmark_returns_pct",
+        "note",
     ]
 
     positions = client.get(f"/api/lp/uniswap-v3/ethereum/positions?owner={_OWNER}").json()
     assert list(positions) == ["chain", "owner", "count", "positions", "note", "disclaimer"]
     assert list(positions["positions"][0]) == [
-        "token_id", "chain", "pool_address", "fee_tier", "token0", "token1",
-        "tick_lower", "tick_upper", "current_tick", "in_range", "liquidity",
-        "amount0", "amount1", "uncollected_fees",
+        "token_id",
+        "chain",
+        "pool_address",
+        "fee_tier",
+        "token0",
+        "token1",
+        "tick_lower",
+        "tick_upper",
+        "current_tick",
+        "in_range",
+        "liquidity",
+        "amount0",
+        "amount1",
+        "uncollected_fees",
     ]
     assert list(positions["positions"][0]["token0"]) == ["address", "symbol", "decimals"]
     assert list(positions["positions"][0]["uncollected_fees"]) == ["token0", "token1", "source"]

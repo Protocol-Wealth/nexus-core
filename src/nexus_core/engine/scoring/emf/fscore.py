@@ -91,9 +91,7 @@ def compute_fscore(
         net_income_prev = _num(inc_prev, "netIncome", "net_income")
         assets_curr = _num(bs_curr, "totalAssets", "total_assets")
         assets_prev = _num(bs_prev, "totalAssets", "total_assets")
-        avg_assets = (
-            (assets_curr + assets_prev) / 2 if (assets_curr + assets_prev) > 0 else 1.0
-        )
+        avg_assets = (assets_curr + assets_prev) / 2 if (assets_curr + assets_prev) > 0 else 1.0
         ocf = _num(
             cf,
             "operatingCashFlow",

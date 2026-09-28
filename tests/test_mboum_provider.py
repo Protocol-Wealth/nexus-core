@@ -68,10 +68,22 @@ def test_get_price_history_list_body() -> None:
             200,
             json={
                 "body": [
-                    {"date": "2026-01-02", "open": 1.0, "high": 2.0, "low": 0.5,
-                     "close": 1.5, "volume": 100.0},
-                    {"date": "2026-01-03", "open": 1.5, "high": 2.5, "low": 1.0,
-                     "close": 2.0, "volume": 200.0},
+                    {
+                        "date": "2026-01-02",
+                        "open": 1.0,
+                        "high": 2.0,
+                        "low": 0.5,
+                        "close": 1.5,
+                        "volume": 100.0,
+                    },
+                    {
+                        "date": "2026-01-03",
+                        "open": 1.5,
+                        "high": 2.5,
+                        "low": 1.0,
+                        "close": 2.0,
+                        "volume": 200.0,
+                    },
                 ]
             },
         )

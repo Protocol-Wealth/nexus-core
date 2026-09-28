@@ -34,7 +34,12 @@ def test_get_prices_parses_v3_shape() -> None:
         return httpx.Response(
             200,
             json={
-                _SOL: {"usdPrice": 82.23, "decimals": 9, "priceChange24h": 0.05, "liquidity": 6.8e8},
+                _SOL: {
+                    "usdPrice": 82.23,
+                    "decimals": 9,
+                    "priceChange24h": 0.05,
+                    "liquidity": 6.8e8,
+                },
                 _USDC: {"usdPrice": 0.9995, "decimals": 6, "priceChange24h": 0.0, "liquidity": 1e9},
             },
         )

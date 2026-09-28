@@ -34,11 +34,7 @@ def test_get_quote_extracts_close() -> None:
         assert request.url.params["symbols"] == "AAPL"
         return httpx.Response(
             200,
-            json={
-                "data": [
-                    {"symbol": "AAPL", "close": 230.1, "date": "2026-01-05T00:00:00+0000"}
-                ]
-            },
+            json={"data": [{"symbol": "AAPL", "close": 230.1, "date": "2026-01-05T00:00:00+0000"}]},
         )
 
     provider = MarketStackMarketData(api_key="ms-key", http_client=_client(handler))
@@ -62,10 +58,22 @@ def test_get_price_history_maps_records() -> None:
             200,
             json={
                 "data": [
-                    {"date": "2026-01-05", "open": 1.0, "high": 2.0, "low": 0.5,
-                     "close": 1.5, "volume": 10.0},
-                    {"date": "2026-01-04", "open": 0.9, "high": 1.5, "low": 0.8,
-                     "close": 1.0, "volume": 20.0},
+                    {
+                        "date": "2026-01-05",
+                        "open": 1.0,
+                        "high": 2.0,
+                        "low": 0.5,
+                        "close": 1.5,
+                        "volume": 10.0,
+                    },
+                    {
+                        "date": "2026-01-04",
+                        "open": 0.9,
+                        "high": 1.5,
+                        "low": 0.8,
+                        "close": 1.0,
+                        "volume": 20.0,
+                    },
                 ]
             },
         )

@@ -64,7 +64,10 @@ def test_unsupported_chain_makes_no_request() -> None:
     def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover
         raise AssertionError("no request for an unsupported chain")
 
-    assert TheGraphClient(api_key="k", http_client=_client(handler)).fetch_v3_position("solana", "1") is None
+    assert (
+        TheGraphClient(api_key="k", http_client=_client(handler)).fetch_v3_position("solana", "1")
+        is None
+    )
 
 
 def test_fetch_v3_position_parses_and_uses_url_path_key() -> None:
@@ -73,7 +76,9 @@ def test_fetch_v3_position_parses_and_uses_url_path_key() -> None:
         assert "/api/k/subgraphs/id/" in request.url.path  # key in URL path
         return httpx.Response(200, json=_POSITION_DATA)
 
-    pos = TheGraphClient(api_key="k", http_client=_client(handler)).fetch_v3_position("ethereum", "123")
+    pos = TheGraphClient(api_key="k", http_client=_client(handler)).fetch_v3_position(
+        "ethereum", "123"
+    )
     assert pos is not None
     assert pos.token_id == "123"
     assert pos.liquidity == 1_000_000_000_000_000_000
@@ -90,21 +95,30 @@ def test_graphql_errors_degrade_to_none() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"errors": [{"message": "boom"}]})
 
-    assert TheGraphClient(api_key="k", http_client=_client(handler)).fetch_v3_position("ethereum", "1") is None
+    assert (
+        TheGraphClient(api_key="k", http_client=_client(handler)).fetch_v3_position("ethereum", "1")
+        is None
+    )
 
 
 def test_http_error_degrades_to_none() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(403, text="forbidden")
 
-    assert TheGraphClient(api_key="k", http_client=_client(handler)).fetch_v3_position("ethereum", "1") is None
+    assert (
+        TheGraphClient(api_key="k", http_client=_client(handler)).fetch_v3_position("ethereum", "1")
+        is None
+    )
 
 
 def test_missing_position_degrades_to_none() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"data": {"position": None}})
 
-    assert TheGraphClient(api_key="k", http_client=_client(handler)).fetch_v3_position("ethereum", "9") is None
+    assert (
+        TheGraphClient(api_key="k", http_client=_client(handler)).fetch_v3_position("ethereum", "9")
+        is None
+    )
 
 
 def test_fetch_v3_positions_by_owner_parses_list() -> None:

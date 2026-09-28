@@ -521,9 +521,7 @@ def test_external_transfer_out_remains_unresolved_without_tax_treatment() -> Non
 
     assert result.coverage.unresolved_transfer_count == 1
     assert result.completeness.statement_ready is False
-    assert "unresolved_transfer_treatment" in {
-        gap.code for gap in result.completeness.gaps
-    }
+    assert "unresolved_transfer_treatment" in {gap.code for gap in result.completeness.gaps}
 
 
 def test_paired_transfer_source_shortfall_is_counted_as_unresolved() -> None:

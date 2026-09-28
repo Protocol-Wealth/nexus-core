@@ -29,9 +29,7 @@ from ..http import fetch_json
 
 logger = logging.getLogger(__name__)
 
-_YIELD_URL = (
-    "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml"
-)
+_YIELD_URL = "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml"
 _TGA_URL = (
     "https://api.fiscaldata.treasury.gov/services/api/fiscal_service"
     "/v1/accounting/dts/operating_cash_balance"

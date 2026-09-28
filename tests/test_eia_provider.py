@@ -20,7 +20,9 @@ def _client(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.Client:
 
 
 def _price_response(value: float) -> httpx.Response:
-    return httpx.Response(200, json={"response": {"data": [{"period": "2026-01-05", "value": value}]}})
+    return httpx.Response(
+        200, json={"response": {"data": [{"period": "2026-01-05", "value": value}]}}
+    )
 
 
 def test_not_configured_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:

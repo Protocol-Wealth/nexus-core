@@ -43,11 +43,41 @@ _EMF_TO_GENERIC: dict[str, str] = {
 #: high diagonal persistence. The ``expansion`` row matches the contract's §3.5
 #: example. Calibrated/illustrative — NOT a fitted estimate.
 _TRANSITION: dict[str, dict[str, float]] = {
-    "expansion": {"expansion": 0.80, "inflationary": 0.08, "deflationary": 0.04, "stagflation": 0.04, "crisis": 0.04},
-    "inflationary": {"expansion": 0.10, "inflationary": 0.70, "deflationary": 0.03, "stagflation": 0.12, "crisis": 0.05},
-    "deflationary": {"expansion": 0.12, "inflationary": 0.05, "deflationary": 0.68, "stagflation": 0.03, "crisis": 0.12},
-    "stagflation": {"expansion": 0.06, "inflationary": 0.18, "deflationary": 0.06, "stagflation": 0.62, "crisis": 0.08},
-    "crisis": {"expansion": 0.25, "inflationary": 0.05, "deflationary": 0.15, "stagflation": 0.05, "crisis": 0.50},
+    "expansion": {
+        "expansion": 0.80,
+        "inflationary": 0.08,
+        "deflationary": 0.04,
+        "stagflation": 0.04,
+        "crisis": 0.04,
+    },
+    "inflationary": {
+        "expansion": 0.10,
+        "inflationary": 0.70,
+        "deflationary": 0.03,
+        "stagflation": 0.12,
+        "crisis": 0.05,
+    },
+    "deflationary": {
+        "expansion": 0.12,
+        "inflationary": 0.05,
+        "deflationary": 0.68,
+        "stagflation": 0.03,
+        "crisis": 0.12,
+    },
+    "stagflation": {
+        "expansion": 0.06,
+        "inflationary": 0.18,
+        "deflationary": 0.06,
+        "stagflation": 0.62,
+        "crisis": 0.08,
+    },
+    "crisis": {
+        "expansion": 0.25,
+        "inflationary": 0.05,
+        "deflationary": 0.15,
+        "stagflation": 0.05,
+        "crisis": 0.50,
+    },
 }
 
 
@@ -76,9 +106,7 @@ def seed_from_cache_key(key: str | None) -> int | None:
         return None
 
 
-def simulate_regime_path(
-    start_regime: str, years: int, rng: np.random.Generator
-) -> list[str]:
+def simulate_regime_path(start_regime: str, years: int, rng: np.random.Generator) -> list[str]:
     """Simulate a length-``years`` Markov regime path from ``start_regime``."""
     regimes = list(GENERIC_REGIMES)
     index = {r: i for i, r in enumerate(regimes)}

@@ -176,4 +176,3 @@ def test_check_custom_threshold() -> None:
     result = HurstCheck(threshold=0.60)(ctx)
     assert result.threshold == 0.60
     assert result.passed is False
-

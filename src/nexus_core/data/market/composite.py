@@ -45,9 +45,7 @@ class CompositeMarketData:
                 # Derive the coarse freshness label from as_of once, centrally,
                 # so every provider's quotes carry it consistently.
                 if quote.market_status is None:
-                    return dataclasses.replace(
-                        quote, market_status=market_status_from(quote.as_of)
-                    )
+                    return dataclasses.replace(quote, market_status=market_status_from(quote.as_of))
                 return quote
         return None
 

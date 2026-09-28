@@ -317,10 +317,14 @@ def build_oauth_router() -> APIRouter:
             return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
 
         if q.get("response_type") != "code":
-            return _redirect_error("unsupported_response_type", "only response_type=code is supported")
+            return _redirect_error(
+                "unsupported_response_type", "only response_type=code is supported"
+            )
         challenge = q.get("code_challenge", "")
         if not challenge or q.get("code_challenge_method") != "S256":
-            return _redirect_error("invalid_request", "PKCE with code_challenge_method=S256 is required")
+            return _redirect_error(
+                "invalid_request", "PKCE with code_challenge_method=S256 is required"
+            )
 
         # Transparent approval — public data, no interactive login.
         code = make_token(
@@ -361,7 +365,14 @@ def build_oauth_router() -> APIRouter:
         """
         now = int(time.time())
         access = make_token(
-            key, {"typ": "access", "aud": audience, "scope": _SCOPE, "iat": now, "exp": now + _ACCESS_TTL}
+            key,
+            {
+                "typ": "access",
+                "aud": audience,
+                "scope": _SCOPE,
+                "iat": now,
+                "exp": now + _ACCESS_TTL,
+            },
         )
         return {
             "access_token": access,
@@ -373,7 +384,14 @@ def build_oauth_router() -> APIRouter:
     def _issue_tokens(key: bytes, audience: str) -> dict[str, Any]:
         now = int(time.time())
         access = make_token(
-            key, {"typ": "access", "aud": audience, "scope": _SCOPE, "iat": now, "exp": now + _ACCESS_TTL}
+            key,
+            {
+                "typ": "access",
+                "aud": audience,
+                "scope": _SCOPE,
+                "iat": now,
+                "exp": now + _ACCESS_TTL,
+            },
         )
         refresh = make_token(
             key, {"typ": "refresh", "aud": audience, "iat": now, "exp": now + _REFRESH_TTL}
@@ -402,17 +420,25 @@ def build_oauth_router() -> APIRouter:
             code = read_token(key, str(form.get("code", "")), typ="code")
             if code is None:
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
-            if code.get("cid") != form.get("client_id") or code.get("ruri") != form.get("redirect_uri"):
+            if code.get("cid") != form.get("client_id") or code.get("ruri") != form.get(
+                "redirect_uri"
+            ):
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
             if not _pkce_ok(str(form.get("code_verifier", "")), str(code.get("chal", ""))):
-                return JSONResponse({"error": "invalid_grant", "error_description": "PKCE failed"}, status_code=400)
-            return JSONResponse(_issue_tokens(key, str(code.get("res"))), headers={"Cache-Control": "no-store"})
+                return JSONResponse(
+                    {"error": "invalid_grant", "error_description": "PKCE failed"}, status_code=400
+                )
+            return JSONResponse(
+                _issue_tokens(key, str(code.get("res"))), headers={"Cache-Control": "no-store"}
+            )
 
         if grant_type == "refresh_token":
             refresh = read_token(key, str(form.get("refresh_token", "")), typ="refresh")
             if refresh is None:
                 return JSONResponse({"error": "invalid_grant"}, status_code=400)
-            return JSONResponse(_issue_tokens(key, str(refresh.get("aud"))), headers={"Cache-Control": "no-store"})
+            return JSONResponse(
+                _issue_tokens(key, str(refresh.get("aud"))), headers={"Cache-Control": "no-store"}
+            )
 
         if grant_type == "client_credentials":
             # THE NON-INTERACTIVE PATH. authorization_code needs a browser and a
@@ -490,7 +516,9 @@ class MCPAuthGate:
             token = auth[7:] if auth.lower().startswith("bearer ") else ""
             if not (token and access_token_audience(key, token) == resource):
                 issuer = f"{scope.get('scheme', 'https')}://{host}"
-                www_auth = f'Bearer resource_metadata="{issuer}/.well-known/oauth-protected-resource/mcp"'
+                www_auth = (
+                    f'Bearer resource_metadata="{issuer}/.well-known/oauth-protected-resource/mcp"'
+                )
                 body = json.dumps(
                     {"error": "invalid_token", "error_description": "MCP access token required"}
                 ).encode()

@@ -9,7 +9,9 @@ from nexus_core.engine.regime.signal_fetcher import _SECTOR_ETFS, SignalFetcher
 
 
 def _bars(closes: list[float]) -> list[PriceBar]:
-    return [PriceBar(timestamp=f"d{i}", open=c, high=c, low=c, close=c) for i, c in enumerate(closes)]
+    return [
+        PriceBar(timestamp=f"d{i}", open=c, high=c, low=c, close=c) for i, c in enumerate(closes)
+    ]
 
 
 def _up() -> list[float]:
@@ -27,7 +29,9 @@ class _FakeMarket:
     def get_quote(self, symbol: str) -> None:
         return None
 
-    def get_price_history(self, symbol: str, *, days: int = 365, interval: str = "1d") -> list[PriceBar]:
+    def get_price_history(
+        self, symbol: str, *, days: int = 365, interval: str = "1d"
+    ) -> list[PriceBar]:
         return _bars(self._m.get(symbol, []))
 
 

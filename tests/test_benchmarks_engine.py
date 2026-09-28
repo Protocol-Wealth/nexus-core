@@ -45,9 +45,7 @@ def test_composition_skips_zero_base_asset() -> None:
 
 
 def test_build_benchmark_series_total_return() -> None:
-    bench = build_benchmark_series(
-        "ETH", {"ETH": 1.0}, {"ETH": [2000.0, 3000.0]}, ["t0", "t1"]
-    )
+    bench = build_benchmark_series("ETH", {"ETH": 1.0}, {"ETH": [2000.0, 3000.0]}, ["t0", "t1"])
     assert bench is not None
     assert bench.name == "ETH"
     assert [p.value for p in bench.points] == pytest.approx([100.0, 150.0])

@@ -551,8 +551,7 @@ def inherited_ira_analysis_tool(body: dict[str, Any]) -> dict[str, Any]:
     beneficiary_type = str(body.get("beneficiaryType", "other_designated_beneficiary"))
     if beneficiary_type not in _INHERITED_IRA_BENEFICIARY_TYPES:
         raise PlanningInputError(
-            "beneficiaryType must be one of "
-            + ", ".join(_INHERITED_IRA_BENEFICIARY_TYPES)
+            "beneficiaryType must be one of " + ", ".join(_INHERITED_IRA_BENEFICIARY_TYPES)
         )
     income_by_year = (
         _as_finite_num_list(body, "beneficiaryOrdinaryIncomeByYear")
@@ -724,9 +723,7 @@ def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
     healthcare_inflation_rate = _optional_number(
         body, "healthcareInflationRate", expense_inflation_rate
     )
-    ltc_shock = _parse_ltc_shock(
-        body, default_cost_inflation=healthcare_inflation_rate
-    )
+    ltc_shock = _parse_ltc_shock(body, default_cost_inflation=healthcare_inflation_rate)
     try:
         return project_cash_flow(
             current_age=_as_int(body, "currentAge"),
@@ -2264,9 +2261,7 @@ def _net_spend_schedule(
         if age < retirement_age:
             if annual_contribution:
                 # Accumulation with saving: a negative net draw = a portfolio inflow.
-                schedule.append(
-                    -annual_contribution * (1.0 + contribution_cola) ** year + ltc_cost
-                )
+                schedule.append(-annual_contribution * (1.0 + contribution_cola) ** year + ltc_cost)
             else:
                 schedule.append(ltc_cost)  # accumulation: shock costs still stress assets
             continue
@@ -2444,12 +2439,8 @@ def _prepare_monte_carlo(
     spend_cola = body.get("spendColaRate", 0.0)
     if isinstance(spend_cola, bool) or not isinstance(spend_cola, (int, float)):
         raise PlanningInputError("spendColaRate must be a number")
-    healthcare_inflation_rate = _optional_number(
-        body, "healthcareInflationRate", float(spend_cola)
-    )
-    ltc_shock = _parse_ltc_shock(
-        body, default_cost_inflation=healthcare_inflation_rate
-    )
+    healthcare_inflation_rate = _optional_number(body, "healthcareInflationRate", float(spend_cola))
+    ltc_shock = _parse_ltc_shock(body, default_cost_inflation=healthcare_inflation_rate)
     net_spend = _net_spend_schedule(
         current_age=current_age,
         retirement_age=retirement_age,

@@ -386,9 +386,7 @@ def project_cash_flow(
         retire_income = retirement_income * (1.0 + expense_inflation_rate) ** k if retired else 0.0
         base_ordinary = earned_income + retire_income
         base_expenses = current_expenses * (1.0 + expense_inflation_rate) ** k
-        ltc_shock_expense = ltc_shock_cost_by_age(
-            ltc_shock, age=age, current_age=current_age
-        )
+        ltc_shock_expense = ltc_shock_cost_by_age(ltc_shock, age=age, current_age=current_age)
         expenses = base_expenses + ltc_shock_expense
 
         if multi_account:

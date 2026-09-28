@@ -1,6 +1,6 @@
 name: CI
 
-# Runs the real quality gate the repo relied on locally: ruff, mypy --strict,
+# Runs the real quality gate the repo relied on locally: Ruff lint/format, mypy --strict,
 # and the pytest suite with a coverage floor. The pre-existing workflows only
 # checked SPDX headers + dependency licenses, so test/type/lint regressions
 # could ship undetected. CodeQL is configured separately (default code scanning).
@@ -32,6 +32,8 @@ jobs:
         run: pip install -e ".[dev,serve]"
       - name: Lint (ruff)
         run: ruff check src/ tests/
+      - name: Format (ruff)
+        run: ruff format --check src/ tests/
       - name: Type-check (mypy --strict)
         run: mypy --strict src/nexus_core/
       - name: Tests + coverage gate

@@ -67,9 +67,7 @@ _COMPANY_FACTS: dict[str, Any] = {
             "LiabilitiesCurrent": _usd(_annual(2024, 150.0), _annual(2023, 160.0)),
             "LongTermDebt": _usd(_annual(2024, 200.0), _annual(2023, 260.0)),
             "StockholdersEquity": _usd(_annual(2024, 500.0), _annual(2023, 400.0)),
-            "CommonStockSharesOutstanding": _shares(
-                _annual(2024, 1_000.0), _annual(2023, 1_010.0)
-            ),
+            "CommonStockSharesOutstanding": _shares(_annual(2024, 1_000.0), _annual(2023, 1_010.0)),
             "NetCashProvidedByUsedInOperatingActivities": _usd(
                 _annual(2024, 110.0), _annual(2023, 70.0)
             ),
@@ -192,9 +190,7 @@ def test_build_fundamentals_gross_profit_derived_when_absent() -> None:
         "facts": {
             "us-gaap": {
                 "Revenues": _usd(_annual(2024, 1000.0), _annual(2023, 900.0)),
-                "CostOfGoodsAndServicesSold": _usd(
-                    _annual(2024, 600.0), _annual(2023, 520.0)
-                ),
+                "CostOfGoodsAndServicesSold": _usd(_annual(2024, 600.0), _annual(2023, 520.0)),
                 "Assets": _usd(_annual(2024, 800.0), _annual(2023, 820.0)),
                 "NetIncomeLoss": _usd(_annual(2024, 120.0), _annual(2023, 80.0)),
                 "StockholdersEquity": _usd(_annual(2024, 500.0), _annual(2023, 400.0)),
@@ -314,9 +310,7 @@ def _full_handler_with_submissions(request: httpx.Request) -> httpx.Response:
     if "companyfacts/CIK0000320193.json" in url:
         return httpx.Response(200, json=_COMPANY_FACTS)
     if "submissions/CIK0000320193.json" in url:
-        return httpx.Response(
-            200, json={"sic": "3571", "sicDescription": "Electronic Computers"}
-        )
+        return httpx.Response(200, json={"sic": "3571", "sicDescription": "Electronic Computers"})
     return httpx.Response(404, json={"error": "not found"})
 
 

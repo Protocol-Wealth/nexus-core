@@ -41,7 +41,9 @@ def test_moment_objectives_are_the_supported_set() -> None:
 
 
 def test_weights_sum_to_one_and_are_bounded() -> None:
-    result = optimize_from_moments(_MU, _COV, _IDS, objective="max_quadratic_utility", risk_aversion=3.0)
+    result = optimize_from_moments(
+        _MU, _COV, _IDS, objective="max_quadratic_utility", risk_aversion=3.0
+    )
     assert set(result.weights) == set(_IDS)
     assert sum(result.weights.values()) == pytest.approx(1.0, abs=1e-4)
     assert all(-1e-9 <= w <= 1.0 + 1e-9 for w in result.weights.values())
@@ -104,9 +106,7 @@ def test_efficient_return_without_target_raises() -> None:
 
 def test_non_positive_risk_aversion_raises() -> None:
     with pytest.raises(ValueError, match="risk_aversion"):
-        optimize_from_moments(
-            _MU, _COV, _IDS, objective="max_quadratic_utility", risk_aversion=0.0
-        )
+        optimize_from_moments(_MU, _COV, _IDS, objective="max_quadratic_utility", risk_aversion=0.0)
 
 
 def test_efficient_risk_hits_target_volatility() -> None:

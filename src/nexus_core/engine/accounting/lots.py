@@ -88,9 +88,7 @@ def exact_decimal_sum(values: Sequence[Decimal]) -> Decimal:
         result,
         max_scale=_MAX_DERIVED_DECIMAL_SCALE,
         max_integer_digits=_MAX_DERIVED_DECIMAL_INTEGER_DIGITS,
-        max_coefficient_digits=(
-            _MAX_DERIVED_DECIMAL_SCALE + _MAX_DERIVED_DECIMAL_INTEGER_DIGITS
-        ),
+        max_coefficient_digits=(_MAX_DERIVED_DECIMAL_SCALE + _MAX_DERIVED_DECIMAL_INTEGER_DIGITS),
     )
     return result
 

@@ -243,7 +243,10 @@ def test_mixed_timestamp_formats_align_by_date() -> None:
     )
     r = TestClient(app).post(
         "/mcp/tools/optimize_allocation",
-        json={"assetClassIds": ["us_equity", "us_bonds", "gold", "bitcoin"], "riskProfile": "moderate"},
+        json={
+            "assetClassIds": ["us_equity", "us_bonds", "gold", "bitcoin"],
+            "riskProfile": "moderate",
+        },
     )
     assert r.status_code == 200, r.text
     body = r.json()

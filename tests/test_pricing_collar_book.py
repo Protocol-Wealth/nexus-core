@@ -85,9 +85,7 @@ def test_price_tier_exclusion_950_stock_in_250k_book() -> None:
 
 
 def test_per_position_cap_honored() -> None:
-    result = assemble_collar_book(
-        [_pos(symbol="ONLY", spot=10.0)], notional_target=1_000_000.0
-    )
+    result = assemble_collar_book([_pos(symbol="ONLY", spot=10.0)], notional_target=1_000_000.0)
     holding = result.positions[0]
     # Room for far more $1,000 contracts than the 12% cap allows.
     assert holding.notional <= 1_000_000.0 * 0.12 + 1e-9
@@ -142,9 +140,9 @@ def test_capital_weighted_floor_and_cap_from_strikes() -> None:
     by_symbol = {h.symbol: h for h in result.positions}
     assert by_symbol["AAA"].floor_pct == 15.0  # derived: (100 - 85) / 100
     assert by_symbol["BBB"].cap_pct == 20.0  # derived: (60 - 50) / 50
-    expected_floor = sum(
-        (h.floor_pct or 0.0) * h.notional for h in result.positions
-    ) / result.notional_deployed
+    expected_floor = (
+        sum((h.floor_pct or 0.0) * h.notional for h in result.positions) / result.notional_deployed
+    )
     assert result.capital_weighted_floor_pct is not None
     assert math.isclose(result.capital_weighted_floor_pct, round(expected_floor, 2))
     assert result.capital_weighted_cap_pct is not None
@@ -297,9 +295,7 @@ def test_n_positions_max_hard_stop() -> None:
     # With a low n_max and a target below the 95% pass-1 fill threshold, the
     # ranking walk must stop at exactly n_max held names.
     names = [_pos(symbol=f"N{i}") for i in range(5)]
-    result = assemble_collar_book(
-        names, n_positions_min=1, n_positions_target=1, n_positions_max=3
-    )
+    result = assemble_collar_book(names, n_positions_min=1, n_positions_target=1, n_positions_max=3)
     assert len(result.positions) == 3
 
 

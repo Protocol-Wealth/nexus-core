@@ -76,8 +76,7 @@ def build_benchmarks_router(*, coingecko: CoinGeckoMarketData) -> APIRouter:
         """List benchmark names + their compositions."""
         return {
             "benchmarks": [
-                {"name": name, "composition": comp}
-                for name, comp in BENCHMARK_COMPOSITIONS.items()
+                {"name": name, "composition": comp} for name, comp in BENCHMARK_COMPOSITIONS.items()
             ],
             "assets": list(ASSET_COIN_IDS),
             "disclaimer": _DISCLAIMER,

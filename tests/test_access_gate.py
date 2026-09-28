@@ -76,9 +76,12 @@ def test_access_gate_accepts_sha256_digests(monkeypatch) -> None:
         "NEXUS_API_KEYS",
         "sha256:" + hashlib.sha256(TEST_KEY.encode()).hexdigest(),
     )
-    assert TestClient(_app()).get(
-        "/api/regime", headers={"Authorization": f"Bearer {TEST_KEY}"}
-    ).status_code == 200
+    assert (
+        TestClient(_app())
+        .get("/api/regime", headers={"Authorization": f"Bearer {TEST_KEY}"})
+        .status_code
+        == 200
+    )
 
 
 def test_accounting_requires_audit_id_and_proves_restricted_auth(monkeypatch) -> None:
@@ -86,9 +89,7 @@ def test_accounting_requires_audit_id_and_proves_restricted_auth(monkeypatch) ->
     monkeypatch.setenv("NEXUS_API_KEYS", TEST_KEY)
     c = TestClient(_app())
 
-    missing = c.get(
-        "/api/accounting/tools", headers={"Authorization": f"Bearer {TEST_KEY}"}
-    )
+    missing = c.get("/api/accounting/tools", headers={"Authorization": f"Bearer {TEST_KEY}"})
     assert missing.status_code == 400
     assert missing.json()["error"] == "invalid_audit_id"
 

@@ -145,11 +145,20 @@ class IncomeExConversion:
                 "qualified_dividends cannot exceed ordinary_dividends "
                 "(qualified is a subset of ordinary)"
             )
-        for name in ("wages", "pension", "social_security_gross", "tax_exempt_interest",
-                     "ordinary_dividends", "above_the_line"):
+        for name in (
+            "wages",
+            "pension",
+            "social_security_gross",
+            "tax_exempt_interest",
+            "ordinary_dividends",
+            "above_the_line",
+        ):
             if getattr(self, name) < 0.0:
                 raise PlanningContractError(f"{name} must be non-negative")
-        if not (self.itemized_or_standard == "standard" or isinstance(self.itemized_or_standard, (int, float))):
+        if not (
+            self.itemized_or_standard == "standard"
+            or isinstance(self.itemized_or_standard, (int, float))
+        ):
             raise PlanningContractError('itemized_or_standard must be "standard" or a number')
         if isinstance(self.itemized_or_standard, (int, float)) and self.itemized_or_standard < 0.0:
             raise PlanningContractError("itemized deduction amount must be non-negative")
@@ -176,15 +185,16 @@ class AccountBalances:
 
     def __post_init__(self) -> None:
         for name in (
-            "trad_ira_aggregate", "nondeductible_basis", "roth_balance",
-            "taxable_liquidity", "employer_plan_aggregate",
+            "trad_ira_aggregate",
+            "nondeductible_basis",
+            "roth_balance",
+            "taxable_liquidity",
+            "employer_plan_aggregate",
         ):
             if getattr(self, name) < 0.0:
                 raise PlanningContractError(f"{name} must be non-negative")
         if self.nondeductible_basis > self.trad_ira_aggregate + 1e-6:
-            raise PlanningContractError(
-                "nondeductible_basis cannot exceed trad_ira_aggregate"
-            )
+            raise PlanningContractError("nondeductible_basis cannot exceed trad_ira_aggregate")
         if self.first_roth_year is not None and not 1998 <= self.first_roth_year <= 2100:
             raise PlanningContractError("first_roth_year must be a plausible year or null")
 
@@ -210,11 +220,15 @@ class ConversionIntent:
             if not 2000 <= y <= 2100:
                 raise PlanningContractError(f"intent.years contains an implausible year: {y}")
         if self.target_rule == "fill_to_rate" and self.target_rate is None:
-            raise PlanningContractError("target_rate is required when target_rule is 'fill_to_rate'")
+            raise PlanningContractError(
+                "target_rate is required when target_rule is 'fill_to_rate'"
+            )
         if self.target_rate is not None and not 0.0 < self.target_rate < 1.0:
             raise PlanningContractError("target_rate must be in (0, 1)")
         if self.target_rule == "fixed_amount" and self.fixed_amount is None:
-            raise PlanningContractError("fixed_amount is required when target_rule is 'fixed_amount'")
+            raise PlanningContractError(
+                "fixed_amount is required when target_rule is 'fixed_amount'"
+            )
         if self.fixed_amount is not None and self.fixed_amount <= 0.0:
             raise PlanningContractError("fixed_amount must be positive")
         # Reject silently-ignored cross-field params so the UI and engine never
@@ -261,11 +275,17 @@ class PlanningContract:
             )
         if not 2000 <= self.tax_year <= 2100:
             raise PlanningContractError("tax_year must be a plausible year")
-        if not (isinstance(self.state_code, str) and len(self.state_code) == 2 and self.state_code.isalpha()):
+        if not (
+            isinstance(self.state_code, str)
+            and len(self.state_code) == 2
+            and self.state_code.isalpha()
+        ):
             raise PlanningContractError("state_code must be a 2-letter US state/territory code")
         n = len(self.birth_years)
         if n not in (1, 2):
-            raise PlanningContractError("birth_years must hold one (self) or two (self, spouse) years")
+            raise PlanningContractError(
+                "birth_years must hold one (self) or two (self, spouse) years"
+            )
         for by in self.birth_years:
             if not 1900 <= by <= self.tax_year:
                 raise PlanningContractError(f"birth_years contains an implausible year: {by}")
@@ -306,8 +326,15 @@ class PlanningContract:
         _require_major_match(version)
 
         allowed = {
-            "case_id", "tax_year", "filing_status", "state_code", "birth_years",
-            "medicare_enrolled", "income_ex_conversion", "accounts", "intent",
+            "case_id",
+            "tax_year",
+            "filing_status",
+            "state_code",
+            "birth_years",
+            "medicare_enrolled",
+            "income_ex_conversion",
+            "accounts",
+            "intent",
             "contract_version",
         }
         unknown = set(payload) - allowed
@@ -341,9 +368,7 @@ _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 def _require_major_match(version: Any) -> None:
     if not isinstance(version, str) or not _SEMVER_RE.match(version):
-        raise PlanningContractError(
-            "contract_version must be a semver string 'MAJOR.MINOR.PATCH'"
-        )
+        raise PlanningContractError("contract_version must be a semver string 'MAJOR.MINOR.PATCH'")
     want = PLANNING_CONTRACT_VERSION.split(".", 1)[0]
     got = version.split(".", 1)[0]
     if got != want:
@@ -465,7 +490,9 @@ def _parse_intent(obj: dict[str, Any]) -> ConversionIntent:
     if not isinstance(rule, str):
         raise PlanningContractError("intent.target_rule must be a string")
     target_rate = obj.get("target_rate")
-    if target_rate is not None and (isinstance(target_rate, bool) or not isinstance(target_rate, (int, float))):
+    if target_rate is not None and (
+        isinstance(target_rate, bool) or not isinstance(target_rate, (int, float))
+    ):
         raise PlanningContractError("intent.target_rate must be a number or null")
     fixed = obj.get("fixed_amount")
     if fixed is not None and (isinstance(fixed, bool) or not isinstance(fixed, (int, float))):

@@ -94,9 +94,7 @@ class RateLimitMiddleware:
 
     def _sweep(self, cutoff: float) -> None:
         """Drop per-IP buckets whose most recent hit is older than ``cutoff``."""
-        stale = [
-            ip for ip, hits in self._hits.items() if not any(stamp > cutoff for stamp in hits)
-        ]
+        stale = [ip for ip, hits in self._hits.items() if not any(stamp > cutoff for stamp in hits)]
         for ip in stale:
             del self._hits[ip]
 

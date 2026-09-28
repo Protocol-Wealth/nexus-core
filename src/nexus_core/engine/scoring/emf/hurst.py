@@ -235,4 +235,3 @@ class HurstCheck:
             interpretation=interp,
             details=details,
         )
-

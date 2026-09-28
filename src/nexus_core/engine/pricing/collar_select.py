@@ -258,7 +258,9 @@ def evaluate_collar_position(
 
     put_strike = _snap_nearest(spot * (1.0 - put_otm_pct / 100.0), increment)
 
-    solved = _solve_call_strike_for_delta(spot, t_years, risk_free_rate, sigma, q, target_call_delta)
+    solved = _solve_call_strike_for_delta(
+        spot, t_years, risk_free_rate, sigma, q, target_call_delta
+    )
     call_floor = spot * (1.0 + call_min_otm_pct / 100.0)
     if solved is None or solved < call_floor:
         warnings.append(
@@ -267,20 +269,22 @@ def evaluate_collar_position(
         )
     call_strike = _snap_up(max(solved, call_floor) if solved is not None else call_floor, increment)
 
-    put_premium = bs_price(spot, put_strike, t_years, risk_free_rate, sigma, "put", dividend_yield=q)
+    put_premium = bs_price(
+        spot, put_strike, t_years, risk_free_rate, sigma, "put", dividend_yield=q
+    )
     call_premium = bs_price(
         spot, call_strike, t_years, risk_free_rate, sigma, "call", dividend_yield=q
     )
-    put_delta = greeks(spot, put_strike, t_years, risk_free_rate, sigma, "put", dividend_yield=q).delta
+    put_delta = greeks(
+        spot, put_strike, t_years, risk_free_rate, sigma, "put", dividend_yield=q
+    ).delta
     call_delta = greeks(
         spot, call_strike, t_years, risk_free_rate, sigma, "call", dividend_yield=q
     ).delta
 
     net_credit = call_premium - put_premium
     if net_credit < 0.0:
-        warnings.append(
-            "Net debit — the protective put costs more than the call premium received."
-        )
+        warnings.append("Net debit — the protective put costs more than the call premium received.")
 
     static_return_pct = net_credit / spot * 100.0
     annualized_return_pct = static_return_pct * (_DAYS_PER_YEAR / days)

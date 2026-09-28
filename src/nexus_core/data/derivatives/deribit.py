@@ -345,4 +345,3 @@ class DeribitClient:
 
 
 __all__ = ["DISCLAIMER", "DeribitClient", "OptionInstrument", "OptionTicker"]
-

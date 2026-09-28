@@ -55,7 +55,9 @@ def _handler(request: httpx.Request) -> httpx.Response:
 
 
 def _slipstream(handler=_handler) -> SlipstreamClient:  # type: ignore[no-untyped-def]
-    tatum = TatumClient(api_key="k", http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+    tatum = TatumClient(
+        api_key="k", http_client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
     return SlipstreamClient(tatum)
 
 

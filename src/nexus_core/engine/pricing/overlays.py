@@ -77,13 +77,17 @@ def _theoretical_put_premium(
     return bs_price(spot, strike, _t_years(expiry_days), rate, sigma, "put")
 
 
-def _call_delta(spot: float, strike: float, expiry_days: int, rate: float, sigma: float) -> float | None:
+def _call_delta(
+    spot: float, strike: float, expiry_days: int, rate: float, sigma: float
+) -> float | None:
     if spot <= 0.0 or strike <= 0.0 or expiry_days <= 0 or sigma <= 0.0:
         return None
     return greeks(spot, strike, _t_years(expiry_days), rate, sigma, "call").delta
 
 
-def _put_delta(spot: float, strike: float, expiry_days: int, rate: float, sigma: float) -> float | None:
+def _put_delta(
+    spot: float, strike: float, expiry_days: int, rate: float, sigma: float
+) -> float | None:
     if spot <= 0.0 or strike <= 0.0 or expiry_days <= 0 or sigma <= 0.0:
         return None
     return greeks(spot, strike, _t_years(expiry_days), rate, sigma, "put").delta
@@ -531,4 +535,3 @@ __all__ = [
     "collar_overlay",
     "covered_call_overlay",
 ]
-

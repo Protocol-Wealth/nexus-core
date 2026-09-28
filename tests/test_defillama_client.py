@@ -24,12 +24,32 @@ def test_get_protocols_sorts_and_filters() -> None:
         return httpx.Response(
             200,
             json=[
-                {"name": "Aave", "symbol": "AAVE", "tvl": 12_000_000_000, "category": "Lending",
-                 "chains": ["Ethereum", "Base"], "slug": "aave", "change_1d": 0.5, "change_7d": -1.2},
-                {"name": "Zero", "symbol": "ZRO", "tvl": None, "category": "Dexes",
-                 "chains": ["Ethereum"], "slug": "zero"},
-                {"name": "Lido", "symbol": "LDO", "tvl": 30_000_000_000, "category": "Liquid Staking",
-                 "chains": ["Ethereum"], "slug": "lido"},
+                {
+                    "name": "Aave",
+                    "symbol": "AAVE",
+                    "tvl": 12_000_000_000,
+                    "category": "Lending",
+                    "chains": ["Ethereum", "Base"],
+                    "slug": "aave",
+                    "change_1d": 0.5,
+                    "change_7d": -1.2,
+                },
+                {
+                    "name": "Zero",
+                    "symbol": "ZRO",
+                    "tvl": None,
+                    "category": "Dexes",
+                    "chains": ["Ethereum"],
+                    "slug": "zero",
+                },
+                {
+                    "name": "Lido",
+                    "symbol": "LDO",
+                    "tvl": 30_000_000_000,
+                    "category": "Liquid Staking",
+                    "chains": ["Ethereum"],
+                    "slug": "lido",
+                },
             ],
         )
 
@@ -44,7 +64,10 @@ def test_get_protocols_respects_limit() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            json=[{"name": f"P{i}", "symbol": "", "tvl": float(i), "slug": f"p{i}"} for i in range(1, 10)],
+            json=[
+                {"name": f"P{i}", "symbol": "", "tvl": float(i), "slug": f"p{i}"}
+                for i in range(1, 10)
+            ],
         )
 
     protocols = DefiLlamaClient(http_client=_client(handler)).get_protocols(limit=3)
@@ -57,8 +80,14 @@ def test_get_protocol_detail() -> None:
         assert request.url.path == "/protocol/aave"
         return httpx.Response(
             200,
-            json={"name": "Aave", "symbol": "AAVE", "tvl": 12_000_000_000.0,
-                  "chains": ["Ethereum"], "category": "Lending", "url": "https://aave.com"},
+            json={
+                "name": "Aave",
+                "symbol": "AAVE",
+                "tvl": 12_000_000_000.0,
+                "chains": ["Ethereum"],
+                "category": "Lending",
+                "url": "https://aave.com",
+            },
         )
 
     detail = DefiLlamaClient(http_client=_client(handler)).get_protocol("aave")

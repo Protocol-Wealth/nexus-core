@@ -76,9 +76,7 @@ def test_score_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_score_without_fundamentals(monkeypatch: pytest.MonkeyPatch) -> None:
     """ETF/crypto path: no SEC fundamentals → CROIC/F-Score insufficient_data, still 200."""
-    monkeypatch.setattr(
-        "nexus_core.app.scoring.build_fundamentals", lambda ticker, **kwargs: None
-    )
+    monkeypatch.setattr("nexus_core.app.scoring.build_fundamentals", lambda ticker, **kwargs: None)
     r = _client().get("/api/score/SPY")
     assert r.status_code == 200
     body = r.json()

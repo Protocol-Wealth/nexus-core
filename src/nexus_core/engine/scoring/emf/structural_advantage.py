@@ -308,12 +308,7 @@ def _structural_score(sector_type: str, fundamentals: dict[str, Any]) -> int:
             score += 1
         if rev_growth is not None and rev_growth > 0.05:
             score += 1
-        if (
-            market_cap is not None
-            and market_cap > 30_000_000_000
-            and rd is not None
-            and rd > 0.03
-        ):
+        if market_cap is not None and market_cap > 30_000_000_000 and rd is not None and rd > 0.03:
             score += 1
     elif sector_type == "energy":
         if rev_growth is not None and rev_growth > 0:

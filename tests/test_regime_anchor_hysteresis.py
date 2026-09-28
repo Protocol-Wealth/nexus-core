@@ -21,7 +21,9 @@ from nexus_core.engine.regime.signals import RegimeSignals
 BAND = 0.02  # RegimeThresholds.gold_spx_hysteresis_band
 
 
-def _signals(ratio: float, *, vix: float = 14.0, spreads: float = 95.0, real: float = 1.8) -> RegimeSignals:
+def _signals(
+    ratio: float, *, vix: float = 14.0, spreads: float = 95.0, real: float = 1.8
+) -> RegimeSignals:
     return RegimeSignals(
         gold_spx_ratio=ratio,
         gold_spx_200wma=0.40,

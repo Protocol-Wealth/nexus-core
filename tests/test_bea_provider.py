@@ -66,7 +66,9 @@ def test_pce_year_over_year_change() -> None:
 
 def test_bea_api_error_returns_none() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"BEAAPI": {"Results": {"Error": {"ErrorDetail": "bad table"}}}})
+        return httpx.Response(
+            200, json={"BEAAPI": {"Results": {"Error": {"ErrorDetail": "bad table"}}}}
+        )
 
     assert BeaMacroData(api_key="k", http_client=_client(handler)).get_gdp_growth() is None
 

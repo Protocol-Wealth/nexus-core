@@ -41,7 +41,9 @@ logger = logging.getLogger(__name__)
 
 def _error(status_code: int, message: str) -> PlainTextResponse:
     """Plain-text error — the body is surfaced verbatim in the consumer UI."""
-    return PlainTextResponse(message, status_code=status_code, headers={"Cache-Control": "no-store"})
+    return PlainTextResponse(
+        message, status_code=status_code, headers={"Cache-Control": "no-store"}
+    )
 
 
 def build_accounting_router(*, price_historian: PriceHistorian | None = None) -> APIRouter:

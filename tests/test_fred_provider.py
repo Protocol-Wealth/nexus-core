@@ -78,7 +78,9 @@ def test_get_series_retries_on_429_then_succeeds(monkeypatch: pytest.MonkeyPatch
     def handler(request: httpx.Request) -> httpx.Response:
         calls["n"] += 1
         if calls["n"] == 1:
-            return httpx.Response(429, json={"error_code": 429, "error_message": "Too Many Requests"})
+            return httpx.Response(
+                429, json={"error_code": 429, "error_message": "Too Many Requests"}
+            )
         return httpx.Response(200, json={"observations": [{"date": "2026-05-28", "value": "2.72"}]})
 
     provider = FredMacroData(api_key="k", http_client=_client(handler))

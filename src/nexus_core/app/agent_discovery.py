@@ -139,7 +139,11 @@ def render_api_catalog() -> dict[str, Any]:
             {
                 "anchor": f"{_BASE}/",
                 "service-desc": [
-                    {"href": f"{_BASE}/openapi.json", "type": "application/json", "title": "OpenAPI specification"},
+                    {
+                        "href": f"{_BASE}/openapi.json",
+                        "type": "application/json",
+                        "title": "OpenAPI specification",
+                    },
                     {
                         "href": f"{_BASE}/.well-known/mcp/server-card.json",
                         "type": "application/json",
@@ -148,10 +152,18 @@ def render_api_catalog() -> dict[str, Any]:
                 ],
                 "service-doc": [
                     {"href": f"{_BASE}/mcp-guide", "type": "text/html", "title": "MCP setup guide"},
-                    {"href": f"{_BASE}/llms.txt", "type": "text/markdown", "title": "Agent site map (llms.txt)"},
+                    {
+                        "href": f"{_BASE}/llms.txt",
+                        "type": "text/markdown",
+                        "title": "Agent site map (llms.txt)",
+                    },
                 ],
                 "status": [
-                    {"href": f"{_BASE}/health", "type": "application/json", "title": "Health check"},
+                    {
+                        "href": f"{_BASE}/health",
+                        "type": "application/json",
+                        "title": "Health check",
+                    },
                 ],
             }
         ]

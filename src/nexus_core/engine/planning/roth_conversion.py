@@ -140,9 +140,7 @@ def roth_conversion(
             tax_table.table_version if tax_table is not None else "caller-provided-unversioned"
         ),
         "taxTableSource": (tax_table.source if tax_table is not None else "caller_provided"),
-        "taxTableLastVerified": (
-            tax_table.last_verified if tax_table is not None else None
-        ),
+        "taxTableLastVerified": (tax_table.last_verified if tax_table is not None else None),
     }
 
 

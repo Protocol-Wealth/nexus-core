@@ -37,7 +37,9 @@ class _FakeMarket:
 
 def _client() -> TestClient:
     app = FastAPI()
-    app.include_router(build_planning_router(market=_FakeMarket(), regime_engine=_FakeRegimeEngine()))
+    app.include_router(
+        build_planning_router(market=_FakeMarket(), regime_engine=_FakeRegimeEngine())
+    )
     return TestClient(app)
 
 
@@ -54,7 +56,9 @@ def test_universe_has_lambda_and_returns_on_every_asset() -> None:
 
 
 def test_cma_specific_ids_shape() -> None:
-    r = _post({"contractVersion": "0.1.0", "assetClassIds": ["us_equity", "us_bonds"], "asOf": None})
+    r = _post(
+        {"contractVersion": "0.1.0", "assetClassIds": ["us_equity", "us_bonds"], "asOf": None}
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["contractVersion"] == CONTRACT_VERSION

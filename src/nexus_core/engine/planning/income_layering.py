@@ -745,9 +745,7 @@ def income_layering(
         year = base_year + offset if base_year is not None else offset
         state_projection_year = year if base_year is not None else tax_year + offset
         survivor_projection_year = state_projection_year
-        survivor_active = (
-            survivor_year is not None and survivor_projection_year >= survivor_year
-        )
+        survivor_active = survivor_year is not None and survivor_projection_year >= survivor_year
         year_filing_status = survivor_filing_status if survivor_active else filing_status
         spending = spending_target * (1.0 + spending_inflation_rate) ** offset
         earned = earned_income * (1.0 + wage_growth_rate) ** offset if age < retirement_age else 0.0
