@@ -105,12 +105,12 @@ _EQUITY_SYMBOL_RE = re.compile(r"^[A-Za-z0-9.\-]{1,10}$")
 # instead of prompting per invocation. ``openWorldHint`` = touches a live
 # upstream; the pure-compute tools set it False.
 _RO_OPEN = (
-    ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True)
+    ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=True)
     if ToolAnnotations is not None
     else None
 )
 _RO_CLOSED = (
-    ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False)
+    ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=False)
     if ToolAnnotations is not None
     else None
 )

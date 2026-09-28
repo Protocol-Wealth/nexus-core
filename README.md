@@ -19,12 +19,6 @@ Adopters are responsible for adding their own PII controls, access control, inpu
 
 Provided as-is under Apache-2.0. Educational use only — nothing here is investment advice.
 
-Current live status and planned work are published at
-[pwos.app/build](https://pwos.app/build); shipped changes at
-[pwos.app/changelog](https://pwos.app/changelog). Open work is tracked in
-[GitHub Issues](https://github.com/Protocol-Wealth/nexus-core/issues), which is
-authoritative — query it rather than a snapshot.
-
 As of the 2026-07-16 ET closeout, PR #264 is merged as commit `e5f4d84` and
 deployed on Cloud Run revision `nexus-core-00070-zhx`. The hosted production
 posture remains a public

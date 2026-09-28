@@ -5,7 +5,7 @@
 > Issues, which is authoritative and should be re-queried; live and planned
 > design work is at [pwos.app/build](https://pwos.app/build) and what shipped at
 > [pwos.app/changelog](https://pwos.app/changelog); checks are recorded in
-> [VALIDATION.md](VALIDATION.md). Read [`CLAUDE.md`](CLAUDE.md) for operating
+> [VALIDATION.md](VALIDATION.md). Read [`AGENTS.md`](AGENTS.md) for operating
 > rules. Where the material below differs, those current sources win.
 
 ## Current pointer (2026-07-17 ET)

@@ -333,7 +333,7 @@ def test_accounting_tools_register_only_in_full_profile(monkeypatch: pytest.Monk
     for tool_id in _ACCOUNTING_TOOL_IDS:
         assert full_tools[tool_id].parameters["required"] == ["body"]
         assert full_tools[tool_id].parameters["properties"]["body"]["type"] == "object"
-        assert full_tools[tool_id].annotations.readOnlyHint is True
+        assert full_tools[tool_id].annotations.read_only_hint is True
 
     monkeypatch.setenv("NEXUS_PUBLIC_MCP_PROFILE", "demo")
     monkeypatch.setattr(
@@ -808,7 +808,8 @@ def test_tools_are_annotated_read_only() -> None:
     tools = asyncio.run(server.list_tools())  # type: ignore[attr-defined]
     annotated = [t for t in tools if t.annotations is not None]
     assert annotated, "expected ToolAnnotations on tools"
-    assert all(t.annotations.readOnlyHint for t in annotated)
+    assert all(t.annotations.read_only_hint for t in annotated)
+    assert all(t.annotations.model_dump(by_alias=True)["readOnlyHint"] for t in annotated)
 
 
 def test_describe_reports_symbology_and_contract() -> None:
