@@ -412,7 +412,7 @@ runs without any of them, with reduced data coverage.
 | `MCP_OAUTH_SIGNING_KEY` | Enables stateless transparent OAuth for remote MCP clients; omit locally to keep `/mcp` open |
 | `NEXUS_PUBLIC_MCP_PROFILE` | `full` (default) or `demo`; `demo` keeps hosted native `/mcp` limited to closed-world demo tools |
 | `NEXUS_ACCESS_MODE` | `public` (default) or `restricted`; restricted mode requires a Nexus API key on `/api/*` and planning JSON gateway paths |
-| `NEXUS_API_KEYS` | Comma-separated raw service keys or `sha256:<hex>` digests accepted by restricted mode |
+| `NEXUS_API_KEYS` | Comma-separated random raw service keys (at least 32 characters) or `sha256:<64 hex digits>` digests accepted by restricted mode; invalid or empty restricted-mode configuration fails at startup |
 | `NEXUS_RATE_LIMIT_PER_MIN` | Per-IP request budget (default `60`) |
 | `NEXUS_CORS_ORIGINS` | Comma-separated CORS allow-list (default `*`) |
 

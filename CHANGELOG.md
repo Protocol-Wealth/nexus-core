@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- **2026-09-28:** Restricted REST/JSON mode now rejects short raw API keys,
+  malformed SHA-256 digests, and an empty key list during app construction.
+
 ### Changed
 
 - **2026-09-21:** Repository agent instructions now live in `AGENTS.md`, and
