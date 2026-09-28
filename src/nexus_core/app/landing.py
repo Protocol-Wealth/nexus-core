@@ -138,7 +138,7 @@ curl -X POST https://nexusmcp.site/api/planning/tools/glide_path \\
 """
 
 _MCP_LINE = (
-    '<li><code>POST /mcp</code> — Model Context Protocol endpoint '
+    "<li><code>POST /mcp</code> — Model Context Protocol endpoint "
     '(connect any MCP-compatible AI client — <a href="/mcp-guide" '
     'style="color:#c7d2fe">setup guide</a>)</li>'
 )
@@ -173,8 +173,7 @@ _MD_MCP_LINKS = (
 )
 
 _MD_MCP_ENDPOINT = (
-    "- `POST /mcp`: Model Context Protocol endpoint "
-    "(connect any MCP-compatible AI client)\n"
+    "- `POST /mcp`: Model Context Protocol endpoint (connect any MCP-compatible AI client)\n"
 )
 
 

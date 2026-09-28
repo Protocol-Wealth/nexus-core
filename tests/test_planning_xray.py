@@ -53,9 +53,13 @@ def test_regime_sensitivity_is_conditioned_on_the_regime() -> None:
         "lambdas": [0.4, 0.4],  # portfolio λ = 0.40, above the alert threshold
         "account_balances": {"taxable": 1_000_000},
     }
-    assert _by_id(portfolio_xray(**kw, regime="crisis"), "regime_sensitivity")["severity"] == "alert"
+    assert (
+        _by_id(portfolio_xray(**kw, regime="crisis"), "regime_sensitivity")["severity"] == "alert"
+    )
     # Same high-λ portfolio in a benign regime is only informational.
-    assert _by_id(portfolio_xray(**kw, regime="expansion"), "regime_sensitivity")["severity"] == "info"
+    assert (
+        _by_id(portfolio_xray(**kw, regime="expansion"), "regime_sensitivity")["severity"] == "info"
+    )
 
 
 def test_tax_location_concentration_warns() -> None:
@@ -77,13 +81,27 @@ def test_tax_location_concentration_warns() -> None:
     ("kwargs", "match"),
     [
         (
-            {"asset_ids": ["a"], "weights": [1.0], "means": [0.05], "vols": [0.1],
-             "lambdas": [0.2, 0.3], "account_balances": {}, "regime": "crisis"},
+            {
+                "asset_ids": ["a"],
+                "weights": [1.0],
+                "means": [0.05],
+                "vols": [0.1],
+                "lambdas": [0.2, 0.3],
+                "account_balances": {},
+                "regime": "crisis",
+            },
             "must align",
         ),
         (
-            {"asset_ids": [], "weights": [], "means": [], "vols": [], "lambdas": [],
-             "account_balances": {}, "regime": "crisis"},
+            {
+                "asset_ids": [],
+                "weights": [],
+                "means": [],
+                "vols": [],
+                "lambdas": [],
+                "account_balances": {},
+                "regime": "crisis",
+            },
             "at least one asset",
         ),
     ],

@@ -95,10 +95,19 @@ def test_filing_status_mapping() -> None:
         (lambda p: p.update(unexpected="x"), "unknown contract field"),
         (lambda p: p.update(tax_year=1999), "tax_year"),
         (lambda p: p.__setitem__("birth_years", [1962, 1963, 1964]), "birth_years"),
-        (lambda p: (p.update(filing_status="single"), p.__setitem__("birth_years", [1962, 1963])), "single"),
+        (
+            lambda p: (
+                p.update(filing_status="single"),
+                p.__setitem__("birth_years", [1962, 1963]),
+            ),
+            "single",
+        ),
         (lambda p: p.update(medicare_enrolled=3), "medicare_enrolled"),
         (lambda p: p["accounts"].update(nondeductible_basis=2_000_000), "nondeductible_basis"),
-        (lambda p: p["income_ex_conversion"].update(qualified_dividends=99_000), "qualified_dividends"),
+        (
+            lambda p: p["income_ex_conversion"].update(qualified_dividends=99_000),
+            "qualified_dividends",
+        ),
         (lambda p: p["intent"].update(target_rule="fill_to_rate", target_rate=None), "target_rate"),
         (lambda p: p["intent"].__setitem__("years", [2027, 2028]), "tax_year"),
         # unknown nested keys are rejected (PII-smuggling hole + schema drift)
@@ -109,7 +118,13 @@ def test_filing_status_mapping() -> None:
         (lambda p: p["accounts"].update(trad_ira_aggregate=float("nan")), "finite"),
         (lambda p: p["income_ex_conversion"].update(wages=float("inf")), "finite"),
         # tax_year must be the earliest year
-        (lambda p: (p.__setitem__("tax_year", 2027), p["intent"].__setitem__("years", [2026, 2027])), "FIRST"),
+        (
+            lambda p: (
+                p.__setitem__("tax_year", 2027),
+                p["intent"].__setitem__("years", [2026, 2027]),
+            ),
+            "FIRST",
+        ),
         # mfj requires two birth years
         (lambda p: p.__setitem__("birth_years", [1962]), "mfj"),
         # conflicting target params are rejected, not silently ignored
@@ -190,7 +205,17 @@ def test_schema_required_is_a_subset_of_properties() -> None:
 
 # --- PII-free by construction ---------------------------------------------
 
-_FORBIDDEN = ("name", "firstname", "lastname", "dob", "dateofbirth", "ssn", "email", "phone", "address")
+_FORBIDDEN = (
+    "name",
+    "firstname",
+    "lastname",
+    "dob",
+    "dateofbirth",
+    "ssn",
+    "email",
+    "phone",
+    "address",
+)
 
 
 def _all_field_names() -> set[str]:

@@ -36,9 +36,7 @@ class _FakeMarket:
         self, symbol: str, *, days: int = 365, interval: str = "1d"
     ) -> list[PriceBar]:
         return [
-            PriceBar(
-                timestamp="2026-01-01", open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0
-            )
+            PriceBar(timestamp="2026-01-01", open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0)
         ]
 
 

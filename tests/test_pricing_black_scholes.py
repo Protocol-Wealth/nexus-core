@@ -274,4 +274,3 @@ def test_implied_vol_zero_time_returns_none() -> None:
 def test_implied_vol_non_positive_spot_returns_none() -> None:
     assert implied_vol(10.0, 0.0, 100.0, _T, _R, "call") is None
     assert implied_vol(10.0, 100.0, 0.0, _T, _R, "call") is None
-

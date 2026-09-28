@@ -78,9 +78,7 @@ _WEALTH_ROADMAP_REQUIRED_BY_SCOPE: dict[str, frozenset[str]] = {
 
 #: Section kinds with a canonical position. Unknown kinds are still accepted (they
 #: sort last) so a caller can attach a bespoke section without a contract change.
-KNOWN_SECTION_KINDS: frozenset[str] = frozenset(
-    [*SECTION_ORDER, *WEALTH_ROADMAP_SECTION_ORDER]
-)
+KNOWN_SECTION_KINDS: frozenset[str] = frozenset([*SECTION_ORDER, *WEALTH_ROADMAP_SECTION_ORDER])
 
 #: Default human title per kind; a section may override with its own ``title``.
 _DEFAULT_TITLES: dict[str, str] = {
@@ -333,7 +331,9 @@ def _normalize_priority_actions(section: dict[str, Any] | None) -> list[dict[str
             raise ValueError(f"priority_actions.data.actions[{index}] must be an object or string")
         text = raw.get("text")
         if not isinstance(text, str) or not text:
-            raise ValueError(f"priority_actions.data.actions[{index}].text must be a non-empty string")
+            raise ValueError(
+                f"priority_actions.data.actions[{index}].text must be a non-empty string"
+            )
         if "curated" in raw:
             raise ValueError(
                 f"priority_actions.data.actions[{index}].curated is private workflow state"

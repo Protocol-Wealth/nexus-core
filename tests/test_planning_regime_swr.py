@@ -23,9 +23,7 @@ def test_expansion_lifts_the_rate() -> None:
 
 
 def test_first_year_withdrawal_when_balance_given() -> None:
-    out = regime_conditioned_swr(
-        regime="crisis", base_swr=0.04, portfolio_balance=1_000_000.0
-    )
+    out = regime_conditioned_swr(regime="crisis", base_swr=0.04, portfolio_balance=1_000_000.0)
     assert out["firstYearWithdrawal"] == 30_000.0  # 1,000,000 * 0.03
 
 

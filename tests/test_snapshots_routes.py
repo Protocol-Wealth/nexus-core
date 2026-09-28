@@ -78,7 +78,10 @@ def test_history_forward_fills_missing_asset(monkeypatch: pytest.MonkeyPatch) ->
     async def fake_read(limit: int = 365) -> list[dict[str, Any]]:
         return [
             {"date": "2026-01-01", "prices": {"BTC": 40000, "ETH": 2000, "SOL": 100, "USDC": 1.0}},
-            {"date": "2026-01-02", "prices": {"BTC": 44000, "SOL": 100, "USDC": 1.0}},  # ETH missing
+            {
+                "date": "2026-01-02",
+                "prices": {"BTC": 44000, "SOL": 100, "USDC": 1.0},
+            },  # ETH missing
         ]
 
     monkeypatch.setattr(snap_mod, "read_benchmark_snapshots", fake_read)

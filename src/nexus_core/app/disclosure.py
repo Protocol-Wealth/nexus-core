@@ -109,10 +109,8 @@ def render_disclosure_card() -> dict[str, Any]:
         ],
         "regulatoryBasis": [
             "SEC Rule 204-2 (supervisory records of AI-assisted workflows)",
-            "Reg S-P (data minimization + security controls with third-party "
-            "technology providers)",
-            "SEC Marketing Rule 206(4)-1 (standardized disclaimers on analytical "
-            "output)",
+            "Reg S-P (data minimization + security controls with third-party technology providers)",
+            "SEC Marketing Rule 206(4)-1 (standardized disclaimers on analytical output)",
         ],
         # Schema pins rule to the literal "SEC 204-2"; supervisory records of
         # AI-assisted workflows are kept at the firm level. This anonymous public

@@ -163,11 +163,15 @@ def classify_inherited_ira_beneficiary(
     if beneficiary_type == "minor_child_of_decedent":
         notes.append("Model the post-majority switch separately before client-facing use.")
     if beneficiary_type == "non_designated_beneficiary":
-        notes.append("Non-designated beneficiaries can follow different payout rules; v1 does not rank them.")
+        notes.append(
+            "Non-designated beneficiaries can follow different payout rules; v1 does not rank them."
+        )
     elif not edb:
         notes.append("Modeled as subject to the 10-year distribution comparison.")
     else:
-        notes.append("Eligible designated beneficiary carve-out identified; 10-year comparison is optional context.")
+        notes.append(
+            "Eligible designated beneficiary carve-out identified; 10-year comparison is optional context."
+        )
 
     label = beneficiary_type.replace("_", " ")
     return {
@@ -245,7 +249,9 @@ def _simulate_strategy(
             growth = beginning * annual_return
             available = max(0.0, beginning + growth)
             remaining_years = years_remaining - year_index + 1
-            required_floor = min(available, _amortizing_distribution(beginning, annual_return, remaining_years))
+            required_floor = min(
+                available, _amortizing_distribution(beginning, annual_return, remaining_years)
+            )
             if strategy == "equal_annual":
                 distribution = required_floor
             else:

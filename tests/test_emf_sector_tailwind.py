@@ -183,4 +183,3 @@ def test_garbage_returns_degrade_to_none() -> None:
     result = SectorTailwindCheck()(ctx)
     assert result.passed is None
     assert result.signal == "insufficient_data"
-

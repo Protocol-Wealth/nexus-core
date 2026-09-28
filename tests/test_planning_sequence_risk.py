@@ -104,9 +104,7 @@ def test_deterministic_repeat() -> None:
 
 def test_rejects_empty_returns() -> None:
     with pytest.raises(ValueError, match="non-empty"):
-        sequence_of_returns_stress(
-            initial_balance=100.0, net_spend_by_year=[], annual_returns=[]
-        )
+        sequence_of_returns_stress(initial_balance=100.0, net_spend_by_year=[], annual_returns=[])
 
 
 def test_rejects_length_mismatch() -> None:

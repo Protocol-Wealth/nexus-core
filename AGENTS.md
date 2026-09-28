@@ -46,10 +46,11 @@ pip install -e ".[dev,serve]"   # what CI installs; deployed surface + dev tooli
 
 pytest                          # full suite; hermetic, no network/keys needed
 ruff check src/ tests/          # lint (line-length 100, target py312)
+ruff format --check src/ tests/ # formatting (pinned Ruff version)
 mypy --strict src/nexus_core/   # types
 ```
 
-All three (pytest, ruff, `mypy --strict`) must pass before opening a PR — CI
+All four (pytest, Ruff lint and format, `mypy --strict`) must pass before opening a PR — CI
 gates on them (`.github/workflows/ci.yml`), alongside the SPDX-header and
 license-compliance checks.
 

@@ -230,9 +230,7 @@ def _holding_from_slot(
     """Build the public holding row, including executable-fill metrics."""
     executable = _executable_net_credit(slot.position)
     executable_period = (
-        (executable + slot.position.dividend_income_window)
-        * _SHARES_PER_CONTRACT
-        * slot.contracts
+        (executable + slot.position.dividend_income_window) * _SHARES_PER_CONTRACT * slot.contracts
         if executable is not None
         else None
     )
@@ -241,11 +239,7 @@ def _holding_from_slot(
         if executable_period is not None
         else None
     )
-    fill_haircut = (
-        slot.position.net_credit - executable
-        if executable is not None
-        else None
-    )
+    fill_haircut = slot.position.net_credit - executable if executable is not None else None
     return CollarBookHolding(
         symbol=slot.position.symbol,
         sector=slot.position.sector,
@@ -443,9 +437,7 @@ def assemble_collar_book(
         sector = slot.position.sector
         room_pos = max_pos_notional - slot.notional
         room_sec = (
-            math.inf
-            if sector is None
-            else max_sector_notional - sector_notional.get(sector, 0.0)
+            math.inf if sector is None else max_sector_notional - sector_notional.get(sector, 0.0)
         )
         add = int(min(residual, room_pos, room_sec) // slot.capital)
         if add >= 1:
@@ -456,10 +448,7 @@ def assemble_collar_book(
             deployed += added
             residual -= added
 
-    holdings = [
-        _holding_from_slot(slot, notional_target, days_per_year)
-        for slot in held
-    ]
+    holdings = [_holding_from_slot(slot, notional_target, days_per_year) for slot in held]
 
     annual_income = sum(slot.annual_income * slot.contracts for slot in held)
     executable_annual_income_raw = 0.0
@@ -507,9 +496,7 @@ def assemble_collar_book(
         annual_income=round(annual_income, 2),
         portfolio_yield_pct=round(annual_income / deployed * 100.0, 2) if deployed else 0.0,
         executable_annual_income=(
-            round(executable_annual_income_raw, 2)
-            if all_have_executable_pricing
-            else None
+            round(executable_annual_income_raw, 2) if all_have_executable_pricing else None
         ),
         executable_portfolio_yield_pct=(
             round(executable_annual_income_raw / deployed * 100.0, 2)

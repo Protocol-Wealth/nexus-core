@@ -147,9 +147,15 @@ def _roadmap_sections() -> list[dict[str, Any]]:
     return [
         {"kind": "income", "findings": ["Income layers cover the first gap."]},
         {"kind": "snapshot", "findings": ["Net worth snapshot is complete."]},
-        {"kind": "historical_blend", "data": {"months": 120, "startMonth": "2016-01", "endMonth": "2025-12"}},
+        {
+            "kind": "historical_blend",
+            "data": {"months": 120, "startMonth": "2016-01", "endMonth": "2025-12"},
+        },
         {"kind": "trajectory", "findings": ["Success probability is within tolerance."]},
-        {"kind": "goals", "findings": ["Education goal needs an additional monthly savings amount."]},
+        {
+            "kind": "goals",
+            "findings": ["Education goal needs an additional monthly savings amount."],
+        },
         {"kind": "guardrails", "findings": ["Guardrail lower band would freeze spending."]},
     ]
 

@@ -80,11 +80,22 @@ def test_no_loss_when_already_above_range() -> None:
 
 def test_situation_validation_and_from_dict() -> None:
     with pytest.raises(TableError, match="household_size"):
-        AcaSituation(marketplace_enrolled=True, household_size=0, benchmark_premium_annual=1.0,
-                     fpl_base=15_000.0, fpl_per_person=5_000.0)
+        AcaSituation(
+            marketplace_enrolled=True,
+            household_size=0,
+            benchmark_premium_annual=1.0,
+            fpl_base=15_000.0,
+            fpl_per_person=5_000.0,
+        )
     with pytest.raises(TableError, match="cliff_mode"):
-        AcaSituation(marketplace_enrolled=True, household_size=1, benchmark_premium_annual=1.0,
-                     fpl_base=15_000.0, fpl_per_person=5_000.0, cliff_mode="nope")
+        AcaSituation(
+            marketplace_enrolled=True,
+            household_size=1,
+            benchmark_premium_annual=1.0,
+            fpl_base=15_000.0,
+            fpl_per_person=5_000.0,
+            cliff_mode="nope",
+        )
     s = AcaSituation.from_dict(
         {"marketplace_enrolled": True, "household_size": 3, "benchmark_premium_annual": 20000}
     )
@@ -92,15 +103,26 @@ def test_situation_validation_and_from_dict() -> None:
 
 
 def test_reference_situation_state_fpl() -> None:
-    assert reference_aca_situation(household_size=1, benchmark_premium_annual=12000).fpl() == 15_060.0
-    assert reference_aca_situation(household_size=1, benchmark_premium_annual=12000, state_code="AK").fpl() == 18_810.0
+    assert (
+        reference_aca_situation(household_size=1, benchmark_premium_annual=12000).fpl() == 15_060.0
+    )
+    assert (
+        reference_aca_situation(
+            household_size=1, benchmark_premium_annual=12000, state_code="AK"
+        ).fpl()
+        == 18_810.0
+    )
 
 
 # --- composite integration: injected ACA quantifies the note; absent = generic ---
 
 _CONTRACT = {
-    "case_id": "aca-1", "tax_year": 2026, "filing_status": "mfj", "state_code": "PA",
-    "birth_years": [1962, 1963], "medicare_enrolled": 0,  # both < 65 in 2026
+    "case_id": "aca-1",
+    "tax_year": 2026,
+    "filing_status": "mfj",
+    "state_code": "PA",
+    "birth_years": [1962, 1963],
+    "medicare_enrolled": 0,  # both < 65 in 2026
     "income_ex_conversion": {"pension": 40_000, "taxable_interest": 5_000},
     "accounts": {"trad_ira_aggregate": 1_400_000, "taxable_liquidity": 250_000},
     "intent": {"target_rule": "fill_to_rate", "target_rate": 0.24, "years": [2026]},
@@ -134,7 +156,9 @@ def test_absent_aca_leaves_generic_flag_and_null_struct() -> None:
 
 
 def test_injected_aca_populates_structured_field() -> None:
-    y = _analyze(reference_aca_situation(household_size=2, benchmark_premium_annual=18_000.0)).years[0]
+    y = _analyze(
+        reference_aca_situation(household_size=2, benchmark_premium_annual=18_000.0)
+    ).years[0]
     assert y.aca is not None  # contract v1.1.0 structured AcaInteraction
     assert y.aca.cliff_mode == "hard_400fpl"
     assert y.aca.magi_pct_fpl_after >= y.aca.magi_pct_fpl_before

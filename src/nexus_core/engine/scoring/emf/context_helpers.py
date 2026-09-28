@@ -55,12 +55,41 @@ from .sector_tailwind import sector_etf_for
 MODEL_TICKERS: dict[str, tuple[str, ...]] = {
     "L1": ("CEG", "VST", "NRG", "NUKZ", "GRID", "IBIT", "GLD", "ASML"),
     "L2": (
-        "NEE", "DUK", "SO", "EQIX", "DLR", "AWK", "WMB", "LIN", "ETN", "PWR",
-        "HUBB", "AGX", "POWL", "GEV", "FERG", "EME", "LRCX", "AMAT", "AVGO", "CCJ",
+        "NEE",
+        "DUK",
+        "SO",
+        "EQIX",
+        "DLR",
+        "AWK",
+        "WMB",
+        "LIN",
+        "ETN",
+        "PWR",
+        "HUBB",
+        "AGX",
+        "POWL",
+        "GEV",
+        "FERG",
+        "EME",
+        "LRCX",
+        "AMAT",
+        "AVGO",
+        "CCJ",
     ),
     "L3": (
-        "SMH", "NVDA", "AMD", "TSM", "VRT", "VICR", "MU", "CRDO", "MRVL",
-        "MPWR", "STRL", "IESC", "FIX",
+        "SMH",
+        "NVDA",
+        "AMD",
+        "TSM",
+        "VRT",
+        "VICR",
+        "MU",
+        "CRDO",
+        "MRVL",
+        "MPWR",
+        "STRL",
+        "IESC",
+        "FIX",
     ),
     "L4": ("CRWD", "PANW", "PLTR", "LMT", "RTX", "SNOW", "ZS"),
     "L5": ("MSFT", "CRM", "NOW", "ADBE", "DDOG", "BE"),
@@ -204,7 +233,9 @@ _KEYWORD_RULES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
 )
 
 
-def classify_layer(sector_or_ticker: str | None, *, fundamentals: Any = None) -> LayerClassification:
+def classify_layer(
+    sector_or_ticker: str | None, *, fundamentals: Any = None
+) -> LayerClassification:
     """Classify into an EMF durability layer, reporting the deciding rule.
 
     The single implementation of the layer priority order (see :func:`layer_for`,
@@ -244,9 +275,7 @@ def classify_layer(sector_or_ticker: str | None, *, fundamentals: Any = None) ->
             return LayerClassification(layer, "sector_industry_keyword", f"sector:{sector_l}")
         for keyword in keywords:
             if keyword in industry_l:
-                return LayerClassification(
-                    layer, "sector_industry_keyword", f"industry:{keyword}"
-                )
+                return LayerClassification(layer, "sector_industry_keyword", f"industry:{keyword}")
 
     # 3. Matched a sector but no specific keyword — use the sector default.
     if sector_l:

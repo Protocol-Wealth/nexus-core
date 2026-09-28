@@ -270,4 +270,3 @@ def test_jsonrpc_error_envelope_degrades_gracefully() -> None:
     assert client.list_option_instruments("ETH") == []
     assert client.get_option_ticker("ETH-27JUN25-4000-C") is None
     assert client.get_index_price("ETH") is None
-

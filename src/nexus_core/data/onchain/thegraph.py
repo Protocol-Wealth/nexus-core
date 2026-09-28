@@ -139,9 +139,7 @@ def _to_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _parse_position(
-    pos: Any, chain: str, *, fallback_token_id: str = ""
-) -> RawV3Position | None:
+def _parse_position(pos: Any, chain: str, *, fallback_token_id: str = "") -> RawV3Position | None:
     """Parse one subgraph ``position`` node (+ its embedded pool) to a typed row.
 
     Shared by the single-position and by-owner queries. ``None`` when the node

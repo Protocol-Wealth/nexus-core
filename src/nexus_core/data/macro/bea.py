@@ -96,7 +96,9 @@ class BeaMacroData:
         return data if isinstance(data, list) else None
 
     @staticmethod
-    def _latest_two_by_line(rows: list[dict[str, Any]], line: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    def _latest_two_by_line(
+        rows: list[dict[str, Any]], line: str
+    ) -> tuple[dict[str, Any], dict[str, Any]] | None:
         series = [r for r in rows if isinstance(r, dict) and r.get("LineNumber") == line]
         if len(series) < 2:
             return None

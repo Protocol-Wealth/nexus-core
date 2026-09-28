@@ -128,10 +128,13 @@ def test_compute_missing_inputs_returns_none() -> None:
     assert compute_croic(None, None) is None
     assert compute_croic({}, {}) is None
     # Non-positive equity -> None
-    assert compute_croic(
-        {"operatingCashFlow": 100.0},
-        {"totalStockholdersEquity": 0.0, "totalDebt": 50.0},
-    ) is None
+    assert (
+        compute_croic(
+            {"operatingCashFlow": 100.0},
+            {"totalStockholdersEquity": 0.0, "totalDebt": 50.0},
+        )
+        is None
+    )
 
 
 def test_sector_adjustment_lowers_threshold() -> None:

@@ -792,13 +792,9 @@ def build_options_router(
         provider = _require_equity_options()
         expirations = provider.list_expirations(sym)
         if expirations is None:
-            raise HTTPException(
-                status_code=502, detail=f"No expiration data available for '{sym}'"
-            )
+            raise HTTPException(status_code=502, detail=f"No expiration data available for '{sym}'")
         if not any(expirations.values()):
-            raise HTTPException(
-                status_code=404, detail=f"No listed option expirations for '{sym}'"
-            )
+            raise HTTPException(status_code=404, detail=f"No listed option expirations for '{sym}'")
         response.headers["Cache-Control"] = f"public, max-age={_EQUITY_EXPIRATIONS_TTL}"
         return {"symbol": sym, "expirations": expirations, "disclaimer": _DISCLAIMER}
 

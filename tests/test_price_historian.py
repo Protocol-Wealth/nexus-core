@@ -56,9 +56,7 @@ def test_override_wins_over_sources() -> None:
 
 
 def test_primary_prices_and_order_is_preserved() -> None:
-    historian = PriceHistorian(
-        [_FakeSource("primary", {("a", 1): 10.0, ("b", 1): 20.0})]
-    )
+    historian = PriceHistorian([_FakeSource("primary", {("a", 1): 10.0, ("b", 1): 20.0})])
     results = historian.price([PriceQuery("b", 1), PriceQuery("a", 1)])
     assert [r.coin for r in results] == ["b", "a"]
     assert results[0].price_usd == Decimal("20.0")

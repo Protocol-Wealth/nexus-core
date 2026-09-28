@@ -127,11 +127,11 @@ class DeBankClient:
         """Token holdings for ``address``, dust-filtered, sorted by USD value desc."""
         if not is_evm_address(address):
             return []
-        payload = self._get(
-            "/user/all_token_list", {"id": address.lower(), "is_all": "false"}
-        )
+        payload = self._get("/user/all_token_list", {"id": address.lower(), "is_all": "false"})
         if isinstance(payload, dict):
-            raw: list[Any] = [t for group in payload.values() if isinstance(group, list) for t in group]
+            raw: list[Any] = [
+                t for group in payload.values() if isinstance(group, list) for t in group
+            ]
         elif isinstance(payload, list):
             raw = payload
         else:

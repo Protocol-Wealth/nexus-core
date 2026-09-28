@@ -207,4 +207,3 @@ __all__ = [
     "compute_period_return",
     "sector_etf_for",
 ]
-

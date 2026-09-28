@@ -117,9 +117,7 @@ class TestCashSecuredPut:
 class TestCollar:
     def test_max_loss_bounded_by_put_floor(self) -> None:
         # spot 100, put 95, call 110, 30 days, put debit 3, call credit 2.
-        ill = collar_overlay(
-            100.0, 95.0, 110.0, 30, put_premium=3.0, call_premium=2.0, shares=100
-        )
+        ill = collar_overlay(100.0, 95.0, 110.0, 30, put_premium=3.0, call_premium=2.0, shares=100)
         # net per share = call - put = 2 - 3 = -1 (debit)
         assert ill.net_premium == pytest.approx(-1.0 * 100)
         # max loss = (spot - put_strike - net) * shares = (5 - (-1)) * 100 = 600
@@ -131,18 +129,14 @@ class TestCollar:
         assert ill.disclaimer == DISCLAIMER
 
     def test_breakeven_debit_raises(self) -> None:
-        ill = collar_overlay(
-            100.0, 95.0, 110.0, 30, put_premium=3.0, call_premium=2.0, shares=100
-        )
+        ill = collar_overlay(100.0, 95.0, 110.0, 30, put_premium=3.0, call_premium=2.0, shares=100)
         # net debit of 1/share raises breakeven above spot.
         assert ill.breakeven == pytest.approx(101.0)
         assert ill.downside_protection_pct == pytest.approx(5.0)  # (100-95)/100
         assert ill.otm_pct == pytest.approx(10.0)  # (110-100)/100
 
     def test_zero_cost_collar_credit(self) -> None:
-        ill = collar_overlay(
-            100.0, 95.0, 110.0, 30, put_premium=2.0, call_premium=2.5, shares=100
-        )
+        ill = collar_overlay(100.0, 95.0, 110.0, 30, put_premium=2.0, call_premium=2.5, shares=100)
         # net credit 0.5/share lowers breakeven below spot.
         assert ill.net_premium == pytest.approx(50.0)
         assert ill.breakeven == pytest.approx(99.5)
@@ -175,4 +169,3 @@ class TestEducationalFraming:
             assert ill.disclaimer == DISCLAIMER
             assert ill.disclaimer == TERSE
             assert "not investment, tax, legal, or financial advice" in ill.disclaimer.lower()
-

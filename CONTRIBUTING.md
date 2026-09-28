@@ -72,6 +72,9 @@ pytest
 # Run linter
 ruff check src/ tests/
 
+# Check formatting
+ruff format --check src/ tests/
+
 # Type check
 mypy --strict src/nexus_core/
 ```

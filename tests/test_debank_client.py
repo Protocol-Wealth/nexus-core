@@ -63,8 +63,22 @@ def test_get_tokens_flat_with_dust_filter() -> None:
         return httpx.Response(
             200,
             json=[
-                {"id": "eth:1", "chain": "eth", "symbol": "ETH", "name": "Ether", "amount": 2.0, "price": 3000.0},
-                {"id": "eth:2", "chain": "eth", "symbol": "DUST", "name": "Dust", "amount": 1.0, "price": 0.0001},
+                {
+                    "id": "eth:1",
+                    "chain": "eth",
+                    "symbol": "ETH",
+                    "name": "Ether",
+                    "amount": 2.0,
+                    "price": 3000.0,
+                },
+                {
+                    "id": "eth:2",
+                    "chain": "eth",
+                    "symbol": "DUST",
+                    "name": "Dust",
+                    "amount": 1.0,
+                    "price": 0.0001,
+                },
             ],
         )
 
@@ -83,7 +97,9 @@ def test_get_tokens_dict_shape() -> None:
             },
         )
 
-    syms = {t.symbol for t in DeBankClient(api_key="k", http_client=_client(handler)).get_tokens(_ADDR)}
+    syms = {
+        t.symbol for t in DeBankClient(api_key="k", http_client=_client(handler)).get_tokens(_ADDR)
+    }
     assert syms == {"ETH", "USDC"}
 
 
@@ -91,9 +107,15 @@ def test_wallet_snapshot_combines_balance_and_tokens() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if "total_balance" in str(request.url):
             return httpx.Response(
-                200, json={"total_usd_value": 9000.0, "chain_list": [{"id": "eth", "usd_value": 9000.0}]}
+                200,
+                json={
+                    "total_usd_value": 9000.0,
+                    "chain_list": [{"id": "eth", "usd_value": 9000.0}],
+                },
             )
-        return httpx.Response(200, json=[{"symbol": "ETH", "chain": "eth", "amount": 3.0, "price": 3000.0}])
+        return httpx.Response(
+            200, json=[{"symbol": "ETH", "chain": "eth", "amount": 3.0, "price": 3000.0}]
+        )
 
     snap = DeBankClient(api_key="k", http_client=_client(handler)).wallet_snapshot(_ADDR)
     assert snap is not None

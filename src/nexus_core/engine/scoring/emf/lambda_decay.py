@@ -101,11 +101,25 @@ DEFAULT_LAYER_THRESHOLD = 0.20
 
 # Known-ticker base-decay overrides + SaaS vulnerability cohorts (ported verbatim).
 TICKER_DECAY_OVERRIDES: dict[str, float] = {
-    "CEG": 0.02, "VST": 0.03, "NRG": 0.03, "IBIT": 0.01, "GLD": 0.01,
-    "NEE": 0.04, "DUK": 0.04, "EQIX": 0.05, "AWK": 0.03,
-    "NVDA": 0.12, "AMD": 0.15, "TSM": 0.10, "ASML": 0.08,
-    "CRWD": 0.10, "PANW": 0.10, "PLTR": 0.08,
-    "CRM": 0.22, "NOW": 0.20, "ASAN": 0.30,
+    "CEG": 0.02,
+    "VST": 0.03,
+    "NRG": 0.03,
+    "IBIT": 0.01,
+    "GLD": 0.01,
+    "NEE": 0.04,
+    "DUK": 0.04,
+    "EQIX": 0.05,
+    "AWK": 0.03,
+    "NVDA": 0.12,
+    "AMD": 0.15,
+    "TSM": 0.10,
+    "ASML": 0.08,
+    "CRWD": 0.10,
+    "PANW": 0.10,
+    "PLTR": 0.08,
+    "CRM": 0.22,
+    "NOW": 0.20,
+    "ASAN": 0.30,
 }
 ASAN_TRINITY_TICKERS = ("ASAN", "MNDY", "SMAR", "ZM", "DOCU", "BOX", "FROG")
 LOW_VULN_SAAS = ("SNOW", "MDB", "DDOG", "CRWD", "PANW", "ZS", "NET", "CFLT")
@@ -199,9 +213,7 @@ class LambdaCheck:
         threshold = LAYER_DECAY_THRESHOLDS.get(layer or "", self.default_threshold)
 
         # 1. Precomputed λ.
-        value = _coerce_float(
-            fundamentals.get("lambda", fundamentals.get("decay_constant"))
-        )
+        value = _coerce_float(fundamentals.get("lambda", fundamentals.get("decay_constant")))
 
         computed = False
         if value is None:
@@ -209,9 +221,7 @@ class LambdaCheck:
             sector = fundamentals.get("sector")
             industry = fundamentals.get("industry")
             if sector or industry or ctx.ticker:
-                value = compute_lambda(
-                    sector=sector, industry=industry, ticker=ctx.ticker
-                )
+                value = compute_lambda(sector=sector, industry=industry, ticker=ctx.ticker)
                 computed = True
 
         if value is None:

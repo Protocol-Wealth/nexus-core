@@ -48,9 +48,7 @@ def test_public_install_guidance_uses_runtime_version_placeholder() -> None:
 
 
 def test_publish_workflow_is_tag_bound_and_tokenless() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "publish-pypi.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (ROOT / ".github" / "workflows" / "publish-pypi.yml").read_text(encoding="utf-8")
 
     assert "release:\n    types: [published]" in workflow
     assert "workflow_dispatch:" in workflow

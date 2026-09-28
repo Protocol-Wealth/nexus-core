@@ -98,10 +98,16 @@ def test_provider_envelope_raw_values() -> None:
     # Values may arrive wrapped as {"raw": n} (provider envelope).
     fundamentals: dict[str, object] = {
         "income_statements": [
-            {"netIncome": {"raw": 120.0}, "revenue": {"raw": 1100.0},
-             "grossProfit": {"raw": 660.0}},
-            {"netIncome": {"raw": 100.0}, "revenue": {"raw": 1000.0},
-             "grossProfit": {"raw": 500.0}},
+            {
+                "netIncome": {"raw": 120.0},
+                "revenue": {"raw": 1100.0},
+                "grossProfit": {"raw": 660.0},
+            },
+            {
+                "netIncome": {"raw": 100.0},
+                "revenue": {"raw": 1000.0},
+                "grossProfit": {"raw": 500.0},
+            },
         ],
         "balance_sheets": PERFECT_FUNDAMENTALS["balance_sheets"],
         "cash_flows": PERFECT_FUNDAMENTALS["cash_flows"],

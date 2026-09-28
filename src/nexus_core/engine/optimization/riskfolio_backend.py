@@ -76,9 +76,7 @@ def risk_parity(
     rp = _require_riskfolio()
     port = rp.Portfolio(returns=returns)
     port.assets_stats(method_mu=method_mu, method_cov=method_cov)
-    weights_df = port.rp_optimization(
-        model="Classic", rm=risk_measure, rf=rf, b=None, hist=True
-    )
+    weights_df = port.rp_optimization(model="Classic", rm=risk_measure, rf=rf, b=None, hist=True)
     weights = {ticker: float(w) for ticker, w in weights_df.iloc[:, 0].items()}
     return RiskfolioResult(
         weights=weights,

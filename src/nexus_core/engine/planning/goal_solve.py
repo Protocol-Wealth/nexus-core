@@ -77,9 +77,7 @@ def _clamp01(value: float) -> float:
     return value
 
 
-def _build_curve(
-    samples: dict[float, float], *, direction: Direction
-) -> tuple[SolvePoint, ...]:
+def _build_curve(samples: dict[float, float], *, direction: Direction) -> tuple[SolvePoint, ...]:
     """Sort the evaluated samples by x and enforce monotonicity in ``direction``.
 
     With a pinned simulation seed the raw samples are already (near-)monotone; the
@@ -167,13 +165,25 @@ def solve_monotone(
         # The ceiling is at hi (the maximum variable -> the maximum success).
         if s_lo >= target:  # already met at the floor — nothing to raise
             return _result(
-                feasible=True, solved_value=lo, achieved=s_lo, target=target,
-                direction=direction, iterations=iters, best=None, samples=samples,
+                feasible=True,
+                solved_value=lo,
+                achieved=s_lo,
+                target=target,
+                direction=direction,
+                iterations=iters,
+                best=None,
+                samples=samples,
             )
         if s_hi < target:  # even the ceiling can't reach the target
             return _result(
-                feasible=False, solved_value=hi, achieved=s_hi, target=target,
-                direction=direction, iterations=iters, best=s_hi, samples=samples,
+                feasible=False,
+                solved_value=hi,
+                achieved=s_hi,
+                target=target,
+                direction=direction,
+                iterations=iters,
+                best=s_hi,
+                samples=samples,
             )
         lo_x, hi_x = lo, hi  # invariant: ev(lo_x) < target <= ev(hi_x)
         while hi_x - lo_x > tol and iters < iterations:
@@ -184,20 +194,38 @@ def solve_monotone(
             else:
                 lo_x = mid
         return _result(
-            feasible=True, solved_value=hi_x, achieved=ev(hi_x), target=target,
-            direction=direction, iterations=iters, best=None, samples=samples,
+            feasible=True,
+            solved_value=hi_x,
+            achieved=ev(hi_x),
+            target=target,
+            direction=direction,
+            iterations=iters,
+            best=None,
+            samples=samples,
         )
 
     # decreasing: the ceiling is at lo (the minimum variable -> the maximum success).
     if s_hi >= target:  # even the ceiling of the variable still meets the target
         return _result(
-            feasible=True, solved_value=hi, achieved=s_hi, target=target,
-            direction=direction, iterations=iters, best=None, samples=samples,
+            feasible=True,
+            solved_value=hi,
+            achieved=s_hi,
+            target=target,
+            direction=direction,
+            iterations=iters,
+            best=None,
+            samples=samples,
         )
     if s_lo < target:  # even the minimum variable can't reach the target
         return _result(
-            feasible=False, solved_value=lo, achieved=s_lo, target=target,
-            direction=direction, iterations=iters, best=s_lo, samples=samples,
+            feasible=False,
+            solved_value=lo,
+            achieved=s_lo,
+            target=target,
+            direction=direction,
+            iterations=iters,
+            best=s_lo,
+            samples=samples,
         )
     lo_x, hi_x = lo, hi  # invariant: ev(lo_x) >= target > ev(hi_x)
     while hi_x - lo_x > tol and iters < iterations:
@@ -208,8 +236,14 @@ def solve_monotone(
         else:
             hi_x = mid
     return _result(
-        feasible=True, solved_value=lo_x, achieved=ev(lo_x), target=target,
-        direction=direction, iterations=iters, best=None, samples=samples,
+        feasible=True,
+        solved_value=lo_x,
+        achieved=ev(lo_x),
+        target=target,
+        direction=direction,
+        iterations=iters,
+        best=None,
+        samples=samples,
     )
 
 
@@ -248,8 +282,13 @@ def solve_integer_monotone(
     if lo == hi:
         feasible = s_lo >= target
         return _result(
-            feasible=feasible, solved_value=lo, achieved=s_lo, target=target,
-            direction=direction, iterations=0, best=None if feasible else s_lo,
+            feasible=feasible,
+            solved_value=lo,
+            achieved=s_lo,
+            target=target,
+            direction=direction,
+            iterations=0,
+            best=None if feasible else s_lo,
             samples=samples,
         )
     s_hi = ev(hi)
@@ -258,13 +297,25 @@ def solve_integer_monotone(
     if direction == "increasing":
         if s_lo >= target:
             return _result(
-                feasible=True, solved_value=lo, achieved=s_lo, target=target,
-                direction=direction, iterations=iters, best=None, samples=samples,
+                feasible=True,
+                solved_value=lo,
+                achieved=s_lo,
+                target=target,
+                direction=direction,
+                iterations=iters,
+                best=None,
+                samples=samples,
             )
         if s_hi < target:
             return _result(
-                feasible=False, solved_value=hi, achieved=s_hi, target=target,
-                direction=direction, iterations=iters, best=s_hi, samples=samples,
+                feasible=False,
+                solved_value=hi,
+                achieved=s_hi,
+                target=target,
+                direction=direction,
+                iterations=iters,
+                best=s_hi,
+                samples=samples,
             )
         lo_i, hi_i = lo, hi  # invariant: ev(lo_i) < target <= ev(hi_i)
         while hi_i - lo_i > 1 and iters < iterations:
@@ -275,20 +326,38 @@ def solve_integer_monotone(
             else:
                 lo_i = mid
         return _result(
-            feasible=True, solved_value=hi_i, achieved=ev(hi_i), target=target,
-            direction=direction, iterations=iters, best=None, samples=samples,
+            feasible=True,
+            solved_value=hi_i,
+            achieved=ev(hi_i),
+            target=target,
+            direction=direction,
+            iterations=iters,
+            best=None,
+            samples=samples,
         )
 
     # decreasing
     if s_hi >= target:
         return _result(
-            feasible=True, solved_value=hi, achieved=s_hi, target=target,
-            direction=direction, iterations=iters, best=None, samples=samples,
+            feasible=True,
+            solved_value=hi,
+            achieved=s_hi,
+            target=target,
+            direction=direction,
+            iterations=iters,
+            best=None,
+            samples=samples,
         )
     if s_lo < target:
         return _result(
-            feasible=False, solved_value=lo, achieved=s_lo, target=target,
-            direction=direction, iterations=iters, best=s_lo, samples=samples,
+            feasible=False,
+            solved_value=lo,
+            achieved=s_lo,
+            target=target,
+            direction=direction,
+            iterations=iters,
+            best=s_lo,
+            samples=samples,
         )
     lo_i, hi_i = lo, hi  # invariant: ev(lo_i) >= target > ev(hi_i)
     while hi_i - lo_i > 1 and iters < iterations:
@@ -299,8 +368,14 @@ def solve_integer_monotone(
         else:
             hi_i = mid
     return _result(
-        feasible=True, solved_value=lo_i, achieved=ev(lo_i), target=target,
-        direction=direction, iterations=iters, best=None, samples=samples,
+        feasible=True,
+        solved_value=lo_i,
+        achieved=ev(lo_i),
+        target=target,
+        direction=direction,
+        iterations=iters,
+        best=None,
+        samples=samples,
     )
 
 

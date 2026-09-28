@@ -82,9 +82,7 @@ def composition_series(
     bases = {a: asset_closes[a][0] for a in assets}
     series: list[float] = []
     for t in range(length):
-        value = sum(
-            weights[a] * (asset_closes[a][t] / bases[a]) for a in assets if bases[a] > 0
-        )
+        value = sum(weights[a] * (asset_closes[a][t] / bases[a]) for a in assets if bases[a] > 0)
         series.append(100.0 * value)
     return series
 

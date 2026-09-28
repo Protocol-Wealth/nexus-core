@@ -1452,9 +1452,10 @@ def test_project_cash_flow_ltc_shock_adds_explicit_expense_rows() -> None:
     shock_rows = [row for row in body["years"] if row.get("ltcShockExpense", 0) > 0]
     assert [row["age"] for row in shock_rows] == [80, 81, 82]
     assert shock_rows[0]["baseExpenses"] < shock_rows[0]["expenses"]
-    assert body["aggregate"]["lifetimeLtcShockCost"] == body["assumptions"]["ltcShock"][
-        "nominalTotalCost"
-    ]
+    assert (
+        body["aggregate"]["lifetimeLtcShockCost"]
+        == body["assumptions"]["ltcShock"]["nominalTotalCost"]
+    )
     assert body["assumptions"]["ltcShock"]["costInflation"] == 0.04
 
 

@@ -67,7 +67,10 @@ class SecurityHeadersMiddleware:
                     if name.lower() == b"content-type":
                         content_type = value.lower()
                         break
-                if content_type.startswith(b"text/html") and b"content-security-policy" not in present:
+                if (
+                    content_type.startswith(b"text/html")
+                    and b"content-security-policy" not in present
+                ):
                     headers.append((b"content-security-policy", _HTML_CSP))
                 message = {**message, "headers": headers}
             await send(message)

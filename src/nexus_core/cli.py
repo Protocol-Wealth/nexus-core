@@ -30,9 +30,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="nexus-core",
         description="Open regime-adaptive financial analysis engine.",
     )
-    parser.add_argument(
-        "--version", action="version", version=f"nexus-core {__version__}"
-    )
+    parser.add_argument("--version", action="version", version=f"nexus-core {__version__}")
     subparsers = parser.add_subparsers(dest="command")
 
     serve_parser = subparsers.add_parser(
@@ -48,9 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Bind port (Cloud Run supplies PORT)",
     )
 
-    subparsers.add_parser(
-        "mcp", help="Run the MCP server over stdio (for Claude Desktop)"
-    )
+    subparsers.add_parser("mcp", help="Run the MCP server over stdio (for Claude Desktop)")
 
     subparsers.add_parser(
         "snapshot", help="Run the daily benchmark-price snapshot job (Cloud Run Job)"

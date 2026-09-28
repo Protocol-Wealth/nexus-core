@@ -58,7 +58,10 @@ def test_conversion_lifts_preferential_income_into_15pct() -> None:
     bt = reference_bracket_table(2026)
     # Sits in the 0% LTCG band before, pushed up by ordinary conversion income.
     income = IncomeExConversion(
-        pension=20_000, ordinary_dividends=10_000, qualified_dividends=10_000, long_term_gains=10_000
+        pension=20_000,
+        ordinary_dividends=10_000,
+        qualified_dividends=10_000,
+        long_term_gains=10_000,
     )
     base = federal_picture(income, "single", bt, n_seniors=0, conversion_taxable=0.0)
     bumped = federal_picture(income, "single", bt, n_seniors=0, conversion_taxable=60_000.0)
@@ -90,7 +93,10 @@ def test_full_deduction_case_unchanged() -> None:
     # regression in the common case.
     bt = reference_bracket_table(2026)
     income = IncomeExConversion(
-        pension=120_000, ordinary_dividends=10_000, qualified_dividends=10_000, long_term_gains=30_000
+        pension=120_000,
+        ordinary_dividends=10_000,
+        qualified_dividends=10_000,
+        long_term_gains=30_000,
     )
     p = federal_picture(income, "single", bt, n_seniors=0, conversion_taxable=0.0)
     # ordinary taxable = 120000 - 15000 std = 105000; 40k preferential stacks on

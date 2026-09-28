@@ -137,9 +137,7 @@ def test_disclosure_card_matches_published_schema() -> None:
 def test_disclosure_card_generated_at_is_iso8601() -> None:
     card = render_disclosure_card()
     # The format checker is a no-op without optional deps, so pin it explicitly.
-    assert re.fullmatch(
-        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", card["generatedAt"]
-    )
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", card["generatedAt"])
 
 
 def test_disclosure_card_states_honest_posture() -> None:
@@ -182,9 +180,7 @@ def test_disclosure_card_has_no_unverified_markers() -> None:
         assert "[VERIFY]" not in citation, citation
 
 
-def test_disclosure_card_served_at_well_known(
-    stub_market: object, stub_fred: object
-) -> None:
+def test_disclosure_card_served_at_well_known(stub_market: object, stub_fred: object) -> None:
     app = create_app(market=stub_market, macro=stub_fred, enable_mcp=False)  # type: ignore[arg-type]
     with TestClient(app) as client:
         response = client.get("/.well-known/ai-disclosure.json")

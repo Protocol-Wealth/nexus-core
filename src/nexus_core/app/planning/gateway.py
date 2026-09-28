@@ -47,12 +47,12 @@ logger = logging.getLogger(__name__)
 
 def _error(status_code: int, message: str) -> PlainTextResponse:
     """Plain-text error — the body is surfaced verbatim in the consumer UI."""
-    return PlainTextResponse(message, status_code=status_code, headers={"Cache-Control": "no-store"})
+    return PlainTextResponse(
+        message, status_code=status_code, headers={"Cache-Control": "no-store"}
+    )
 
 
-def build_planning_router(
-    *, market: MarketDataProvider, regime_engine: RegimeEngine
-) -> APIRouter:
+def build_planning_router(*, market: MarketDataProvider, regime_engine: RegimeEngine) -> APIRouter:
     """Build the planning tool-gateway router with its data dependencies injected."""
     router = APIRouter(tags=["planning"])
     handlers = build_tool_handlers(market=market, regime_engine=regime_engine)
@@ -104,7 +104,9 @@ def build_planning_router(
             return _error(400, exc.public_message)
         except PlanningInfeasibleError as exc:
             return _error(422, exc.public_message)
-        except Exception:  # defensive: never log or return traceback details from the public gateway
+        except (
+            Exception
+        ):  # defensive: never log or return traceback details from the public gateway
             logger.warning("planning tool %r failed with an internal engine error", tool_id)
             return _error(500, "internal planning engine error")
 

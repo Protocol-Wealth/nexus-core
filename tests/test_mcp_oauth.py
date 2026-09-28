@@ -66,7 +66,10 @@ def test_expired_token_rejected() -> None:
 
 
 def test_protected_resource_metadata() -> None:
-    for path in ("/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"):
+    for path in (
+        "/.well-known/oauth-protected-resource",
+        "/.well-known/oauth-protected-resource/mcp",
+    ):
         body = _client().get(path).json()
         assert body["resource"].endswith("/mcp")
         assert body["authorization_servers"]
@@ -94,7 +97,9 @@ def test_register_requires_valid_redirect_uris() -> None:
 
 def test_authorize_rejects_unknown_redirect_uri() -> None:
     c = _client()
-    client_id = c.post("/register", json={"redirect_uris": ["https://claude.ai/cb"]}).json()["client_id"]
+    client_id = c.post("/register", json={"redirect_uris": ["https://claude.ai/cb"]}).json()[
+        "client_id"
+    ]
     _, challenge = _pkce()
     r = c.get(
         "/authorize",
@@ -151,7 +156,9 @@ def test_full_authorization_code_flow() -> None:
     assert body["expires_in"] > 0
     assert access_token_audience(_KEY.encode(), body["access_token"]) == "http://testserver/mcp"
     # Refresh works.
-    refreshed = c.post("/token", data={"grant_type": "refresh_token", "refresh_token": body["refresh_token"]})
+    refreshed = c.post(
+        "/token", data={"grant_type": "refresh_token", "refresh_token": body["refresh_token"]}
+    )
     assert refreshed.status_code == 200
     assert refreshed.json()["access_token"]
 

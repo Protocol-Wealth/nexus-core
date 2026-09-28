@@ -216,9 +216,7 @@ def test_collar_screen_ranked_by_income_and_counted() -> None:
     assert body["count"] == 2
     rows = body["screen"]
     assert [row["symbol"] for row in rows] == ["HIVOL", "LOWVOL"]
-    assert (
-        rows[0]["total_annualized_income_pct"] >= rows[1]["total_annualized_income_pct"]
-    )
+    assert rows[0]["total_annualized_income_pct"] >= rows[1]["total_annualized_income_pct"]
 
 
 def test_collar_screen_unknown_symbol_404_when_spot_missing() -> None:
@@ -335,9 +333,7 @@ def test_collar_book_params_respected_and_exclusions_reported() -> None:
     )
     assert r.status_code == 200
     book = r.json()["book"]
-    assert book["excluded_price_tier"] == [
-        {"symbol": "PRICY", "capital_per_contract": 95_000.0}
-    ]
+    assert book["excluded_price_tier"] == [{"symbol": "PRICY", "capital_per_contract": 95_000.0}]
     assert book["excluded_degenerate"] == [
         {"symbol": "BADDTE", "reason": "dte must be >= 1 (got 0)"}
     ]
@@ -694,7 +690,9 @@ def _mboum_payload(with_rows: bool = True) -> dict[str, object]:
             }
         ]
     return {
-        "meta": {"expirations": {"monthly": ["2026-08-21", "2026-07-17"], "weekly": ["2026-08-07"]}},
+        "meta": {
+            "expirations": {"monthly": ["2026-08-21", "2026-07-17"], "weekly": ["2026-08-07"]}
+        },
         "body": {"Call": calls, "Put": puts},
     }
 
@@ -714,9 +712,7 @@ def _mboum_options_client(
 def _equity_client(mboum: MboumOptionsClient) -> TestClient:
     app = FastAPI()
     app.include_router(
-        build_options_router(
-            market=_FakeMarket(), deribit=_FakeDeribit(), mboum_options=mboum
-        )
+        build_options_router(market=_FakeMarket(), deribit=_FakeDeribit(), mboum_options=mboum)
     )
     return TestClient(app)
 
@@ -752,15 +748,9 @@ def test_equity_chain_route_parses_display_strings() -> None:
 def test_equity_chain_requires_expiration_and_valid_inputs() -> None:
     client = _equity_client(_mboum_options_client(_mboum_payload()))
     assert client.get("/api/options/equity/KO/chain").status_code == 422
-    assert (
-        client.get("/api/options/equity/KO/chain?expiration=soonish").status_code == 422
-    )
-    assert (
-        client.get("/api/options/equity/KO/chain?expiration=2026-13-45").status_code == 422
-    )
-    assert (
-        client.get("/api/options/equity/K$O/chain?expiration=2026-08-07").status_code == 404
-    )
+    assert client.get("/api/options/equity/KO/chain?expiration=soonish").status_code == 422
+    assert client.get("/api/options/equity/KO/chain?expiration=2026-13-45").status_code == 422
+    assert client.get("/api/options/equity/K$O/chain?expiration=2026-08-07").status_code == 404
 
 
 def test_equity_routes_503_without_key() -> None:
@@ -768,18 +758,12 @@ def test_equity_routes_503_without_key() -> None:
     resp = client.get("/api/options/equity/KO/expirations")
     assert resp.status_code == 503
     assert "MBOUM_API_KEY" in resp.json()["detail"]
-    assert (
-        client.get("/api/options/equity/KO/chain?expiration=2026-08-07").status_code == 503
-    )
+    assert client.get("/api/options/equity/KO/chain?expiration=2026-08-07").status_code == 503
 
 
 def test_equity_chain_empty_is_404_and_upstream_failure_502() -> None:
     empty = _equity_client(_mboum_options_client(_mboum_payload(with_rows=False)))
-    assert (
-        empty.get("/api/options/equity/KO/chain?expiration=2026-08-07").status_code == 404
-    )
+    assert empty.get("/api/options/equity/KO/chain?expiration=2026-08-07").status_code == 404
     broken = _equity_client(_mboum_options_client(None, status_code=500))
-    assert (
-        broken.get("/api/options/equity/KO/chain?expiration=2026-08-07").status_code == 502
-    )
+    assert broken.get("/api/options/equity/KO/chain?expiration=2026-08-07").status_code == 502
     assert broken.get("/api/options/equity/KO/expirations").status_code == 502

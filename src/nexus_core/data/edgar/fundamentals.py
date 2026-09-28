@@ -170,9 +170,7 @@ def cik_for_ticker(
     if not symbol:
         return None
     try:
-        payload = fetch_json(
-            _TICKERS_URL, headers=_HEADERS, client=client, timeout=timeout
-        )
+        payload = fetch_json(_TICKERS_URL, headers=_HEADERS, client=client, timeout=timeout)
     except (httpx.HTTPError, ValueError) as exc:
         logger.debug("SEC ticker map fetch failed: %s", exc)
         return None
@@ -379,9 +377,7 @@ def _statement_rows(gaap: dict[str, Any], years: list[int]) -> dict[str, list[di
 # =============================================================================
 
 
-def _precompute_croic(
-    cash_flow: dict[str, Any], balance_sheet: dict[str, Any]
-) -> float | None:
+def _precompute_croic(cash_flow: dict[str, Any], balance_sheet: dict[str, Any]) -> float | None:
     """Precompute current-year CROIC = FCF / (equity + debt).
 
     Faithful to pw-nexus ``enhanced_metrics.calculate_croic`` and the nexus-core
@@ -512,36 +508,71 @@ _SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
 # software, pharma, autos vs aerospace, REITs) are handled by _SIC_OVERRIDES,
 # which take precedence.
 _SIC_MAJOR_SECTOR: dict[int, str] = {
-    1: "basic materials", 2: "basic materials", 7: "basic materials", 9: "basic materials",
-    10: "basic materials", 12: "basic materials", 14: "basic materials",
+    1: "basic materials",
+    2: "basic materials",
+    7: "basic materials",
+    9: "basic materials",
+    10: "basic materials",
+    12: "basic materials",
+    14: "basic materials",
     13: "energy",
-    15: "industrials", 16: "industrials", 17: "industrials",
-    20: "consumer defensive", 21: "consumer defensive",
-    22: "consumer cyclical", 23: "consumer cyclical",
-    24: "basic materials", 25: "consumer cyclical", 26: "basic materials",
+    15: "industrials",
+    16: "industrials",
+    17: "industrials",
+    20: "consumer defensive",
+    21: "consumer defensive",
+    22: "consumer cyclical",
+    23: "consumer cyclical",
+    24: "basic materials",
+    25: "consumer cyclical",
+    26: "basic materials",
     27: "communication services",
     28: "basic materials",
     29: "energy",
-    30: "consumer cyclical", 31: "consumer cyclical", 32: "basic materials",
-    33: "basic materials", 34: "industrials",
-    35: "industrials", 36: "technology",
+    30: "consumer cyclical",
+    31: "consumer cyclical",
+    32: "basic materials",
+    33: "basic materials",
+    34: "industrials",
+    35: "industrials",
+    36: "technology",
     37: "consumer cyclical",
-    38: "technology", 39: "consumer cyclical",
-    40: "industrials", 41: "industrials", 42: "industrials", 44: "industrials",
-    45: "industrials", 47: "industrials",
+    38: "technology",
+    39: "consumer cyclical",
+    40: "industrials",
+    41: "industrials",
+    42: "industrials",
+    44: "industrials",
+    45: "industrials",
+    47: "industrials",
     48: "communication services",
     49: "utilities",
-    50: "consumer cyclical", 51: "consumer cyclical",
-    52: "consumer cyclical", 53: "consumer cyclical", 55: "consumer cyclical",
-    56: "consumer cyclical", 57: "consumer cyclical", 59: "consumer cyclical",
+    50: "consumer cyclical",
+    51: "consumer cyclical",
+    52: "consumer cyclical",
+    53: "consumer cyclical",
+    55: "consumer cyclical",
+    56: "consumer cyclical",
+    57: "consumer cyclical",
+    59: "consumer cyclical",
     54: "consumer defensive",
     58: "consumer cyclical",
-    60: "financials", 61: "financials", 62: "financials", 63: "financials",
-    64: "financials", 67: "financials",
+    60: "financials",
+    61: "financials",
+    62: "financials",
+    63: "financials",
+    64: "financials",
+    67: "financials",
     65: "real estate",
-    70: "consumer cyclical", 72: "consumer cyclical", 73: "technology",
-    75: "consumer cyclical", 78: "communication services", 79: "consumer cyclical",
-    80: "healthcare", 82: "communication services", 87: "industrials",
+    70: "consumer cyclical",
+    72: "consumer cyclical",
+    73: "technology",
+    75: "consumer cyclical",
+    78: "communication services",
+    79: "consumer cyclical",
+    80: "healthcare",
+    82: "communication services",
+    87: "industrials",
 }
 
 _SIC_OVERRIDES: tuple[tuple[int, int, str], ...] = (

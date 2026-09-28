@@ -48,9 +48,7 @@ from .models import (
 ACCOUNTING_METHOD_VERSION = "2.0.0"
 ACCOUNTING_METHOD_SOURCE = "nexus-core/docs/ONCHAIN-ACCOUNTING.md"
 ACCOUNTING_METHOD_LAST_VERIFIED = date(2026, 7, 18)
-ACCOUNTING_METHODOLOGY_REVIEW_STATUS: Literal["pending_governance_review", "approved"] = (
-    "approved"
-)
+ACCOUNTING_METHODOLOGY_REVIEW_STATUS: Literal["pending_governance_review", "approved"] = "approved"
 
 _AMBIGUOUS_DEFI_KINDS = frozenset(
     {

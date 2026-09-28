@@ -24,9 +24,7 @@ def _decreasing(x: float) -> float:
 
 
 def test_increasing_finds_smallest_sufficient_value() -> None:
-    r = solve_monotone(
-        evaluate=_increasing, lo=0.0, hi=100.0, target=0.80, direction="increasing"
-    )
+    r = solve_monotone(evaluate=_increasing, lo=0.0, hi=100.0, target=0.80, direction="increasing")
     assert r.feasible is True
     assert r.best_achievable is None
     # smallest x with success >= 0.80 is x = 80 (conservative: rounds toward meeting)
@@ -35,9 +33,7 @@ def test_increasing_finds_smallest_sufficient_value() -> None:
 
 
 def test_decreasing_finds_largest_affordable_value() -> None:
-    r = solve_monotone(
-        evaluate=_decreasing, lo=0.0, hi=100.0, target=0.80, direction="decreasing"
-    )
+    r = solve_monotone(evaluate=_decreasing, lo=0.0, hi=100.0, target=0.80, direction="decreasing")
     assert r.feasible is True
     assert r.best_achievable is None
     # largest x still meeting success >= 0.80 is x = 20
@@ -59,8 +55,11 @@ def test_increasing_infeasible_reports_best_achievable_not_raise() -> None:
 def test_decreasing_infeasible_when_even_floor_fails() -> None:
     # even x=0 (the min) only reaches 0.30 — target 0.80 unreachable.
     r = solve_monotone(
-        evaluate=lambda x: 0.30 - x / 1000.0, lo=0.0, hi=100.0,
-        target=0.80, direction="decreasing",
+        evaluate=lambda x: 0.30 - x / 1000.0,
+        lo=0.0,
+        hi=100.0,
+        target=0.80,
+        direction="decreasing",
     )
     assert r.feasible is False
     assert r.solved_value == 0.0
@@ -69,8 +68,11 @@ def test_decreasing_infeasible_when_even_floor_fails() -> None:
 
 def test_increasing_already_met_at_floor() -> None:
     r = solve_monotone(
-        evaluate=lambda x: 0.90 + x / 1000.0, lo=0.0, hi=100.0,
-        target=0.80, direction="increasing",
+        evaluate=lambda x: 0.90 + x / 1000.0,
+        lo=0.0,
+        hi=100.0,
+        target=0.80,
+        direction="increasing",
     )
     assert r.feasible is True
     assert r.solved_value == 0.0  # nothing to raise — the floor already clears
@@ -79,8 +81,11 @@ def test_increasing_already_met_at_floor() -> None:
 
 def test_decreasing_met_even_at_ceiling() -> None:
     r = solve_monotone(
-        evaluate=lambda x: 0.95 - x / 1000.0, lo=0.0, hi=100.0,
-        target=0.80, direction="decreasing",
+        evaluate=lambda x: 0.95 - x / 1000.0,
+        lo=0.0,
+        hi=100.0,
+        target=0.80,
+        direction="decreasing",
     )
     assert r.feasible is True
     assert r.solved_value == 100.0  # even the max variable still meets the target
@@ -116,8 +121,11 @@ def test_decreasing_curve_is_non_increasing() -> None:
 def test_integer_domain_finds_smallest_integer() -> None:
     # success rises from 0 at age 40 to 1 at age 80; target 0.5 -> age 60.
     r = solve_integer_monotone(
-        evaluate=lambda age: (age - 40.0) / 40.0, lo=45, hi=95,
-        target=0.50, direction="increasing",
+        evaluate=lambda age: (age - 40.0) / 40.0,
+        lo=45,
+        hi=95,
+        target=0.50,
+        direction="increasing",
     )
     assert r.feasible is True
     assert r.solved_value == 60.0
@@ -127,8 +135,11 @@ def test_integer_domain_finds_smallest_integer() -> None:
 
 def test_integer_domain_infeasible_reports_ceiling() -> None:
     r = solve_integer_monotone(
-        evaluate=lambda age: (age - 40.0) / 400.0, lo=45, hi=95,
-        target=0.90, direction="increasing",
+        evaluate=lambda age: (age - 40.0) / 400.0,
+        lo=45,
+        hi=95,
+        target=0.90,
+        direction="increasing",
     )
     assert r.feasible is False
     assert r.solved_value == 95.0
@@ -184,12 +195,8 @@ def test_integer_single_point_domain() -> None:
 
 
 def test_determinism_same_inputs_identical_result() -> None:
-    a = solve_monotone(
-        evaluate=_increasing, lo=0.0, hi=100.0, target=0.72, direction="increasing"
-    )
-    b = solve_monotone(
-        evaluate=_increasing, lo=0.0, hi=100.0, target=0.72, direction="increasing"
-    )
+    a = solve_monotone(evaluate=_increasing, lo=0.0, hi=100.0, target=0.72, direction="increasing")
+    b = solve_monotone(evaluate=_increasing, lo=0.0, hi=100.0, target=0.72, direction="increasing")
     assert a == b
 
 
@@ -201,4 +208,6 @@ def test_rejects_bad_bounds_and_target() -> None:
     with pytest.raises(ValueError, match="target must be in"):
         solve_monotone(evaluate=_increasing, lo=0.0, hi=1.0, target=1.5, direction="increasing")
     with pytest.raises(ValueError, match="hi must be >="):
-        solve_integer_monotone(evaluate=_increasing, lo=70, hi=60, target=0.5, direction="increasing")
+        solve_integer_monotone(
+            evaluate=_increasing, lo=70, hi=60, target=0.5, direction="increasing"
+        )

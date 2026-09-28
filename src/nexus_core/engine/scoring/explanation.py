@@ -111,9 +111,7 @@ class ScoreExplanation:
             "checks_not_evaluated": list(self.checks_not_evaluated),
             "per_check": [c.to_dict() for c in self.per_check],
             "confidence_tier": self.confidence_tier,
-            "regime_signal_contributions": [
-                s.to_dict() for s in self.regime_signal_contributions
-            ],
+            "regime_signal_contributions": [s.to_dict() for s in self.regime_signal_contributions],
             "notes": list(self.notes),
         }
 
