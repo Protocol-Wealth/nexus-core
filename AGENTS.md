@@ -140,7 +140,7 @@ Path catalog and cache notes live in [`README.md`](README.md). MCP endpoint:
 [`/mcp-guide`](https://nexusmcp.site/mcp-guide). Agent site map:
 [`/llms.txt`](https://nexusmcp.site/llms.txt).
 
-New MCP tools: read-only, `ToolAnnotations(readOnlyHint=True)`, a rich routing
+New MCP tools: read-only, `ToolAnnotations(read_only_hint=True)`, a rich routing
 docstring, and never embed credentials or env-var names in the description.
 
 ## Boundaries
