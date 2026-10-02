@@ -293,8 +293,8 @@ enrich Tatum's Solana native-balance read with USD figures.
 ## Persistence
 
 The public surface is read-only over external APIs. The one persistence seam is
-`data/db.py` — async `asyncpg` access to the private **`nexus-marketdata`**
-Cloud SQL instance (Postgres 16, private-IP-only on `pwllc-prod-vpc`, backups +
+`data/db.py` — async `asyncpg` access to a private Cloud SQL
+instance (Postgres 16, private-IP-only on a VPC network, backups +
 deletion protection). It is reachable only from inside the VPC, never from the
 public internet, and is configured by `DATABASE_URL`. When that variable is
 unset, `db.is_configured()` is `False` and callers no-op, so the service runs
@@ -361,8 +361,8 @@ remote MCP connectors can complete their required authorization flow.
 
 - Public read-only; **no public write endpoints** (the daily snapshot is a Cloud
   Run Job, not an HTTP route).
-- Private-only Cloud SQL: `nexus-marketdata` has no public IP and is reachable
-  only from inside `pwllc-prod-vpc`.
+- Private-only Cloud SQL: the database instance has no public IP and is reachable
+  only from inside the VPC.
 - In-process rate limiter resolves the client key spoofing-resistantly
   (`CF-Connecting-IP`, else rightmost `X-Forwarded-For`, else transport peer).
   It is a best-effort abuse guard, not a security boundary — Cloudflare's edge
@@ -372,9 +372,9 @@ remote MCP connectors can complete their required authorization flow.
   is set; it uses Dynamic Client Registration, PKCE, and HMAC-signed compact
   tokens. Omitting the key leaves `/mcp` open in local/unkeyed deployments.
 - Secrets live only in Google Secret Manager (`nexus-*-api-key`,
-  `nexus-marketdata-database-url`, hosted OAuth signing key); no credentials in
+  the database-URL secret, hosted OAuth signing key); no credentials in
   config or code.
-- The web service runs as the `nexus-core-run@pwllc-prod` service account.
+- The web service runs as a dedicated runtime service account.
 
 ## Deploy Topology
 
@@ -387,12 +387,12 @@ Cloud Run Job (nexus-snapshot-job)  ── nexus-core snapshot ──┐
 Cloudflare (nexusmcp.site)                                   │ Direct VPC egress
     │                                                        │ + Cloud SQL connector
     ▼                                                        ▼
-Cloud Run Service (nexus-core)  ── Direct VPC egress ──▶  Cloud SQL (nexus-marketdata,
-    nexus-core serve                                          private IP, pwllc-prod-vpc)
+Cloud Run Service (nexus-core)  ── Direct VPC egress ──▶  Cloud SQL (private IP,
+    nexus-core serve                                          VPC only)
 ```
 
 Both the web service and the snapshot job reach the database through Direct VPC
-egress into `pwllc-prod-vpc` (subnet `pwllc-prod-cloud-run-us-central1`,
+egress into the VPC (`--network` / `--subnet`,
 `--vpc-egress=private-ranges-only`) plus the Cloud SQL connector, with
 `roles/cloudsql.client`. Provider keys and `DATABASE_URL` are injected from
 Secret Manager. See `DEPLOY.md` for the exact `gcloud` invocations.

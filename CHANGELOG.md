@@ -1303,8 +1303,7 @@ neither ran in CI). Deployed at `nexus-core-00040`.
   snapshots). Compositions: BTC/ETH/SOL, ETH-USDC 50/50·60/40·70/30,
   ETH-BTC 50/50; USDC held at $1.
 - **Private market-data persistence** — `data/db.py` + `data/snapshots.py`
-  (asyncpg) against a private-IP-only Cloud SQL instance (`nexus-marketdata`,
-  POSTGRES_16) reached via Direct VPC egress. `GET /health/db` probes
+  (asyncpg) against a private-IP-only Cloud SQL instance (POSTGRES_16) reached via Direct VPC egress. `GET /health/db` probes
   connectivity. `DATABASE_URL` gates persistence and
   `/api/benchmarks/history` (503 when unset).
 - **Daily snapshot Cloud Run Job** — `jobs/daily_snapshot.py`, invoked via the
