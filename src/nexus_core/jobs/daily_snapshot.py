@@ -4,8 +4,8 @@
 
 ``nexus-core snapshot`` runs this. In production a Cloud Scheduler job triggers
 the Cloud Run Job daily via a service-account OIDC identity — **no public HTTP
-endpoint and no shared secret**. The job runs inside ``pwllc-prod-vpc`` where the
-private ``nexus-marketdata`` DB is reachable: it fetches today's BTC/ETH/SOL
+endpoint and no shared secret**. The job runs inside the deployment's VPC, where
+the private market-data DB is reachable: it fetches today's BTC/ETH/SOL
 prices from CoinGecko and upserts one row (USDC held at $1).
 
 Fails loudly (non-zero exit) on incomplete prices or a DB error so the

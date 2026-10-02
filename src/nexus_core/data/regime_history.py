@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Protocol Wealth, LLC and contributors.
-"""Daily regime-classification persistence (asyncpg → nexus-marketdata).
+"""Daily regime-classification persistence (asyncpg → market-data Postgres).
 
 The regime engine classifies on demand and, until now, the answer was served and
 discarded. Nothing was written down, so no accuracy or precision measure was
@@ -19,7 +19,7 @@ data touches this table.
 
 Idempotent: the table is created on demand (``CREATE TABLE IF NOT EXISTS``) and
 writes upsert on ``snapshot_date``, so re-running a day overwrites cleanly. All
-functions require ``DATABASE_URL`` (reachable only inside ``pwllc-prod-vpc``).
+functions require ``DATABASE_URL`` (reachable only inside the deployment's VPC).
 """
 
 from __future__ import annotations

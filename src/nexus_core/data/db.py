@@ -3,8 +3,8 @@
 """Async access to the dedicated market-data Postgres (asyncpg).
 
 nexus-core's public surface is read-only over external APIs; this is the narrow
-seam to the private ``nexus-marketdata`` Cloud SQL instance — reachable only
-from inside ``pwllc-prod-vpc`` via the Cloud SQL connector socket
+seam to a private Cloud SQL instance — reachable only from inside the
+deployment's VPC via the Cloud SQL connector socket
 (``/cloudsql/<connection-name>``), never from the public internet. It backs
 persistence jobs (daily snapshots) and connectivity checks.
 

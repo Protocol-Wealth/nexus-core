@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Protocol Wealth, LLC and contributors.
-"""Daily benchmark-price snapshot persistence (asyncpg → nexus-marketdata).
+"""Daily benchmark-price snapshot persistence (asyncpg → market-data Postgres).
 
 Stores one row per day of raw asset USD prices (BTC/ETH/SOL/USDC). Base-100
 return series and compositions are derived on read by ``engine.benchmarks`` from
@@ -9,7 +9,7 @@ normalization baseline is simply the earliest stored day.
 
 Idempotent: the table is created on demand (``CREATE TABLE IF NOT EXISTS``) and
 writes upsert on ``snapshot_date`` so re-running a day overwrites cleanly. All
-functions require ``DATABASE_URL`` (reachable only inside ``pwllc-prod-vpc``).
+functions require ``DATABASE_URL`` (reachable only inside the deployment's VPC).
 """
 
 from __future__ import annotations

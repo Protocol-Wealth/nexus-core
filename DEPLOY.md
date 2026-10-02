@@ -135,14 +135,16 @@ differ between the web service and the snapshot job.
 
 ## Cloud Run deploy (canonical)
 
-Protocol Wealth infrastructure runs on Google Cloud (project `pwllc-prod`).
-nexus-core deploys to Cloud Run from source — Cloud Build builds the `Dockerfile`
+nexus-core runs on Google Cloud. The commands below use placeholders in angle
+brackets (`<PROJECT_ID>`, `<SERVICE_ACCOUNT>`, `<VPC_NETWORK>`, `<VPC_SUBNET>`,
+`<SQL_INSTANCE>`, `<API_KEY_DIGEST_SECRET>`, `<DATABASE_URL_SECRET>`,
+`<SERVICE_URL>`); substitute your own values. nexus-core deploys to Cloud Run from source — Cloud Build builds the `Dockerfile`
 automatically.
 
 **Prerequisites** (one-time, per project): `gcloud` CLI authenticated; the Cloud
 Run, Cloud Build, Artifact Registry, Cloud SQL Admin, Secret Manager, and Cloud
 Scheduler APIs enabled. The runtime service account is
-`nexus-core-run@pwllc-prod.iam.gserviceaccount.com`, granted `roles/cloudsql.client`
+`<SERVICE_ACCOUNT>@<PROJECT_ID>.iam.gserviceaccount.com`, granted `roles/cloudsql.client`
 and `roles/secretmanager.secretAccessor`.
 
 ### 1. Secrets (Google Secret Manager)
@@ -161,20 +163,20 @@ printf '%s' "YOUR_DEBANK_KEY"      | gcloud secrets create nexus-debank-api-key 
 printf '%s' "YOUR_TATUM_KEY"       | gcloud secrets create nexus-tatum-api-key --data-file=-
 printf '%s' "YOUR_VAULTSFYI_KEY"   | gcloud secrets create nexus-vaultsfyi-api-key --data-file=-
 printf '%s' "YOUR_THEGRAPH_KEY"    | gcloud secrets create nexus-thegraph-api-key --data-file=-
-printf '%s' "YOUR_DATABASE_URL"    | gcloud secrets create nexus-marketdata-database-url --data-file=-
+printf '%s' "YOUR_DATABASE_URL"    | gcloud secrets create <DATABASE_URL_SECRET> --data-file=-
 printf '%s' "YOUR_RANDOM_SIGNING_KEY" | gcloud secrets create nexus-mcp-oauth-signing-key --data-file=-
 ```
 
-Restricted REST/JSON mode uses the Terraform-managed
-`pwllc-nexus-api-key-digests` secret from `pw-infrastructure`. It contains the
+Restricted REST/JSON mode reads a Secret Manager secret, `<API_KEY_DIGEST_SECRET>`,
+managed outside this repository (for example by Terraform). It contains the
 accepted `sha256:<hex>` digest list for `NEXUS_API_KEYS`. Do not mount the raw
 service key on Nexus; the raw bearer key is held by `pw-api` as
 `NEXUS_SERVICE_API_KEY`.
 
 ### 2. Private database
 
-Persistence is a private Cloud SQL instance, `nexus-marketdata`
-(`POSTGRES_16`, private-IP-only on the `pwllc-prod-vpc` VPC, with automated
+Persistence is a private Cloud SQL instance, `<SQL_INSTANCE>`
+(`POSTGRES_16`, private-IP-only on the `<VPC_NETWORK>` VPC, with automated
 backups and deletion protection enabled). It has **no public IP**. The web
 service reaches it via Direct VPC egress; the `DATABASE_URL` secret points at the
 private address.
@@ -187,11 +189,11 @@ gcloud run deploy nexus-core \
   --region us-central1 \
   --allow-unauthenticated \
   --min-instances 1 \
-  --service-account nexus-core-run@pwllc-prod.iam.gserviceaccount.com \
-  --network pwllc-prod-vpc \
-  --subnet pwllc-prod-cloud-run-us-central1 \
+  --service-account <SERVICE_ACCOUNT>@<PROJECT_ID>.iam.gserviceaccount.com \
+  --network <VPC_NETWORK> \
+  --subnet <VPC_SUBNET> \
   --vpc-egress private-ranges-only \
-  --add-cloudsql-instances pwllc-prod:us-central1:nexus-marketdata \
+  --add-cloudsql-instances <PROJECT_ID>:us-central1:<SQL_INSTANCE> \
   --set-env-vars "NEXUS_PUBLIC_MCP_PROFILE=demo,NEXUS_ACCESS_MODE=restricted" \
   --set-secrets "FRED_API_KEY=nexus-fred-api-key:latest,\
 MBOUM_API_KEY=nexus-mboum-api-key:latest,\
@@ -203,9 +205,9 @@ DEBANK_API_KEY=nexus-debank-api-key:latest,\
 TATUM_API_KEY=nexus-tatum-api-key:latest,\
 VAULTSFYI_API_KEY=nexus-vaultsfyi-api-key:latest,\
 THEGRAPH_API_KEY=nexus-thegraph-api-key:latest,\
-DATABASE_URL=nexus-marketdata-database-url:latest,\
+DATABASE_URL=<DATABASE_URL_SECRET>:latest,\
 MCP_OAUTH_SIGNING_KEY=nexus-mcp-oauth-signing-key:latest,\
-NEXUS_API_KEYS=pwllc-nexus-api-key-digests:latest"
+NEXUS_API_KEYS=<API_KEY_DIGEST_SECRET>:latest"
 ```
 
 `--min-instances 1` keeps one instance always warm — it eliminates Cloud Run cold
@@ -221,16 +223,16 @@ instance. The command prints the service URL; confirm it is reachable before
 mapping DNS:
 
 ```bash
-curl https://nexus-core-XXXXXX-uc.a.run.app/health
-curl https://nexus-core-XXXXXX-uc.a.run.app/health/db
+curl https://<SERVICE_URL>/health
+curl https://<SERVICE_URL>/health/db
 # Hosted native `/mcp` uses transparent OAuth when `MCP_OAUTH_SIGNING_KEY` is
 # mounted. With `NEXUS_PUBLIC_MCP_PROFILE=demo`, an OAuth MCP `tools/list` should
 # return only option_price, collar_book, classify_layer, health, and describe.
 
 # Restricted REST/planning paths should 401 without the pw-api service key.
-curl -i https://nexus-core-XXXXXX-uc.a.run.app/api/planning/tools
+curl -i https://<SERVICE_URL>/api/planning/tools
 curl -H "Authorization: Bearer ${NEXUS_SERVICE_API_KEY}" \
-  https://nexus-core-XXXXXX-uc.a.run.app/api/planning/tools
+  https://<SERVICE_URL>/api/planning/tools
 ```
 
 For an existing service where the source image is already current, the narrow
@@ -240,7 +242,7 @@ runtime-only update is:
 gcloud run services update nexus-core \
   --region us-central1 \
   --update-env-vars "NEXUS_PUBLIC_MCP_PROFILE=demo,NEXUS_ACCESS_MODE=restricted" \
-  --update-secrets "NEXUS_API_KEYS=pwllc-nexus-api-key-digests:latest"
+  --update-secrets "NEXUS_API_KEYS=<API_KEY_DIGEST_SECRET>:latest"
 ```
 
 Keep `MCP_OAUTH_SIGNING_KEY` mounted on the hosted public service unless the
@@ -261,12 +263,12 @@ gcloud run jobs deploy nexus-snapshot-job \
   --region us-central1 \
   --command nexus-core \
   --args snapshot \
-  --service-account nexus-core-run@pwllc-prod.iam.gserviceaccount.com \
-  --network pwllc-prod-vpc \
-  --subnet pwllc-prod-cloud-run-us-central1 \
+  --service-account <SERVICE_ACCOUNT>@<PROJECT_ID>.iam.gserviceaccount.com \
+  --network <VPC_NETWORK> \
+  --subnet <VPC_SUBNET> \
   --vpc-egress private-ranges-only \
-  --set-cloudsql-instances pwllc-prod:us-central1:nexus-marketdata \
-  --set-secrets "DATABASE_URL=nexus-marketdata-database-url:latest,\
+  --set-cloudsql-instances <PROJECT_ID>:us-central1:<SQL_INSTANCE> \
+  --set-secrets "DATABASE_URL=<DATABASE_URL_SECRET>:latest,\
 COINGECKO_API_KEY=nexus-coingecko-api-key:latest,\
 FRED_API_KEY=nexus-fred-api-key:latest,\
 MBOUM_API_KEY=nexus-mboum-api-key:latest,\
@@ -302,9 +304,9 @@ gcloud scheduler jobs create http nexus-daily-snapshot \
   --location us-central1 \
   --schedule "0 1 * * *" \
   --time-zone "America/New_York" \
-  --uri "https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/pwllc-prod/jobs/nexus-snapshot-job:run" \
+  --uri "https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<PROJECT_ID>/jobs/nexus-snapshot-job:run" \
   --http-method POST \
-  --oauth-service-account-email nexus-core-run@pwllc-prod.iam.gserviceaccount.com
+  --oauth-service-account-email <SERVICE_ACCOUNT>@<PROJECT_ID>.iam.gserviceaccount.com
 ```
 
 ### 6. Map the custom domain

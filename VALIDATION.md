@@ -360,7 +360,7 @@ serving 100% traffic.
 | unauthenticated `POST https://nexusmcp.site/mcp` | `401` — transparent OAuth bearer token required |
 | transparent OAuth `/register` → `/authorize` → `/token` | `201` → `302` → `200`; token exchange succeeded with public `mcp` scope |
 | OAuth MCP initialize → initialized → `tools/list` | `200` → `202` → `200`; tool list was `option_price`, `collar_book`, `health`, `describe`; provider-backed/full tools absent |
-| Cloud Run service config | `NEXUS_PUBLIC_MCP_PROFILE=demo`, `NEXUS_ACCESS_MODE=restricted`, `NEXUS_API_KEYS` mounted from `pwllc-nexus-api-key-digests`; `MCP_OAUTH_SIGNING_KEY` remains mounted for hosted MCP compatibility |
+| Cloud Run service config | `NEXUS_PUBLIC_MCP_PROFILE=demo`, `NEXUS_ACCESS_MODE=restricted`, `NEXUS_API_KEYS` mounted from the API-key digest secret; `MCP_OAUTH_SIGNING_KEY` remains mounted for hosted MCP compatibility |
 
 GitHub status after the issue-sync pass: no open PRs; seven open issues
 (#197-#203) track the outstanding and future-build lanes from the roadmap.
