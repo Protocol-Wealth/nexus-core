@@ -371,7 +371,7 @@ def test_income_layering_gateway_happy_path_and_disclaimer() -> None:
     assert body["years"][0]["year"] == 2026
     assert body["assumptions"]["withdrawalOrder"] == ["rmd", "taxable", "traditional", "roth"]
     assert body["assumptions"]["taxTableSource"].startswith("IRS Rev. Proc.")
-    assert body["assumptions"]["taxTableLastVerified"] == "2026-07-08"
+    assert body["assumptions"]["taxTableLastVerified"] == "2026-10-22"
     assert "not predictions" in body["disclaimer"]
 
 

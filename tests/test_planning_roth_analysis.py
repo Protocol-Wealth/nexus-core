@@ -79,12 +79,9 @@ def test_irmaa_binds_for_a_60s_mfj_retiree() -> None:
     res = _run(_contract())
     y = res.years[0]
     assert y.binding_constraint == "irmaa"
-    assert (
-        "Federal tax table version: federal-income-tax-reference-2026-illustrative-v1."
-        in res.assumptions
-    )
+    assert "Federal tax table version: federal-income-tax-reference-2026-v2." in res.assumptions
     assert res.snapshot.bracket_table_reference_source.startswith("IRS Rev. Proc.")
-    assert res.snapshot.bracket_table_last_verified == "2026-07-08"
+    assert res.snapshot.bracket_table_last_verified == "2026-10-22"
     assert (
         "IRMAA table version: irmaa-reference-2025-married_joint-illustrative-v1."
         in res.assumptions
@@ -100,13 +97,13 @@ def test_roth_irmaa_tool_wrappers_echo_assumption_provenance() -> None:
     analysis = analyze_roth_conversion_tool({"contract": _BASE})
     snapshot = analysis["snapshot"]
     assert snapshot["bracket_table_reference_source"].startswith("IRS Rev. Proc.")
-    assert snapshot["bracket_table_last_verified"] == "2026-07-08"
+    assert snapshot["bracket_table_last_verified"] == "2026-10-22"
     assert snapshot["irmaa_table_reference_source"].startswith("CMS 2025 Medicare")
     assert snapshot["irmaa_table_last_verified"] == "2026-07-08"
 
     sequence = sequence_conversions_tool({"contract": _BASE})
     assert sequence["bracketTableReferenceSource"].startswith("IRS Rev. Proc.")
-    assert sequence["bracketTableLastVerified"] == "2026-07-08"
+    assert sequence["bracketTableLastVerified"] == "2026-10-22"
     assert sequence["irmaaTableReferenceSource"].startswith("CMS 2025 Medicare")
     assert sequence["irmaaTableLastVerified"] == "2026-07-08"
 

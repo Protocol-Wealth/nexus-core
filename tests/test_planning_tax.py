@@ -21,9 +21,9 @@ _ACCOUNTS = [
 
 
 def test_ordinary_tax_progressive_married_joint() -> None:
-    # income 130000 - 30000 std ded = 100000 taxable:
-    # 23850*.10 + (96950-23850)*.12 + (100000-96950)*.22 = 2385 + 8772 + 671 = 11828
-    assert round(ordinary_tax(130_000, "married_joint")) == 11828
+    # 2026: income 130,000 - 32,200 std ded = 97,800 taxable (below the 100,800 12% top):
+    # 24,800*.10 + (97,800-24,800)*.12 = 2,480 + 8,760 = 11,240
+    assert round(ordinary_tax(130_000, "married_joint")) == 11240
 
 
 def test_ordering_taxable_first_when_young() -> None:
@@ -38,7 +38,7 @@ def test_ordering_taxable_first_when_young() -> None:
     assert [w["type"] for w in r["withdrawals"]] == ["taxable"]  # age<73 ⇒ no RMD; taxable first
     assert r["withdrawals"][0]["gross"] == 120_000
     assert r["taxTableYear"] == 2026
-    assert r["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
+    assert r["taxTableVersion"] == "federal-income-tax-reference-2026-v2"
     assert r["rmdSatisfied"] is True  # RMD = 0
     assert 0.0 <= r["effectiveRate"] <= 1.0
 
@@ -157,7 +157,7 @@ def test_state_tax_exposes_federal_and_state_split() -> None:
     assert r["stateTaxModeled"] is True
     assert r["stateTax"] == pytest.approx(2_456.0)
     assert r["taxTableSource"].startswith("IRS Rev. Proc.")
-    assert r["taxTableLastVerified"] == "2026-07-08"
+    assert r["taxTableLastVerified"] == "2026-10-22"
     assert r["stateTaxTableSource"].startswith("Pennsylvania Department")
     assert r["stateTaxTableLastVerified"] == "2026-07-08"
     assert trad["stateTax"] == pytest.approx(2_456.0)

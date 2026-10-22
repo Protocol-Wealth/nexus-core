@@ -967,7 +967,9 @@ def test_tax_bracket_headroom_happy_path() -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["marginalRate"] == 0.22
-    assert body["roomToNextBracket"] == 18_350.0
+    # 2026 single: taxable 83,900 = 100,000 - 16,100 std ded; 22% top 105,700;
+    # room = 105,700 - 83,900 = 21,800
+    assert body["roomToNextBracket"] == 21_800.0
     assert body["nextRate"] == 0.24
 
 
@@ -1255,10 +1257,7 @@ def test_analyze_roth_conversion_gateway() -> None:
     assert y0["recommended_amount"] > 0
     # reference tables were used (no caller injection) -> snapshot says so.
     assert body["snapshot"]["irmaa_table_source"] == "engine_reference"
-    assert (
-        "Federal tax table version: federal-income-tax-reference-2026-illustrative-v1."
-        in body["assumptions"]
-    )
+    assert "Federal tax table version: federal-income-tax-reference-2026-v2." in body["assumptions"]
     assert (
         "IRMAA table version: irmaa-reference-2025-married_joint-illustrative-v1."
         in body["assumptions"]
@@ -1273,7 +1272,7 @@ def test_sequence_conversions_gateway() -> None:
     assert len(body["recommended_by_year"]) == 2
     assert body["total_recommended"] > 0
     assert body["bracketTableYear"] == 2026
-    assert body["bracketTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
+    assert body["bracketTableVersion"] == "federal-income-tax-reference-2026-v2"
     assert body["irmaaTableVersion"] == "irmaa-reference-2025-married_joint-illustrative-v1"
 
 

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **2026-10-22:** The 2026 federal tax tables used by planning (brackets,
+  standard deduction, additional deduction for 65+, long-term capital gains
+  breakpoints) carried 2025 figures. They now match IRS Rev. Proc. 2025-32;
+  table version `federal-income-tax-reference-2026-v2`, last verified
+  2026-10-22. Roth-conversion, bracket-headroom, income-layering and cash-flow
+  tax outputs change accordingly.
+
 ### Security
 
 - **2026-09-28:** Restricted REST/JSON mode now rejects short raw API keys,

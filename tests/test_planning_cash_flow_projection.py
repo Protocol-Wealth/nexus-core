@@ -160,10 +160,12 @@ def test_accumulation_exact_arithmetic() -> None:
     # saved into a non-growing portfolio, so it stacks linearly.
     result = _project()
     expected_tax = ordinary_tax(100_000.0, "married_joint")
-    assert expected_tax == pytest.approx(7_923.0)
-    expected_savings = 100_000.0 - expected_tax - 40_000.0  # 52_077
+    # 2026 MFJ: taxable 67,800 = 100,000 - 32,200 standard deduction;
+    # tax = 10%*24,800 + 12%*(67,800-24,800) = 2,480 + 5,160 = 7,640
+    assert expected_tax == pytest.approx(7_640.0)
+    expected_savings = 100_000.0 - expected_tax - 40_000.0  # 52_360
     y0, y1 = result["years"]
-    assert y0["taxes"] == pytest.approx(7_923.0)
+    assert y0["taxes"] == pytest.approx(7_640.0)
     assert y0["netCashFlow"] == pytest.approx(expected_savings)
     assert y0["portfolioBalance"] == pytest.approx(expected_savings)
     # Year 1: prior balance (no growth) + another year's savings.
@@ -193,8 +195,10 @@ def test_lifetime_tax_rollup() -> None:
     result = _project()
     tax = result["lifetimeTax"]
     assert tax["totalIncome"] == pytest.approx(200_000.0)  # 100k x 2 years
-    assert tax["totalTaxesPaid"] == pytest.approx(2 * 7_923.0)
-    assert tax["effectiveRate"] == pytest.approx(round((2 * 7_923.0) / 200_000.0, 4))
+    # 2026 MFJ year tax 7,640 (see test_accumulation_exact_arithmetic) x 2 = 15,280;
+    # effective rate 15,280 / 200,000 = 0.0764
+    assert tax["totalTaxesPaid"] == pytest.approx(2 * 7_640.0)
+    assert tax["effectiveRate"] == pytest.approx(round((2 * 7_640.0) / 200_000.0, 4))
     # Lifetime taxes equal the sum of the per-year taxes.
     assert tax["totalTaxesPaid"] == pytest.approx(sum(r["taxes"] for r in result["years"]))
 
@@ -347,9 +351,9 @@ def test_assumptions_echoed() -> None:
     a = result["assumptions"]
     assert a["filingStatus"] == "married_joint"
     assert a["taxTableYear"] == 2026
-    assert a["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
+    assert a["taxTableVersion"] == "federal-income-tax-reference-2026-v2"
     assert a["taxTableSource"].startswith("IRS Rev. Proc.")
-    assert a["taxTableLastVerified"] == "2026-07-08"
+    assert a["taxTableLastVerified"] == "2026-10-22"
     assert a["incomeGrowthRate"] == pytest.approx(0.04)
     assert a["expectedReturn"] == pytest.approx(0.06)
     assert a["retirementIncomeGrowthRate"] == pytest.approx(a["expenseInflationRate"])

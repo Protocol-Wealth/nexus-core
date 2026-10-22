@@ -10,24 +10,25 @@ from nexus_core.engine.planning import bracket_headroom
 
 
 def test_single_in_22pct_bracket() -> None:
-    # $100k gross, single -> taxable 85,000; 22% bracket runs to 103,350 taxable.
+    # $100k gross, single -> taxable 83,900 (2026: 100,000 - 16,100 standard
+    # deduction); 22% bracket runs 50,400 to 105,700 taxable.
     out = bracket_headroom(taxable_income=100_000.0, filing_status="single")
-    assert out["taxableIncome"] == 85_000.0
+    assert out["taxableIncome"] == 83_900.0
     assert out["marginalRate"] == 0.22
-    assert out["bracketFloor"] == 48_475.0
-    assert out["bracketCeiling"] == 103_350.0
-    assert out["roomToNextBracket"] == 18_350.0  # 103350 - 85000
+    assert out["bracketFloor"] == 50_400.0
+    assert out["bracketCeiling"] == 105_700.0
+    assert out["roomToNextBracket"] == 21_800.0  # 2026: 105,700 - 83,900
     assert out["nextRate"] == 0.24
     assert out["taxTableYear"] == 2026
-    assert out["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
+    assert out["taxTableVersion"] == "federal-income-tax-reference-2026-v2"
 
 
 def test_reference_provenance_only_when_whole_table_is_reference() -> None:
     # Both inputs omitted -> the whole table is the IRS reference.
     full_ref = bracket_headroom(taxable_income=100_000.0, filing_status="single")
     assert full_ref["taxTableSource"].startswith("IRS Rev. Proc.")
-    assert full_ref["taxTableLastVerified"] == "2026-07-08"
-    assert full_ref["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
+    assert full_ref["taxTableLastVerified"] == "2026-10-22"
+    assert full_ref["taxTableVersion"] == "federal-income-tax-reference-2026-v2"
 
     # A partial caller override (custom brackets, reference std deduction) makes
     # the effective table caller-modified — it must NOT claim the IRS source.
@@ -42,10 +43,11 @@ def test_reference_provenance_only_when_whole_table_is_reference() -> None:
 
 
 def test_fill_to_target_rate() -> None:
-    # Filling up to the 24% bracket ceiling (197,300 taxable).
+    # Filling up to the 24% bracket ceiling (2026: 201,775 taxable).
     out = bracket_headroom(taxable_income=100_000.0, filing_status="single", target_rate=0.24)
     assert out["targetRate"] == 0.24
-    assert out["roomToTargetRate"] == 197_300.0 - 85_000.0
+    # 2026: 201,775 - 83,900 taxable (100,000 - 16,100) = 117,875
+    assert out["roomToTargetRate"] == 201_775.0 - 83_900.0
 
 
 def test_top_bracket_has_no_ceiling() -> None:
