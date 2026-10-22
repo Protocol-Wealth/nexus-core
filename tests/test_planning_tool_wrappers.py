@@ -41,7 +41,7 @@ def test_tax_aware_withdrawal_tool_accepts_birth_year_policy() -> None:
     assert out["rmdStartAge"] == 75
     assert out["withdrawals"][0]["type"] == "taxable"
     assert out["withdrawals"][0]["gross"] == 10_000
-    assert out["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
+    assert out["taxTableVersion"] == "federal-income-tax-reference-2026-v2"
 
 
 def test_tax_aware_withdrawal_tool_accepts_state_tax_fields() -> None:
@@ -72,7 +72,7 @@ def test_tax_bracket_headroom_tool_stamps_table_version() -> None:
         {"taxableIncome": 100_000, "filingStatus": "single", "year": 2026}
     )
     assert out["taxTableYear"] == 2026
-    assert out["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
+    assert out["taxTableVersion"] == "federal-income-tax-reference-2026-v2"
 
 
 def test_tax_bracket_headroom_tool_rejects_unregistered_year() -> None:
@@ -125,9 +125,7 @@ def test_project_cash_flow_tool_stamps_tax_table_version() -> None:
             "taxYear": 2026,
         }
     )
-    assert out["assumptions"]["taxTableVersion"] == (
-        "federal-income-tax-reference-2026-illustrative-v1"
-    )
+    assert out["assumptions"]["taxTableVersion"] == ("federal-income-tax-reference-2026-v2")
 
 
 def test_project_cash_flow_tool_rejects_unregistered_tax_year() -> None:

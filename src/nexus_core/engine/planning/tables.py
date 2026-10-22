@@ -421,67 +421,74 @@ class EducationVehicleRule:
 # Illustrative current-basis figures. These reference registries are explicit by
 # year so missing years fail closed instead of silently reusing a stale basis.
 _REFERENCE_TAX_TABLE_VERSION_BY_YEAR: dict[int, str] = {
-    2026: "federal-income-tax-reference-2026-illustrative-v1",
+    2026: "federal-income-tax-reference-2026-v2",
 }
 _REFERENCE_TAX_TABLE_SOURCE_BY_YEAR: dict[int, str] = {
     2026: "IRS Rev. Proc. 2025-32 and IRS 2026 tax inflation-adjustments guidance; OBBBA senior deduction provisions",
 }
+# 2026-10-22: v1 carried 2025 figures (pre-OBBBA standard deduction, 2025
+# brackets and capital-gains breakpoints) under the 2026 label. v2 is copied
+# from Rev. Proc. 2025-32 (IRS, Oct. 9, 2025): Tables 1-4 of section .01, the
+# section .03 capital-gains amounts, and section .14 (standard deduction,
+# aged-or-blind amounts). Statutory, unindexed figures (NIIT thresholds, Social
+# Security provisional income, the OBBBA senior deduction and its phase-out)
+# are unchanged.
 _REFERENCE_TAX_TABLE_LAST_VERIFIED_BY_YEAR: dict[int, str] = {
-    2026: "2026-07-08",
+    2026: "2026-10-22",
 }
 _STD_DEDUCTION_BY_YEAR: dict[int, dict[FilingStatus, float]] = {
     2026: {
-        "single": 15_000.0,
-        "married_joint": 30_000.0,
-        "married_separate": 15_000.0,
-        "head_of_household": 22_500.0,
+        "single": 16_100.0,
+        "married_joint": 32_200.0,
+        "married_separate": 16_100.0,
+        "head_of_household": 24_150.0,
     },
 }
 _ORDINARY_BRACKETS_BY_YEAR: dict[int, dict[FilingStatus, list[tuple[float, float]]]] = {
     2026: {
         "single": [
-            (11_925, 0.10),
-            (48_475, 0.12),
-            (103_350, 0.22),
-            (197_300, 0.24),
-            (250_525, 0.32),
-            (626_350, 0.35),
+            (12_400, 0.10),
+            (50_400, 0.12),
+            (105_700, 0.22),
+            (201_775, 0.24),
+            (256_225, 0.32),
+            (640_600, 0.35),
             (_INF, 0.37),
         ],
         "married_joint": [
-            (23_850, 0.10),
-            (96_950, 0.12),
-            (206_700, 0.22),
-            (394_600, 0.24),
-            (501_050, 0.32),
-            (751_600, 0.35),
+            (24_800, 0.10),
+            (100_800, 0.12),
+            (211_400, 0.22),
+            (403_550, 0.24),
+            (512_450, 0.32),
+            (768_700, 0.35),
             (_INF, 0.37),
         ],
         "married_separate": [
-            (11_925, 0.10),
-            (48_475, 0.12),
-            (103_350, 0.22),
-            (197_300, 0.24),
-            (250_525, 0.32),
-            (375_800, 0.35),
+            (12_400, 0.10),
+            (50_400, 0.12),
+            (105_700, 0.22),
+            (201_775, 0.24),
+            (256_225, 0.32),
+            (384_350, 0.35),
             (_INF, 0.37),
         ],
         "head_of_household": [
-            (17_000, 0.10),
-            (64_850, 0.12),
-            (103_350, 0.22),
-            (197_300, 0.24),
-            (250_500, 0.32),
-            (626_350, 0.35),
+            (17_700, 0.10),
+            (67_450, 0.12),
+            (105_700, 0.22),
+            (201_750, 0.24),
+            (256_200, 0.32),
+            (640_600, 0.35),
             (_INF, 0.37),
         ],
     },
 }
 _ADDITIONAL_STD_65: dict[FilingStatus, float] = {
-    "single": 2_000.0,
-    "married_joint": 1_600.0,
-    "married_separate": 1_600.0,
-    "head_of_household": 2_000.0,
+    "single": 2_050.0,
+    "married_joint": 1_650.0,
+    "married_separate": 1_650.0,
+    "head_of_household": 2_050.0,
 }
 _SENIOR_BONUS_PHASEOUT: dict[FilingStatus, tuple[float, float]] = {
     "single": (75_000.0, 0.06),
@@ -490,10 +497,10 @@ _SENIOR_BONUS_PHASEOUT: dict[FilingStatus, tuple[float, float]] = {
     "head_of_household": (75_000.0, 0.06),
 }
 _LTCG_BREAKPOINTS: dict[FilingStatus, tuple[float, float]] = {
-    "single": (48_350.0, 533_400.0),
-    "married_joint": (96_700.0, 600_050.0),
-    "married_separate": (48_350.0, 300_000.0),
-    "head_of_household": (64_750.0, 566_700.0),
+    "single": (49_450.0, 545_500.0),
+    "married_joint": (98_900.0, 613_700.0),
+    "married_separate": (49_450.0, 306_850.0),
+    "head_of_household": (66_200.0, 579_600.0),
 }
 _NIIT_THRESHOLD: dict[FilingStatus, float] = {
     "single": 200_000.0,

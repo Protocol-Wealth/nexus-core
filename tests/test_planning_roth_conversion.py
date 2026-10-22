@@ -25,7 +25,7 @@ def test_conversion_tax_is_the_incremental_ordinary_tax() -> None:
     assert out["conversionTax"] == round(expected, 2)
     assert out["effectiveConversionRate"] == round(expected / conversion, 4)
     assert out["taxTableYear"] == 2026
-    assert out["taxTableVersion"] == "federal-income-tax-reference-2026-illustrative-v1"
+    assert out["taxTableVersion"] == "federal-income-tax-reference-2026-v2"
     # A large conversion stacking on income should creep past one flat bracket.
     assert out["effectiveConversionRate"] > 0.0
 

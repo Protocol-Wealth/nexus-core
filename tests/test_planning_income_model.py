@@ -99,9 +99,10 @@ def test_full_deduction_case_unchanged() -> None:
         long_term_gains=30_000,
     )
     p = federal_picture(income, "single", bt, n_seniors=0, conversion_taxable=0.0)
-    # ordinary taxable = 120000 - 15000 std = 105000; 40k preferential stacks on
-    # top, all above the single 15% breakpoint (48,350) -> 15%.
-    assert p.ordinary_taxable == pytest.approx(105_000.0)
+    # 2026: ordinary taxable 103,900 = 120,000 - 16,100 single std; 40k preferential
+    # stacks on top (103,900 -> 143,900), all above the single 15% breakpoint
+    # (49,450) and below the 20% one (545,500) -> 15% = 6,000.
+    assert p.ordinary_taxable == pytest.approx(103_900.0)
     assert p.ltcg_tax == pytest.approx(40_000 * 0.15)
 
 
