@@ -25,8 +25,9 @@ WORKDIR /app
 # invalidate the dependency layer.
 #
 # Regenerate the lock after a dependency change in pyproject.toml:
-#   uv pip compile pyproject.toml --extra serve --generate-hashes \
-#     -o requirements-serve.lock
+#   uv pip compile pyproject.toml --extra serve --generate-hashes -U \
+#     --exclude-newer <date 3+ days ago> -o requirements-serve.lock
+# The cooldown keeps brand-new releases out of the image.
 COPY pyproject.toml README.md LICENSE NOTICE requirements-serve.lock ./
 COPY src/ ./src/
 RUN pip install --require-hashes --no-deps -r requirements-serve.lock \
