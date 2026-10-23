@@ -19,41 +19,26 @@ Adopters are responsible for adding their own PII controls, access control, inpu
 
 Provided as-is under Apache-2.0. Educational use only — nothing here is investment advice.
 
-As of the 2026-07-16 ET closeout, PR #264 is merged as commit `e5f4d84` and
-deployed on Cloud Run revision `nexus-core-00070-zhx`. The hosted production
-posture remains a public
-demo MCP surface plus authenticated REST/JSON calculation endpoints. Anonymous
-MCP clients can use the low-risk demo tool set; `/api/*` and the planning and
-accounting JSON gateways are service-key gated in production and should be
-called server-to-server by `pw-api`, not directly from browser apps.
-PWOS/PWPortal browser code should call their own BFF/API layer, which keeps
-Nexus keys out of clients.
+The code supports a public demo MCP profile and service-key-gated REST/JSON
+calculation endpoints. The deployed configuration is documented in
+[`DEPLOY.md`](DEPLOY.md); verify the live endpoints before relying on their
+current access posture. Browser apps should call their own BFF/API layer so
+Nexus service keys remain server-side.
 
-The hardened onchain-accounting substrate is deployed through
+The onchain-accounting substrate is exposed through
 `GET /api/accounting/tools` and `POST /api/accounting/tools/{tool_id}` with
 accounting contract `0.2.0`, with account-scoped FIFO, explicit
 transfer/fee/event treatment, bounded replay,
 calendar holding periods, exact total-basis conservation, method-pinned opening
 snapshots, replay-safe lineage, and structured completeness; see
-[the accounting contract guide](docs/ONCHAIN-ACCOUNTING.md). The contract change
-was released through PR #262. PR #264 also reuses the same handler
-registry and configured price historian to register `price_history`,
+[the accounting contract guide](docs/ONCHAIN-ACCOUNTING.md). The same handler
+registry and configured price historian register `price_history`,
 `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report` in the
-native MCP **full** profile (issue
-[#259](https://github.com/Protocol-Wealth/nexus-core/issues/259), now closed).
-The internal
-accounting `describe` handler is not duplicated; native discovery reports the
-four tools and contract `0.2.0` through the existing top-level `describe` tool.
-The hosted production service remains on the demo MCP profile, where accounting
-tools are intentionally absent. This is calculation substrate, not an end-to-end
-client statement or tax-return system.
-Technical issue [#260](https://github.com/Protocol-Wealth/nexus-core/issues/260)
-is complete. The private consumer epic
-[`pw-api#789`](https://github.com/Protocol-Wealth/pw-api/issues/789) tracks
-the private consumer and delivery implementation. The 2026-07-17 CCO/CIO/CTO
-decision approved methodology 2.0/FIFO for operational use, so bounded complete
-results can be statement-ready. Authenticated linkage, exact-artifact review,
-delivery, and retention remain private consumer responsibilities.
+native MCP **full** profile. The hosted demo profile excludes accounting tools.
+This is calculation substrate, not an end-to-end client statement or tax-return
+system. Authenticated linkage, exact-artifact review, delivery, and retention
+remain private consumer responsibilities. Release and methodology decisions are
+recorded in [`CHANGELOG.md`](CHANGELOG.md) and the accounting guide.
 
 The current options substrate includes the MBOUM equity option expiration/chain
 provider, batch collar screens, and a collar-book realistic-fill layer. The

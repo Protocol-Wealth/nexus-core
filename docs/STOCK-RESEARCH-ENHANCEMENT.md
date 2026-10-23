@@ -199,7 +199,7 @@ greeks supplied. So the correct move is to **genuinely generalize `vol_skew`/
 math in the engine) and add a put wing — **not** write new skew math at the route
 layer (which the boundaries forbid). Budget this as real engine work.
 
-### 4.3 Boundary compliance (all verified against `CLAUDE.md` hard-NOs)
+### 4.3 Boundary compliance (all verified against `AGENTS.md` hard-NOs)
 
 SPDX header on every new `.py`; sync handlers + sync `httpx`; **no new regime
 state** (regime is consumed, never extended; the 5-state model + thresholds are
