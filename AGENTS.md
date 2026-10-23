@@ -4,7 +4,19 @@ Engineering and regulatory standards for every agent are `~/projects/AGENTS.md`.
 Where this file conflicts with that one, that one wins. This file is only what
 is specific to this repository. It does not describe what is live.
 
-[`PROJECT.md`](PROJECT.md) is the operating contract for this repository.
+**This repository is public**, and so is its git history: deleting a file does not
+unpublish it. Keep client data, PII, account identifiers and firm-internal
+configuration out of code, tests, fixtures, commit messages, issues and pull
+requests. Keep production infrastructure identifiers out of docs and docstrings
+too: the GCP project ID, service-account emails, VPC and subnet names, the Cloud
+SQL instance, Secret Manager secret names and the `run.app` hostname. Use
+placeholders (#322 scrubbed these; history still holds them).
+
+**Merging does not publish.** `.github/workflows/publish-pypi.yml` runs only on
+`release: published` and `workflow_dispatch`. Pull-request CI never exercises
+it, so a change to it, including a bump of its SHA-pinned actions, is unverified
+until the next real release.
+
 Workflow and DCO live in [`CONTRIBUTING.md`](CONTRIBUTING.md). Public surface
 and install guidance live in [`README.md`](README.md). Deploy procedure lives
 in [`DEPLOY.md`](DEPLOY.md).
@@ -20,8 +32,7 @@ Operated by Protocol Wealth, LLC (SEC-registered RIA). Published to PyPI as
 Sibling: [`pwos-core`](https://github.com/Protocol-Wealth/pwos-core) — TypeScript
 compliance primitives. **Math + analytical engine lives here; data shapes +
 audit/compliance primitives live in pwos-core.** Do not port primitives across
-that boundary. Closed runtime + consumer repos (`pw-portal`, `pw-onchain`,
-`pw-infrastructure`, and others listed on the security page) stay closed: do
+that boundary. Private Protocol Wealth repositories stay closed: do
 not port code from those into here, or vice versa.
 
 ### Layout
@@ -56,11 +67,11 @@ license-compliance checks.
 
 `[dev]` is tooling only (pytest, ruff, mypy). Without `[serve]` there is no
 `fastmcp`, so `mypy --strict src/nexus_core/` cannot type-check the MCP server.
-Modular extras (`serve`, `mcp`, `optimization`, `risk`, `pricing`, `edgar`,
-`market`, `ai`, `backtest`, `all`) are documented in README § Installation.
+Modular extras are declared in `pyproject.toml` `[project.optional-dependencies]`
+and documented in README § Installation.
 
 ```bash
-nexus-core serve     # public HTTP API + MCP-over-HTTP at http://127.0.0.1:8080
+nexus-core serve     # public HTTP API + MCP-over-HTTP; binds 0.0.0.0:8080 by default
 nexus-core mcp       # MCP server over stdio (Claude Desktop / local clients)
 nexus-core snapshot  # daily benchmark snapshot (Cloud Run Job entrypoint)
 nexus-core --version
@@ -81,7 +92,7 @@ digests). Full optional-variable list is in README § Configuration.
 
 - **Regime signal** → `src/nexus_core/engine/regime/` (`signals.py` +
   `signal_fetcher.py`). **Scoring check** → `src/nexus_core/engine/scoring/`
-  (`checks.py` / `emf/`). Add tests under `tests/test_<name>.py`. If the change
+  (`checks.py` / `emf/`). Tests live under `tests/test_<name>.py`. If the change
   touches the engine contract, update [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
   in the same PR.
 - **HTTP route:** add or extend a `build_*_router(...)` factory under
@@ -167,7 +178,7 @@ Hard NOs. Each is enforced by review + tooling where possible.
   recommendations. Confidence tiers are probabilistic labels, never buy/sell/hold;
   never emit a tier on insufficient evaluated checks.
 - **EMF framework definitions are governed** (regime states, layer model,
-  thresholds, 8-check set, confidence tiers). Changing them is a partner/CCO
+  thresholds, 8-check set, confidence tiers). Changing them is an owner
   decision, not a routine edit — stop and ask.
 - **Do not change the calibrated threshold/decay/weight values casually.** These
   are Protocol Wealth's published EMF calibration (EMF is openly published — see
@@ -183,8 +194,6 @@ Hard NOs. Each is enforced by review + tooling where possible.
   Apache 2.0. Do not remove the patent-pending notice from `README.md`,
   `src/nexus_core/__init__.py`, or shields/badges. Do not author claims of a
   different IP posture in this repo.
-- **No `--no-verify` on commits.** No skipped hooks. No `--no-gpg-sign`. If a
-  hook fails, fix the root cause.
 - **No backwards-compat shims for hypothetical adopters.** This is a scaffold
   framework — adopters take it at the version they fork. Don't add deprecation
   paths or compat layers that aren't load-bearing for current production use.
@@ -221,16 +230,18 @@ Hard NOs. Each is enforced by review + tooling where possible.
 ## Deploy and CI
 
 - **CI** (`.github/workflows/ci.yml`): `pip install -e ".[dev,serve]"`, then
-  `ruff check src/ tests/`, `mypy --strict src/nexus_core/`, and pytest with an
-  80% coverage floor. SPDX headers: `.github/workflows/spdx-headers.yml`.
+  `ruff check src/ tests/`, `ruff format --check src/ tests/`,
+  `mypy --strict src/nexus_core/`, then
+  `pytest -q --cov=src/nexus_core --cov-fail-under=80` (plain `pytest` does not
+  enforce the coverage floor; run this form to reproduce the gate). SPDX headers: `.github/workflows/spdx-headers.yml`.
   License scan: `.github/workflows/license-compliance.yml`.
-- **Release and watch-outs:** [`PROJECT.md`](PROJECT.md) §4 and §8.
 - **Deploy:** [`DEPLOY.md`](DEPLOY.md) owns the Cloud Run web service, snapshot
   Job, and Scheduler procedure. The snapshot is a Cloud Run Job (`nexus-core
   snapshot`), not an HTTP route. Secrets live in Secret Manager — no credentials
   in config or code.
 - **Rate limit:** in-process limiter in `src/nexus_core/app/ratelimit.py`;
-  `/health` and `/mcp` are exempt.
+  `/health` and the MCP transport (`_is_transport_path`) are exempt;
+  `/mcp/tools/*` and `/mcp-guide` are not.
 - **Transparent MCP OAuth:** `src/nexus_core/app/mcp_oauth.py` is stateless and
   anonymous when `MCP_OAUTH_SIGNING_KEY` is set.
 
@@ -239,15 +250,6 @@ Report vulnerabilities privately to **security@protocolwealthllc.com** — see
 
 ## Things that have bitten
 
-- **DCO on GitHub's merge ref.** A CI checkout of a PR is `refs/pull/N/merge`.
-  Checking trailers on `HEAD` there is empty for every PR. Read the PR commits
-  via the GitHub API (see Conventions above). False findings: #296, #297, #302,
-  #303.
 - **`pip install -e ".[dev]"` is not the gate.** CI and a clean type-check need
   `pip install -e ".[dev,serve]"` so `fastmcp` is present.
-- **`invalid_token` on `POST /mcp` is the OAuth handshake starting**, not proof
-  the MCP surface is private. See Endpoint access.
-- **Code default `NEXUS_ACCESS_MODE=public` is not the hosted posture.**
-  Production runs `restricted`. Check the service.
-- Further watch-outs, including `NEXUS_API_KEYS` format, are in
-  [`PROJECT.md`](PROJECT.md) §8.
+
