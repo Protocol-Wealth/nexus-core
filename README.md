@@ -92,7 +92,7 @@ private ingestion.
 | `GET /api/usage` | Provider usage / quota report |
 | `POST /mcp` | Model Context Protocol over HTTP (FastMCP, also stdio). In full mode, `tools/list` = research tools + `health`/`describe`/`get_quotes` + 34 planning tools + four accounting tools; in demo mode, only closed-world demo tools are registered. All tools are read-only |
 | `GET /api/planning/tools` · `POST /api/planning/tools/{id}` | Planning JSON gateway (pw-api / pwplan-core contractVersion `0.1.0`, PII-free). Legacy `/mcp/tools` aliases remain for compatibility |
-| `GET /api/accounting/tools` · `POST /api/accounting/tools/{id}` | Restricted REST accounting gateway (deployed contractVersion `0.2.0` on Cloud Run revision `nexus-core-00070-zhx`): `describe`, `price_history`, `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report`. The deployed image registers the four calculation handlers (not the colliding internal `describe`) in native MCP full mode; hosted demo remains unchanged |
+| `GET /api/accounting/tools` · `POST /api/accounting/tools/{id}` | Restricted REST accounting gateway (contractVersion `0.2.0`; for the live revision run `gcloud run services describe nexus-core --region us-central1 --format='value(status.latestReadyRevisionName)'`): `describe`, `price_history`, `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report`. The deployed image registers the four calculation handlers (not the colliding internal `describe`) in native MCP full mode; hosted demo remains unchanged |
 
 ### Regime & Scoring
 
