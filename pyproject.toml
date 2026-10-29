@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pw-nexus-core"
-version = "1.0.2"
+version = "1.0.3"
 description = "Open source regime-adaptive financial analysis engine with MCP tool orchestration"
 readme = "README.md"
 requires-python = ">=3.12"

@@ -17,7 +17,7 @@ def test_distribution_identity_matches_runtime_version() -> None:
         project = tomllib.load(stream)["project"]
 
     assert project["name"] == "pw-nexus-core"
-    assert project["version"] == nexus_core.__version__ == "1.0.2"
+    assert project["version"] == nexus_core.__version__ == "1.0.3"
     assert project["scripts"]["nexus-core"] == "nexus_core.cli:main"
 
 

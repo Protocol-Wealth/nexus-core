@@ -284,7 +284,7 @@ different signal sources should still re-fit.)
 ### Full install (all capabilities)
 
 ```bash
-pip install "pw-nexus-core[all]==1.0.2"
+pip install "pw-nexus-core[all]==1.0.3"
 ```
 
 ### Modular installs (reduce dep footprint)
@@ -297,7 +297,7 @@ FinancePy) · `edgar` (edgartools, Arelle, sec-parser) · `market` (yfinance) ·
 alphalens). Omit the bracket entirely for core only (regime + scoring).
 
 ```bash
-pip install "pw-nexus-core[serve]==1.0.2"
+pip install "pw-nexus-core[serve]==1.0.3"
 ```
 
 ### From source
@@ -305,7 +305,7 @@ pip install "pw-nexus-core[serve]==1.0.2"
 Install the same reviewed tag directly from GitHub:
 
 ```bash
-pip install "pw-nexus-core[all] @ git+https://github.com/Protocol-Wealth/nexus-core.git@v1.0.2"
+pip install "pw-nexus-core[all] @ git+https://github.com/Protocol-Wealth/nexus-core.git@v1.0.3"
 ```
 
 ## Quick Start

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-10-29
+
+### PyPI distribution
+
+- Published `pw-nexus-core` version `1.0.3` from current `main`. It carries
+  every change below since `1.0.2`; the `nexus_core` import package and the
+  `nexus-core` CLI command are unchanged.
+
 ### Fixed
 
 - **2026-10-22:** The 2026 federal tax tables used by planning (brackets,
@@ -15,18 +23,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   table version `federal-income-tax-reference-2026-v2`, last verified
   2026-10-22. Roth-conversion, bracket-headroom, income-layering and cash-flow
   tax outputs change accordingly.
+- **2026-09-06:** Code blocks on the landing page and the MCP setup guide wrap
+  instead of clipping long commands (#311).
 
 ### Security
 
+- **2026-10-23:** The deployment lock `requirements-serve.lock` was
+  regenerated: `certifi` 2026.10.19 drops the eMudhra emSign ECC Root CA - G3,
+  and ten packages with published advisories moved to fixed releases inside
+  the ranges `pyproject.toml` declares (#324).
 - **2026-09-28:** Restricted REST/JSON mode now rejects short raw API keys,
   malformed SHA-256 digests, and an empty key list during app construction.
 
 ### Changed
 
+- **2026-10-23:** `README.md` describes the code rather than a dated deployment
+  snapshot (#325); `CURRENT-STATE.md` and `ROADMAP.md` were retired earlier
+  (#306).
+- **2026-09-28:** The source tree is normalized to `ruff format`, and CI gates
+  on `ruff format --check src/ tests/`.
 - **2026-09-21:** Repository agent instructions now live in `AGENTS.md`, and
   root `CLAUDE.md` was removed after its still-current facts moved.
+- Dependency ranges: `fastmcp>=3.4.4,<5`, `pandas>=2.2,<4.0`,
+  `numpy>=2.5.1`, `fastapi>=0.139.2`, `transformers>=5.14.1`,
+  `QuantLib>=1.43`, `arelle-release>=2.42.1`. Build requirements:
+  `setuptools==84.0.0`, `wheel==0.48.0`.
 
 ### Added
+
+- **OAuth `client_credentials` grant on the MCP transport (#309).** A CLI,
+  coding agent or scheduled job can exchange a configured client secret for
+  the same signed, audience-bound access token the `authorization_code` flow
+  issues, without a browser. Off by default: with `NEXUS_MCP_CLIENT_SECRETS`
+  unset the grant is neither advertised in the authorization-server metadata
+  nor accepted at the token endpoint. See `DEPLOY.md`.
 
 - **Typed response models across `/api/lp/*`.** The last of the five on-chain and
   market-data route modules to get them (wallet, chain, vaults, solana, lp); every
@@ -1497,4 +1527,5 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 - Initial public release of docs
 
+[1.0.3]: https://github.com/Protocol-Wealth/nexus-core/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/Protocol-Wealth/nexus-core/compare/v1.0.1...v1.0.2
