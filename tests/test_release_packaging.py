@@ -59,8 +59,11 @@ def test_publish_workflow_is_tag_bound_and_tokenless() -> None:
     assert "password:" not in workflow
     assert "release tag must match vX.Y.Z" in workflow
     assert "python -m build --no-isolation" in workflow
-    assert "setuptools==83.0.0" in workflow
-    assert "wheel==0.47.0" in workflow
+    # --no-isolation builds with the workflow's installed tooling and refuses
+    # to start unless it satisfies [build-system].requires exactly.
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    for requirement in pyproject["build-system"]["requires"]:
+        assert requirement in workflow, requirement
     assert workflow.count('test "${#artifacts[@]}" -eq 2') == 2
     assert "pw_nexus_core-${PACKAGE_VERSION}-py3-none-any.whl" in workflow
     assert 'pip install "${WHEEL}[serve]"' in workflow
