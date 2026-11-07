@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **2026-11-07:** `project_cash_flow` can force and tax required minimum
+  distributions. Pass `birthYear` together with `accountBalances`. From the
+  owner's SECURE 2.0 applicable age, each year's RMD is the traditional
+  bucket's prior-year-end balance divided by the IRS Uniform Lifetime Table
+  factor. It is withdrawn whether or not spending needs it, taxed as ordinary
+  income and counted toward spending first, and any after-tax excess is
+  reinvested in the taxable bucket. Rows add `requiredMinimumDistribution`,
+  `withdrawalsByAccount.traditional` includes it, and the aggregate adds
+  `lifetimeRequiredMinimumDistributions`. Without `birthYear`, the output is
+  unchanged.
+
 ## [1.0.3] - 2026-10-29
 
 ### PyPI distribution

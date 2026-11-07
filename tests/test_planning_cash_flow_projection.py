@@ -380,3 +380,91 @@ def test_determinism() -> None:
 def test_validation_errors(overrides: dict[str, Any], fragment: str) -> None:
     with pytest.raises(ValueError, match=fragment):
         _project(**overrides)
+
+
+# ── Forced required minimum distributions (opt-in via birth_year) ───────────
+# Uniform Lifetime Table (26 CFR 1.401(a)(9)-9(c)): age 74 → 25.5, 75 → 24.6,
+# 76 → 23.7. SECURE 2.0 applicable age: 73 for 1951–1959, 75 for 1960+.
+
+
+def _retiree(**overrides: Any) -> dict[str, Any]:
+    params: dict[str, Any] = {
+        "current_age": 75,
+        "retirement_age": 65,
+        "terminal_age": 76,
+        "current_income": 0.0,
+        "current_expenses": 60_000.0,
+        "current_portfolio": 1_500_000.0,
+        "account_balances": {"taxable": 500_000.0, "traditional": 1_000_000.0, "roth": 0.0},
+        "retirement_income": 80_000.0,  # covers spending before tax: no draw is needed
+        "expected_return": 0.0,
+        "expense_inflation_rate": 0.0,
+        "birth_year": 1951,
+    }
+    params.update(overrides)
+    return _project(**params)
+
+
+def test_rmd_is_forced_when_spending_needs_no_withdrawal() -> None:
+    row = _retiree()["years"][0]
+    rmd = round(1_000_000.0 / 24.6, 2)  # 40,650.41 at age 75
+    assert row["requiredMinimumDistribution"] == rmd
+    assert row["withdrawalsByAccount"]["traditional"] == rmd
+    assert row["accountBalances"]["traditional"] == round(1_000_000.0 - 1_000_000.0 / 24.6, 2)
+
+
+def test_rmd_is_ordinary_income_and_the_after_tax_excess_is_reinvested() -> None:
+    row = _retiree()["years"][0]
+    rmd = 1_000_000.0 / 24.6
+    tax = ordinary_tax(80_000.0 + rmd, "married_joint", year=2026)
+    assert row["taxes"] == round(tax, 2)
+    excess = 80_000.0 + rmd - tax - 60_000.0
+    assert row["accountBalances"]["taxable"] == round(500_000.0 + excess, 2)
+    assert row["netCashFlow"] == round(excess - rmd, 2)
+
+
+def test_next_year_rmd_uses_the_prior_year_end_traditional_balance() -> None:
+    years = _retiree(expected_return=0.05, account_returns=None)["years"]
+    end_75 = (1_000_000.0 - 1_000_000.0 / 24.6) * 1.05
+    assert years[1]["requiredMinimumDistribution"] == round(end_75 / 23.7, 2)
+
+
+def test_rmd_start_age_follows_birth_year() -> None:
+    # Age 74: a 1960 birth year starts at 75 (no RMD); 1955 starts at 73.
+    young = _retiree(current_age=74, terminal_age=75, birth_year=1960)["years"]
+    assert young[0]["requiredMinimumDistribution"] == 0.0
+    assert young[1]["requiredMinimumDistribution"] == round(1_000_000.0 / 24.6, 2)
+    older = _retiree(current_age=74, terminal_age=75, birth_year=1955)["years"]
+    assert older[0]["requiredMinimumDistribution"] == round(1_000_000.0 / 25.5, 2)
+
+
+def test_rmd_counts_toward_spending_before_the_waterfall() -> None:
+    # A $350k spend with no other income: the RMD funds part of it and the
+    # rest is drawn taxable-first; traditional is drawn by exactly the RMD.
+    row = _retiree(retirement_income=0.0, current_expenses=350_000.0)["years"][0]
+    rmd = round(1_000_000.0 / 24.6, 2)
+    assert row["withdrawalsByAccount"]["traditional"] == rmd
+    assert row["withdrawalsByAccount"]["taxable"] > 0.0
+    assert row["withdrawalsByAccount"]["roth"] == 0.0
+
+
+def test_lifetime_rmds_and_assumptions_are_reported() -> None:
+    out = _retiree()
+    total = sum(r["requiredMinimumDistribution"] for r in out["years"])
+    assert out["aggregate"]["lifetimeRequiredMinimumDistributions"] == pytest.approx(
+        total, abs=0.02
+    )
+    assert out["assumptions"]["rmdStartAge"] == 73
+    assert out["assumptions"]["rmdTable"] == "IRS Uniform Lifetime Table"
+
+
+def test_no_birth_year_leaves_the_projection_unchanged() -> None:
+    with_none = _retiree(birth_year=None)
+    assert "requiredMinimumDistribution" not in with_none["years"][0]
+    assert with_none["years"][0]["withdrawalsByAccount"]["traditional"] == 0.0
+    assert "rmdStartAge" not in with_none["assumptions"]
+
+
+def test_birth_year_requires_account_balances() -> None:
+    with pytest.raises(ValueError, match="requires account_balances"):
+        _project(birth_year=1951)
