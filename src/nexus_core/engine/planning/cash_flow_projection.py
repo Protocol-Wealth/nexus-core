@@ -36,16 +36,27 @@ Conventions (documented because they are load-bearing):
   conservative, matching the FIRE accumulator and the Monte-Carlo decumulator.
 * **Net worth.** ``portfolio − liabilities``; liabilities are held at their
   current value (amortization / scheduled payoff is a CFP refinement).
+* **Required minimum distributions (opt-in).** With ``account_balances`` and a
+  ``birth_year``, each year from the owner's SECURE 2.0 applicable age
+  (``tax.rmd_start_age``) the RMD — the traditional bucket's prior-year-end
+  balance divided by the IRS Uniform Lifetime Table factor for that age
+  (``tax.rmd_factor``) — is withdrawn from the traditional bucket at year-start
+  whether or not spending needs it. It is ordinary income, counts toward the
+  year's spending first, and any after-tax excess is reinvested in the taxable
+  bucket. The traditional bucket is one owner's IRAs and plans totaled; per
+  account RMDs (balance / factor) sum to the same figure for one owner. Spouse
+  owners of different ages, the Joint Life table and QCDs are not modeled.
 """
 
 from __future__ import annotations
 
 import math
+from datetime import date as _date
 from typing import Any
 
 from .healthcare import LongTermCareShock, ltc_shock_cost_by_age, ltc_shock_summary
 from .tables import reference_bracket_table
-from .tax import FilingStatus, ordinary_tax
+from .tax import FilingStatus, ordinary_tax, rmd_factor, rmd_start_age
 
 #: DoS / sanity bounds for the public, unauthenticated surface.
 _MIN_AGE = 0
@@ -245,6 +256,7 @@ def project_cash_flow(
     early_withdrawal_penalty_age: float = _DEFAULT_EARLY_WITHDRAWAL_PENALTY_AGE,
     early_withdrawal_penalty_rate: float = _DEFAULT_EARLY_WITHDRAWAL_PENALTY_RATE,
     ltc_shock: LongTermCareShock | None = None,
+    birth_year: int | None = None,
 ) -> dict[str, Any]:
     """Year-by-year cash-flow + net-worth projection with a lifetime tax rollup.
 
@@ -287,6 +299,11 @@ def project_cash_flow(
         ltc_shock: Optional long-term-care stress event. Annual cost is in
             current-year dollars and is inflated by the shock's healthcare-cost
             inflation rate into each active shock year.
+        birth_year: Optional owner birth YEAR (never a date of birth). With
+            ``account_balances``, forces and taxes RMDs from the traditional
+            bucket from the SECURE 2.0 applicable age on (see module notes).
+            Requires ``account_balances``. Omitted, no RMDs are modeled and
+            the output is unchanged.
 
     Returns:
         ``years`` (per-year rows), ``aggregate`` (lifetime totals, peak/ending
@@ -356,6 +373,16 @@ def project_cash_flow(
         raise ValueError("early_withdrawal_penalty_age must be in [0, 130]")
     if not 0 <= early_withdrawal_penalty_rate < 1:
         raise ValueError("early_withdrawal_penalty_rate must be in [0, 1)")
+    rmd_age: float | None = None
+    if birth_year is not None:
+        if account_balances is None:
+            raise ValueError("birth_year (RMDs) requires account_balances")
+        if isinstance(birth_year, bool) or not isinstance(birth_year, int):
+            raise ValueError("birth_year must be an integer or omitted")
+        age_year = base_year if base_year is not None else _date.today().year
+        if abs((age_year - birth_year) - current_age) > 1:
+            raise ValueError("birth_year does not agree with current_age")
+        rmd_age = float(rmd_start_age(birth_year))
 
     tax_table = reference_bracket_table(tax_year)
     num_years = terminal_age - current_age + 1
@@ -374,6 +401,7 @@ def project_cash_flow(
     lifetime_ltc_shock_cost = 0.0
     lifetime_savings = 0.0
     lifetime_withdrawals = 0.0
+    lifetime_rmds = 0.0
     peak_net_worth = portfolio - liabilities
     peak_net_worth_age = current_age
     depletion_age: int | None = None
@@ -389,12 +417,22 @@ def project_cash_flow(
         ltc_shock_expense = ltc_shock_cost_by_age(ltc_shock, age=age, current_age=current_age)
         expenses = base_expenses + ltc_shock_expense
 
+        rmd_amount = 0.0
+        if multi_account and rmd_age is not None and age >= rmd_age:
+            assert balances is not None
+            # Prior-year-end traditional balance / Uniform Lifetime factor,
+            # taken at year-start like every other withdrawal.
+            rmd_amount = min(balances["traditional"], balances["traditional"] / rmd_factor(age))
+            balances["traditional"] -= rmd_amount
+            lifetime_rmds += rmd_amount
+        taxed_base = base_ordinary + rmd_amount
+
         if multi_account:
             assert balances is not None
             desired_withdrawal, withdrawal, ordinary_tax_amount, penalty, withdrawal_allocation = (
                 _multi_account_withdrawal_and_tax(
                     balances=balances,
-                    base_ordinary=base_ordinary,
+                    base_ordinary=taxed_base,
                     expenses=expenses,
                     filing_status=filing_status,
                     tax_year=tax_year,
@@ -418,7 +456,8 @@ def project_cash_flow(
 
         if withdrawal <= 0.0:
             # Surplus (or exactly covered): save it; it compounds from next year.
-            net_cash_flow = base_ordinary - tax - expenses
+            # A forced RMD left over after tax and spending is reinvested here.
+            net_cash_flow = taxed_base - tax - expenses
             if multi_account:
                 assert balances is not None
                 balances = {
@@ -430,6 +469,9 @@ def project_cash_flow(
             else:
                 portfolio = portfolio * (1.0 + expected_return) + net_cash_flow
             lifetime_savings += net_cash_flow
+            # The portfolio's own net flow: the reinvested surplus less the RMD.
+            net_cash_flow -= rmd_amount
+            lifetime_withdrawals += rmd_amount
         else:
             # Deficit funded from the portfolio, capped at what is actually there.
             # Past depletion the desired withdrawal cannot be taken, so the tax is
@@ -462,15 +504,17 @@ def project_cash_flow(
                         base_ordinary + actual_withdrawal, filing_status, year=tax_year
                     )
                 portfolio = (available - actual_withdrawal) * (1.0 + expected_return)
-            net_cash_flow = -actual_withdrawal
-            lifetime_withdrawals += actual_withdrawal
+            net_cash_flow = -(actual_withdrawal + rmd_amount)
+            lifetime_withdrawals += actual_withdrawal + rmd_amount
 
         net_worth = portfolio - liabilities
         if net_worth > peak_net_worth:
             peak_net_worth = net_worth
             peak_net_worth_age = age
 
-        lifetime_income += base_ordinary
+        # Every taxed ordinary dollar, the forced RMD included, so the
+        # effective rate's denominator holds what its numerator taxed.
+        lifetime_income += base_ordinary + rmd_amount
         lifetime_expenses += expenses
         lifetime_ltc_shock_cost += ltc_shock_expense
         lifetime_taxes += tax
@@ -481,7 +525,7 @@ def project_cash_flow(
             "phase": "retirement" if retired else "accumulation",
             "earnedIncome": round(earned_income, 2),
             "retirementIncome": round(retire_income, 2),
-            "income": round(base_ordinary, 2),
+            "income": round(base_ordinary + rmd_amount, 2),
             "expenses": round(expenses, 2),
             "taxes": round(tax, 2),
             "netCashFlow": round(net_cash_flow, 2),
@@ -495,7 +539,11 @@ def project_cash_flow(
         if multi_account:
             assert balances is not None
             row["accountBalances"] = _round_account_map(balances)
-            row["withdrawalsByAccount"] = _round_account_map(withdrawal_allocation)
+            drawn = dict(withdrawal_allocation) or dict.fromkeys(_ACCOUNT_TYPES, 0.0)
+            drawn["traditional"] += rmd_amount
+            row["withdrawalsByAccount"] = _round_account_map(drawn)
+            if rmd_age is not None:
+                row["requiredMinimumDistribution"] = round(rmd_amount, 2)
             row["ordinaryTaxes"] = round(ordinary_tax_amount, 2)
             row["earlyWithdrawalPenalty"] = round(penalty, 2)
         rows.append(row)
@@ -529,6 +577,8 @@ def project_cash_flow(
         aggregate["startingAccountBalances"] = _round_account_map(starting_account_balances)
         aggregate["endingAccountBalances"] = _round_account_map(balances)
         aggregate["lifetimeEarlyWithdrawalPenalties"] = round(lifetime_penalties, 2)
+        if rmd_age is not None:
+            aggregate["lifetimeRequiredMinimumDistributions"] = round(lifetime_rmds, 2)
 
     effective_rate = lifetime_taxes / lifetime_income if lifetime_income > 0 else 0.0
     lifetime_tax = {
@@ -559,6 +609,9 @@ def project_cash_flow(
         assumptions["earlyWithdrawalPenaltyAccounts"] = sorted(_EARLY_WITHDRAWAL_PENALTY_ACCOUNTS)
         assumptions["earlyWithdrawalPenaltyAge"] = early_withdrawal_penalty_age
         assumptions["earlyWithdrawalPenaltyRate"] = early_withdrawal_penalty_rate
+        if rmd_age is not None:
+            assumptions["rmdStartAge"] = rmd_age
+            assumptions["rmdTable"] = "IRS Uniform Lifetime Table"
     if ltc_shock is not None:
         assumptions["ltcShock"] = ltc_shock_summary(
             ltc_shock, current_age=current_age, years=num_years

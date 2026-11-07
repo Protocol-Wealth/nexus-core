@@ -101,7 +101,12 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "For S8 waterfall mode, optionally pass `accountBalances` split across "
         "taxable/traditional/roth, optional `accountReturns`, and optional early "
         "withdrawal penalty settings; existing single-bucket callers are unchanged. "
-        "Identity-free (numbers + filing status only). Illustration only, not "
+        "Pass `birthYear` (a birth YEAR, never a date) together with "
+        "`accountBalances` to force and tax each year's required minimum "
+        "distribution from the traditional bucket (SECURE 2.0 start age; must agree "
+        "with `currentAge` in `baseYear` within one year). Without `birthYear` no "
+        "RMDs are modeled. "
+        "Identity-free (numbers, filing status and birth year only). Illustration only, not "
         "advice. JSON request object in `body`."
     ),
     "cashflow_planning_bridge": (
