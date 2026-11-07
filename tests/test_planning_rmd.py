@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 from nexus_core.engine.planning import rmd, rmd_start_age
-from nexus_core.engine.planning.tax import RMD_START_AGE_POLICY_VERSION
+from nexus_core.engine.planning.tax import RMD_START_AGE_POLICY_VERSION, rmd_factor
 
 
 def test_no_rmd_before_start_age() -> None:
@@ -61,10 +61,30 @@ def test_rmd_start_age_rejects_bad_birth_year(birth_year: object) -> None:
         rmd_start_age(birth_year)  # type: ignore[arg-type]
 
 
-def test_rmd_beyond_table_uses_last_factor() -> None:
+# Treas. Reg. §1.401(a)(9)-9(c) Uniform Lifetime Table (2022+).
+@pytest.mark.parametrize(
+    ("age", "factor"),
+    [
+        (70, 27.4),
+        (72, 27.4),
+        (73, 26.5),
+        (100, 6.4),
+        (101, 6.0),
+        (105, 4.6),
+        (110, 3.5),
+        (115, 2.9),
+        (120, 2.0),
+        (125, 2.0),
+    ],
+)
+def test_rmd_factor_follows_the_uniform_lifetime_table(age: int, factor: float) -> None:
+    assert rmd_factor(age) == factor
+
+
+def test_rmd_above_100_uses_its_own_row() -> None:
     out = rmd(age=105, balance=100_000.0)
-    assert out["distributionPeriod"] == 6.4  # age-100 factor, clamped
-    assert out["rmdAmount"] == round(100_000.0 / 6.4, 2)
+    assert out["distributionPeriod"] == 4.6
+    assert out["rmdAmount"] == round(100_000.0 / 4.6, 2)
 
 
 def test_zero_balance() -> None:

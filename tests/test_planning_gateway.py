@@ -947,6 +947,21 @@ def test_rmd_accepts_birth_year_policy() -> None:
     assert body["rmdAmount"] == 0.0
 
 
+@pytest.mark.parametrize("bad", ["Infinity", "-Infinity", "NaN"])
+def test_rmd_non_finite_birth_year_400(bad: str) -> None:
+    # Python's json accepts these tokens; a whole-number field must refuse
+    # them with a 400, not let int() raise OverflowError into a 500.
+    r = _client().post(
+        "/mcp/tools/rmd",
+        content='{"contractVersion": "0.1.0", "age": 73, "balance": 500000, "birthYear": '
+        + bad
+        + "}",
+        headers={"content-type": "application/json"},
+    )
+    assert r.status_code == 400
+    assert "birthYear" in r.text
+
+
 def test_rmd_negative_balance_400() -> None:
     r = _client().post(
         "/mcp/tools/rmd", json={"contractVersion": "0.1.0", "age": 73, "balance": -1}
