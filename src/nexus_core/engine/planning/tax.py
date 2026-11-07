@@ -68,8 +68,10 @@ RMD_START_AGE_POLICY_VERSION = "secure2.0-goodfaith-73-per-89FR58644"
 # "secure2.0-goodfaith-73-per-89FR58644".
 RmdStartAge = int | float
 
-#: IRS Uniform Lifetime Table factors (2022+), ages 73..100. Beyond ⇒ last value.
+#: IRS Uniform Lifetime Table (Treas. Reg. §1.401(a)(9)-9(c), 2022+), ages
+#: 72..120. Below 72 uses the age-72 row; 120 is the "120 and older" row.
 _RMD_FACTORS: dict[int, float] = {
+    72: 27.4,
     73: 26.5,
     74: 25.5,
     75: 24.6,
@@ -98,13 +100,37 @@ _RMD_FACTORS: dict[int, float] = {
     98: 7.3,
     99: 6.8,
     100: 6.4,
+    101: 6.0,
+    102: 5.6,
+    103: 5.2,
+    104: 4.9,
+    105: 4.6,
+    106: 4.3,
+    107: 4.1,
+    108: 3.9,
+    109: 3.7,
+    110: 3.5,
+    111: 3.4,
+    112: 3.3,
+    113: 3.1,
+    114: 3.0,
+    115: 2.9,
+    116: 2.8,
+    117: 2.7,
+    118: 2.5,
+    119: 2.3,
+    120: 2.0,
 }
+_RMD_TABLE_FIRST_AGE = 72
+_RMD_TABLE_LAST_AGE = 120
 
 
 def _rmd_factor(age: int) -> float:
-    if age <= _RMD_START_AGE:
-        return _RMD_FACTORS[_RMD_START_AGE]
-    return _RMD_FACTORS.get(age, _RMD_FACTORS[100])
+    if age <= _RMD_TABLE_FIRST_AGE:
+        return _RMD_FACTORS[_RMD_TABLE_FIRST_AGE]
+    if age >= _RMD_TABLE_LAST_AGE:
+        return _RMD_FACTORS[_RMD_TABLE_LAST_AGE]
+    return _RMD_FACTORS[age]
 
 
 #: Public alias — the SECURE 2.0 age at which RMDs begin.
@@ -138,7 +164,7 @@ def rmd_start_age(birth_year: int | None = None) -> RmdStartAge:
 
 
 def rmd_factor(age: int) -> float:
-    """IRS Uniform Lifetime Table distribution period for ``age`` (clamped to 73+)."""
+    """IRS Uniform Lifetime Table distribution period for ``age`` (rows 72..120; clamped at both ends)."""
     return _rmd_factor(age)
 
 

@@ -170,7 +170,12 @@ def _require(body: dict[str, Any], key: str) -> Any:
 
 def _as_int(body: dict[str, Any], key: str) -> int:
     value = _require(body, key)
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value != int(value):
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value != int(value)
+    ):
         raise PlanningInputError(f"field '{key}' must be a whole number; got {value!r}")
     return int(value)
 
@@ -179,7 +184,12 @@ def _optional_int(body: dict[str, Any], key: str) -> int | None:
     if key not in body or body[key] is None:
         return None
     value = body[key]
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value != int(value):
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value != int(value)
+    ):
         raise PlanningInputError(f"field '{key}' must be a whole number; got {value!r}")
     return int(value)
 

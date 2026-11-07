@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `lifetimeRequiredMinimumDistributions`. Without `birthYear`, the output is
   unchanged.
 
+### Fixed
+
+- The RMD Uniform Lifetime Table now runs from age 72 to 120, following Treas.
+  Reg. §1.401(a)(9)-9(c). Above 100 it previously reused the age-100 factor
+  (6.4), which understated RMDs. Age 72, and the earlier start ages, now use
+  the age-72 factor (27.4) instead of the age-73 one.
+- A whole-number planning field, required (such as `age` or `year`) or
+  optional (such as `birthYear`), sent as JSON `Infinity`, `-Infinity` or
+  `NaN` now returns 400 naming the field, instead of 500 or an unnamed error.
+
 ## [1.0.3] - 2026-10-29
 
 ### PyPI distribution
