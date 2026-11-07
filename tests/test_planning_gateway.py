@@ -1537,6 +1537,28 @@ def test_project_cash_flow_account_balances_gateway() -> None:
     assert body["assumptions"]["withdrawalOrder"] == ["taxable", "traditional", "roth"]
 
 
+def test_project_cash_flow_birth_year_forces_rmds_through_the_gateway() -> None:
+    payload = {
+        "contractVersion": "0.1.0",
+        "currentAge": 75,
+        "retirementAge": 65,
+        "terminalAge": 76,
+        "currentIncome": 0,
+        "currentExpenses": 60_000,
+        "retirementIncome": 80_000,
+        "filingStatus": "married_joint",
+        "accountBalances": {"taxable": 500_000, "traditional": 1_000_000, "roth": 0},
+        "accountReturns": {"taxable": 0.0, "traditional": 0.0, "roth": 0.0},
+        "birthYear": 1951,
+        "baseYear": 2026,
+    }
+    response = _call_gateway_tool("project_cash_flow", payload)
+    assert isinstance(response, JSONResponse)
+    body = _response_json(response)
+    assert body["years"][0]["requiredMinimumDistribution"] == round(1_000_000 / 24.6, 2)
+    assert body["assumptions"]["rmdStartAge"] == 73
+
+
 def test_project_cash_flow_bad_horizon_400() -> None:
     response = _call_gateway_tool(
         "project_cash_flow",

@@ -747,6 +747,7 @@ def project_cash_flow_tool(body: dict[str, Any]) -> dict[str, Any]:
                 body, "earlyWithdrawalPenaltyRate", 0.10
             ),
             ltc_shock=ltc_shock,
+            birth_year=_optional_int(body, "birthYear"),
         )
     except ValueError as exc:
         raise PlanningInputError(str(exc)) from exc
