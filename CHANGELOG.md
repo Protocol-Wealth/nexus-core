@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **2026-11-07:** `risk_based_guardrails` planning tool (the 35th). It gives
+  probability-of-success spending guardrails for one plan, over the same
+  in-process Monte Carlo decumulation engine and pinned seed as `solve_goal`, so
+  there's no second simulation. Pass optional `thresholds` {upper, target,
+  lower} (defaults 0.90/0.80/0.70) with a static-spending
+  `monte_carlo_decumulation` body. It returns:
+  - today's success and zone;
+  - the starting portfolio values at which success would reach the upper and
+    lower thresholds;
+  - the annual spend that returns the plan to the target today, and at each
+    trigger.
+
+  Advisor analysis; numbers and enums only.
+
 - **2026-11-07:** `project_cash_flow` can force and tax required minimum
   distributions. Pass `birthYear` together with `accountBalances`. From the
   owner's SECURE 2.0 applicable age, each year's RMD is the traditional

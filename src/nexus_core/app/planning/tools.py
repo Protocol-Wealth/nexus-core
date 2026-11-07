@@ -2901,6 +2901,148 @@ def _solve_goal_tool(
     return response
 
 
+# ── Risk-based guardrails (risk_based_guardrails) ────────────────────────────
+# Probability-of-success guardrails: where the household sits against an upper
+# and lower success threshold, the portfolio values that would cross each one,
+# and the annual spending change that returns the plan to its target success.
+# Every number comes from the SAME in-process decumulation engine and pinned
+# seed as solve_goal; no second simulation exists. Advisor analysis only.
+_GUARDRAIL_DEFAULTS = {"upper": 0.90, "target": 0.80, "lower": 0.70}
+
+
+def _guardrail_thresholds(body: dict[str, Any]) -> dict[str, float]:
+    raw = body.get("thresholds")
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise PlanningInputError("thresholds must be an object or null")
+    resolved: dict[str, float] = {}
+    for key, default in _GUARDRAIL_DEFAULTS.items():
+        value = raw.get(key, default)
+        if value is None:
+            value = default
+        resolved[key] = _finite_number(value, f"thresholds.{key}")
+    if not 0.0 < resolved["lower"] < resolved["target"] < resolved["upper"] <= 1.0:
+        raise PlanningInputError("thresholds must satisfy 0 < lower < target < upper <= 1")
+    return resolved
+
+
+def _guardrail_zone(success: float, thresholds: dict[str, float]) -> str:
+    if success > thresholds["upper"]:
+        return "above_upper"
+    if success < thresholds["lower"]:
+        return "below_lower"
+    return "within_band"
+
+
+def _spend_to_target(
+    ctx: _MonteCarloContext, *, initial_balance: float, target: float
+) -> dict[str, Any]:
+    """Solve the annual spend that hits ``target`` from ``initial_balance``."""
+    solve_paths = min(ctx.paths, _SOLVE_PATHS)
+    hi = initial_balance * 0.25 + _total_guaranteed_income(ctx.body)
+    result = solve_monotone(
+        evaluate=lambda x: _mc_success(
+            ctx,
+            initial_balance=initial_balance,
+            net_spend_by_year=_schedule_for(ctx, annual_spend=x),
+            paths=solve_paths,
+        ),
+        lo=0.0,
+        hi=max(hi, 1.0),
+        target=target,
+        direction="decreasing",
+    )
+    confirm = _mc_success(
+        ctx,
+        initial_balance=initial_balance,
+        net_spend_by_year=_schedule_for(ctx, annual_spend=result.solved_value),
+    )
+    spend = round(result.solved_value, 2)
+    return {
+        "feasible": result.feasible,
+        "annualSpend": spend,
+        "annualChange": round(spend - ctx.annual_spend, 2),
+        "achievedSuccess": round(confirm, 4),
+    }
+
+
+def _balance_at_threshold(ctx: _MonteCarloContext, *, threshold: float) -> dict[str, Any]:
+    """Solve the starting portfolio value at which success equals ``threshold``."""
+    solve_paths = min(ctx.paths, _SOLVE_PATHS)
+    lo, hi = _default_solve_bounds("initial_savings", ctx)
+    result = solve_monotone(
+        evaluate=lambda x: _mc_success(
+            ctx, initial_balance=x, net_spend_by_year=ctx.net_spend, paths=solve_paths
+        ),
+        lo=lo,
+        hi=hi,
+        target=threshold,
+        direction="increasing",
+    )
+    confirm = _mc_success(ctx, initial_balance=result.solved_value, net_spend_by_year=ctx.net_spend)
+    return {
+        "feasible": result.feasible,
+        "portfolioValue": round(result.solved_value, 2),
+        "achievedSuccess": round(confirm, 4),
+    }
+
+
+def _risk_based_guardrails_tool(
+    body: dict[str, Any], market: MarketDataProvider, regime_engine: RegimeEngine
+) -> dict[str, Any]:
+    """``risk_based_guardrails`` — probability-of-success guardrails for one plan.
+
+    Parses ``{ thresholds?: {upper, target, lower}, ...baseMonteCarloBody }``.
+    Returns today's success and zone, the portfolio values at which success
+    would reach the upper and lower thresholds (static spending), the annual
+    spend that returns the plan to ``target`` today, and the spend that would
+    return it to ``target`` if the portfolio reached each trigger. Numbers and
+    enums only; an illustration for the advisor, not advice.
+    """
+    if body.get("guardrails") is not None:
+        raise PlanningInputError(
+            "risk_based_guardrails models static spending; omit the Guyton-Klinger "
+            "'guardrails' rules (run monte_carlo_decumulation for those)"
+        )
+    thresholds = _guardrail_thresholds(body)
+    mc_body = {k: v for k, v in body.items() if k != "thresholds"}
+    mc_body.setdefault("seed", _SOLVE_SEED)
+    ctx = _prepare_monte_carlo(mc_body, market, regime_engine)
+
+    current = _run_monte_carlo(
+        ctx, initial_balance=ctx.initial_balance, net_spend_by_year=ctx.net_spend
+    )
+    success = round(float(current["successProbability"]), 4)
+    upper = _balance_at_threshold(ctx, threshold=thresholds["upper"])
+    lower = _balance_at_threshold(ctx, threshold=thresholds["lower"])
+    today = _spend_to_target(ctx, initial_balance=ctx.initial_balance, target=thresholds["target"])
+    at_upper = _spend_to_target(
+        ctx, initial_balance=upper["portfolioValue"], target=thresholds["target"]
+    )
+    at_lower = _spend_to_target(
+        ctx, initial_balance=lower["portfolioValue"], target=thresholds["target"]
+    )
+    return {
+        "method": "probability_of_success_guardrails",
+        "basis": "static_spend_schedule_same_seed_engine",
+        "thresholds": {k: round(v, 4) for k, v in thresholds.items()},
+        "portfolioValue": round(ctx.initial_balance, 2),
+        "annualSpend": round(ctx.annual_spend, 2),
+        "currentSuccess": success,
+        "currentSuccessConfidenceInterval": current["successProbabilityConfidenceInterval"],
+        "zone": _guardrail_zone(success, thresholds),
+        "triggers": {
+            "upper": {**upper, "spendingAtTarget": at_upper},
+            "lower": {**lower, "spendingAtTarget": at_lower},
+        },
+        "spendingAdjustment": {"targetSuccess": round(thresholds["target"], 4), **today},
+        "pathsSearch": min(ctx.paths, _SOLVE_PATHS),
+        "pathsConfirm": ctx.paths,
+        "seedUsed": ctx.seed,
+    }
+
+
 def _opt_num(body: dict[str, Any], key: str, default: float) -> float:
     if key not in body or body[key] is None:
         return default
@@ -3074,6 +3216,9 @@ def build_tool_handlers(
     def solve_goal_tool(body: dict[str, Any]) -> dict[str, Any]:
         return _solve_goal_tool(body, market, regime_engine)
 
+    def risk_based_guardrails_tool(body: dict[str, Any]) -> dict[str, Any]:
+        return _risk_based_guardrails_tool(body, market, regime_engine)
+
     def regime_conditioned_swr_tool(body: dict[str, Any]) -> dict[str, Any]:
         return _regime_conditioned_swr_tool(body, regime_engine)
 
@@ -3089,6 +3234,7 @@ def build_tool_handlers(
     return {
         "monte_carlo_decumulation": monte_carlo_decumulation_tool,
         "solve_goal": solve_goal_tool,
+        "risk_based_guardrails": risk_based_guardrails_tool,
         "analyze_goals": analyze_goals_tool,
         "project_cash_flow": project_cash_flow_tool,
         "cashflow_planning_bridge": cashflow_planning_bridge_tool,
