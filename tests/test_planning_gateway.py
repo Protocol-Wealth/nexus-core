@@ -962,6 +962,41 @@ def test_rmd_non_finite_birth_year_400(bad: str) -> None:
     assert "birthYear" in r.text
 
 
+@pytest.mark.parametrize("bad", ["Infinity", "-Infinity", "NaN"])
+def test_rmd_non_finite_required_age_400(bad: str) -> None:
+    # A required whole-number field must refuse non-finite JSON tokens with a
+    # 400 naming the field, not an OverflowError 500 or an unnamed message.
+    r = _client().post(
+        "/mcp/tools/rmd",
+        content='{"contractVersion": "0.1.0", "age": ' + bad + ', "balance": 500000}',
+        headers={"content-type": "application/json"},
+    )
+    assert r.status_code == 400
+    assert "age" in r.text
+
+
+@pytest.mark.parametrize(("field", "bad"), [("year", "Infinity"), ("age", "NaN")])
+def test_tax_aware_withdrawal_non_finite_whole_number_400(field: str, bad: str) -> None:
+    body = {
+        "contractVersion": "0.1.0",
+        "year": 2026,
+        "filingStatus": "married_joint",
+        "accounts": [{"type": "taxable", "balance": 200000, "allocation": {"us_equity": 1.0}}],
+        "grossNeed": 120000,
+        "age": 65,
+        "otherTaxableIncome": 0,
+    }
+    raw = json.dumps(body).replace(f'"{field}": {body[field]}', f'"{field}": {bad}')
+    assert bad in raw
+    r = _client().post(
+        "/mcp/tools/tax_aware_withdrawal",
+        content=raw,
+        headers={"content-type": "application/json"},
+    )
+    assert r.status_code == 400
+    assert field in r.text
+
+
 def test_rmd_negative_balance_400() -> None:
     r = _client().post(
         "/mcp/tools/rmd", json={"contractVersion": "0.1.0", "age": 73, "balance": -1}
