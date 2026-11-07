@@ -51,6 +51,7 @@ Conventions (documented because they are load-bearing):
 from __future__ import annotations
 
 import math
+from datetime import date as _date
 from typing import Any
 
 from .healthcare import LongTermCareShock, ltc_shock_cost_by_age, ltc_shock_summary
@@ -376,6 +377,11 @@ def project_cash_flow(
     if birth_year is not None:
         if account_balances is None:
             raise ValueError("birth_year (RMDs) requires account_balances")
+        if isinstance(birth_year, bool) or not isinstance(birth_year, int):
+            raise ValueError("birth_year must be an integer or omitted")
+        age_year = base_year if base_year is not None else _date.today().year
+        if abs((age_year - birth_year) - current_age) > 1:
+            raise ValueError("birth_year does not agree with current_age")
         rmd_age = float(rmd_start_age(birth_year))
 
     tax_table = reference_bracket_table(tax_year)
@@ -506,7 +512,9 @@ def project_cash_flow(
             peak_net_worth = net_worth
             peak_net_worth_age = age
 
-        lifetime_income += base_ordinary
+        # Every taxed ordinary dollar, the forced RMD included, so the
+        # effective rate's denominator holds what its numerator taxed.
+        lifetime_income += base_ordinary + rmd_amount
         lifetime_expenses += expenses
         lifetime_ltc_shock_cost += ltc_shock_expense
         lifetime_taxes += tax
@@ -517,7 +525,7 @@ def project_cash_flow(
             "phase": "retirement" if retired else "accumulation",
             "earnedIncome": round(earned_income, 2),
             "retirementIncome": round(retire_income, 2),
-            "income": round(base_ordinary, 2),
+            "income": round(base_ordinary + rmd_amount, 2),
             "expenses": round(expenses, 2),
             "taxes": round(tax, 2),
             "netCashFlow": round(net_cash_flow, 2),

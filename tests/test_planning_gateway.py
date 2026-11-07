@@ -1550,6 +1550,7 @@ def test_project_cash_flow_birth_year_forces_rmds_through_the_gateway() -> None:
         "accountBalances": {"taxable": 500_000, "traditional": 1_000_000, "roth": 0},
         "accountReturns": {"taxable": 0.0, "traditional": 0.0, "roth": 0.0},
         "birthYear": 1951,
+        "baseYear": 2026,
     }
     response = _call_gateway_tool("project_cash_flow", payload)
     assert isinstance(response, JSONResponse)

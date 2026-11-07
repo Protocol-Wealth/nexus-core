@@ -400,6 +400,7 @@ def _retiree(**overrides: Any) -> dict[str, Any]:
         "expected_return": 0.0,
         "expense_inflation_rate": 0.0,
         "birth_year": 1951,
+        "base_year": 2026,  # born 1951, age 75 in 2026
     }
     params.update(overrides)
     return _project(**params)
@@ -431,10 +432,10 @@ def test_next_year_rmd_uses_the_prior_year_end_traditional_balance() -> None:
 
 def test_rmd_start_age_follows_birth_year() -> None:
     # Age 74: a 1960 birth year starts at 75 (no RMD); 1955 starts at 73.
-    young = _retiree(current_age=74, terminal_age=75, birth_year=1960)["years"]
+    young = _retiree(current_age=74, terminal_age=75, birth_year=1960, base_year=2034)["years"]
     assert young[0]["requiredMinimumDistribution"] == 0.0
     assert young[1]["requiredMinimumDistribution"] == round(1_000_000.0 / 24.6, 2)
-    older = _retiree(current_age=74, terminal_age=75, birth_year=1955)["years"]
+    older = _retiree(current_age=74, terminal_age=75, birth_year=1955, base_year=2029)["years"]
     assert older[0]["requiredMinimumDistribution"] == round(1_000_000.0 / 25.5, 2)
 
 
@@ -468,3 +469,48 @@ def test_no_birth_year_leaves_the_projection_unchanged() -> None:
 def test_birth_year_requires_account_balances() -> None:
     with pytest.raises(ValueError, match="requires account_balances"):
         _project(birth_year=1951)
+
+
+def test_rmd_counts_in_income_so_the_effective_rate_stays_below_one() -> None:
+    # Review finding 1 (a513f9e): age 80, born 1951, MFJ, $15k other income,
+    # $3M traditional. The RMD (3,000,000 / 20.2 at age 80) is taxed, so it
+    # must also be in the income the effective rate divides by.
+    out = _retiree(
+        current_age=80,
+        terminal_age=81,
+        base_year=2031,
+        retirement_income=15_000.0,
+        current_expenses=10_000.0,
+        account_balances={"taxable": 0.0, "traditional": 3_000_000.0, "roth": 0.0},
+        current_portfolio=3_000_000.0,
+    )
+    row = out["years"][0]
+    rmd = round(3_000_000.0 / 20.2, 2)
+    assert row["requiredMinimumDistribution"] == rmd
+    assert row["income"] == round(15_000.0 + 3_000_000.0 / 20.2, 2)
+    assert 0.0 < out["lifetimeTax"]["effectiveRate"] < 1.0
+    assert out["lifetimeTax"]["totalIncome"] == pytest.approx(
+        sum(r["income"] for r in out["years"]), abs=0.02
+    )
+
+
+def test_birth_year_must_agree_with_current_age() -> None:
+    # Review finding 2: born 1951 is 75 in 2026, not 70.
+    with pytest.raises(ValueError, match="does not agree with current_age"):
+        _retiree(current_age=70, terminal_age=71, base_year=2026)
+    assert _retiree(current_age=75, terminal_age=76, base_year=2026)["years"]
+
+
+def test_deficit_year_with_an_rmd_moves_cash_flow_and_balances_by_both() -> None:
+    # Review finding 5: a deficit year where the RMD funds part of the spend.
+    out = _retiree(retirement_income=0.0, current_expenses=350_000.0)
+    row = out["years"][0]
+    rmd = row["requiredMinimumDistribution"]
+    drawn = row["withdrawalsByAccount"]  # traditional already includes the RMD
+    total = drawn["taxable"] + drawn["traditional"] + drawn["roth"]
+    assert rmd > 0.0 and total > rmd
+    assert row["netCashFlow"] == pytest.approx(-total, abs=0.02)
+    assert row["portfolioBalance"] == pytest.approx(1_500_000.0 - total, abs=0.02)
+    assert out["aggregate"]["lifetimeWithdrawals"] == pytest.approx(
+        sum(sum(r["withdrawalsByAccount"].values()) for r in out["years"]), abs=0.05
+    )
