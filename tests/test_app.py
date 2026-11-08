@@ -97,6 +97,7 @@ def test_mcp_guide_documents_pwplan_core_integration() -> None:
     for tool_id in (
         "monte_carlo_decumulation",
         "solve_goal",
+        "risk_based_guardrails",
         "analyze_goals",
         "project_cash_flow",
         "cashflow_planning_bridge",
