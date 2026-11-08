@@ -240,9 +240,18 @@ Hard NOs. Each is enforced by review + tooling where possible.
   `mypy --strict src/nexus_core/`, then
   `pytest -q --cov=src/nexus_core --cov-fail-under=80` (plain `pytest` does not
   enforce the coverage floor; run this form to reproduce the gate). SPDX headers: `.github/workflows/spdx-headers.yml`.
-  License scan: `.github/workflows/license-compliance.yml`.
-- **Deploy:** [`DEPLOY.md`](DEPLOY.md) owns the Cloud Run web service, snapshot
-  Job, and Scheduler procedure. The snapshot is a Cloud Run Job (`nexus-core
+  License scan: `.github/workflows/license-compliance.yml`. `ci.yml` is also
+  callable (`workflow_call`): `deploy.yml` runs it as its pre-deploy gate.
+- **Deploy:** a merge to `main` deploys the web service
+  (`.github/workflows/deploy.yml`):
+  - it runs the CI gate and skips a stale commit;
+  - it changes only the image, as a canary: no traffic, then `/health` on the
+    tag URL, then 100% of traffic;
+  - it runs as `nexus-core-deployer` through WIF.
+
+  Agents never deploy by hand. `gcloud run deploy --source` is an emergency
+  path only. [`DEPLOY.md`](DEPLOY.md) owns the procedure, including the
+  snapshot Job, which is still deployed by hand, and the Scheduler. The snapshot is a Cloud Run Job (`nexus-core
   snapshot`), not an HTTP route. Secrets live in Secret Manager — no credentials
   in config or code.
 - **Rate limit:** in-process limiter in `src/nexus_core/app/ratelimit.py`;
