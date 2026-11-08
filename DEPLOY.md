@@ -324,10 +324,28 @@ origin behind a Cloud Run managed TLS certificate.
 
 ### Redeploy
 
-Re-run the `gcloud run deploy nexus-core` command from step 3 (and
-`gcloud run jobs deploy nexus-snapshot-job` from step 4 if job code changed) — each
-builds and rolls out a new revision with zero-downtime traffic migration. The
-Cloud Scheduler job persists across redeploys.
+**The web service deploys itself on every merge to `main`**
+([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)). The workflow:
+
+1. runs `ci.yml` as the gate;
+2. skips if the commit is no longer the head of `main`;
+3. builds the image and pushes it to `cloud-run-source-deploy/nexus-core:<sha>`;
+4. creates a revision with **no traffic** and a `sha-<short>` tag, then checks
+   `/health` on the tag URL;
+5. moves 100% of traffic to the new revision and confirms that the serving
+   revision runs that image.
+
+Only the image changes; env vars, secrets, VPC and Cloud SQL settings stay as
+they are on the service. A failed smoke check leaves the current revision
+serving. Moving traffic to 100% also clears any manual traffic split. A manual
+run (`workflow_dispatch` with the confirm box) redeploys the head of `main`.
+
+The `gcloud run deploy nexus-core --source .` command from step 3 is for
+emergencies only. The next merge to `main` replaces whatever it deployed.
+
+`nexus-snapshot-job` is **not** covered by the workflow. Redeploy it by hand
+with `gcloud run jobs deploy nexus-snapshot-job` from step 4 when job code
+changes. The Cloud Scheduler job persists across redeploys.
 
 ## Notes
 
