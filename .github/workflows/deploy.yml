@@ -1,0 +1,143 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Protocol Wealth, LLC and contributors.
+name: Deploy
+
+# Continuous deployment: every merge to main ships the nexus-core Cloud Run
+# service, the way pw-api, pw-os-v2 and pw-portal-v2 do. Before this, the
+# service was deployed by hand (`gcloud run deploy --source`), so a merged
+# engine fix stayed out of production until someone ran that command.
+#
+# No path filter: the image COPYs README.md, LICENSE and NOTICE as well as src/,
+# so a markdown-only change can still change the image.
+#
+# The deploy changes the IMAGE ONLY (`gcloud run services update --image`).
+# Every env var, secret reference, VPC, Cloud SQL and scaling setting already
+# on the service is kept as it is; this workflow never sets them.
+#
+# Identity: nexus-core-deployer@pwllc-shared (pw-infrastructure,
+# terraform/app-deployers/nexus-core-deployer.tf), reachable only from
+# refs/heads/main of this repository through the GitHub WIF provider.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      confirm_production_deploy:
+        description: "I confirm this run should deploy nexus-core to production."
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write # Workload Identity Federation
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: pwllc-prod
+  REGION: us-central1
+  SERVICE: nexus-core
+  # The repository the live revision already pulls from (created by
+  # `gcloud run deploy --source`, imported in pw-infrastructure bootstrap).
+  IMAGE_REPO: us-central1-docker.pkg.dev/pwllc-prod/cloud-run-source-deploy/nexus-core
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  test:
+    name: Pre-deploy gate (ruff + mypy + pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install (deployed surface + dev tools)
+        run: pip install -e ".[dev,serve]"
+      - name: Lint (ruff)
+        run: ruff check src/ tests/
+      - name: Format (ruff)
+        run: ruff format --check src/ tests/
+      - name: Type-check (mypy --strict)
+        run: mypy --strict src/nexus_core/
+      - name: Tests + coverage gate
+        run: pytest -q --cov=src/nexus_core --cov-report=term-missing --cov-fail-under=80
+
+  deploy:
+    name: Build image + deploy to Cloud Run
+    runs-on: ubuntu-latest
+    needs: test
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      ( github.event_name == 'push' ||
+        (github.event_name == 'workflow_dispatch' && inputs.confirm_production_deploy == true) )
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: projects/849960870306/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: nexus-core-deployer@pwllc-shared.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        run: |
+          set -euo pipefail
+          IMAGE="${IMAGE_REPO}:${IMAGE_TAG}"
+          docker build --tag "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy to Cloud Run (image only)
+        run: |
+          set -euo pipefail
+          gcloud run services update "$SERVICE" \
+            --region="$REGION" \
+            --project="$PROJECT_ID" \
+            --image="$IMAGE" \
+            --quiet
+          REVISION=$(gcloud run services describe "$SERVICE" \
+            --region="$REGION" --project="$PROJECT_ID" \
+            --format='value(status.latestReadyRevisionName)')
+          SERVING_IMAGE=$(gcloud run revisions describe "$REVISION" \
+            --region="$REGION" --project="$PROJECT_ID" \
+            --format='value(spec.containers[0].image)')
+          URL=$(gcloud run services describe "$SERVICE" \
+            --region="$REGION" --project="$PROJECT_ID" \
+            --format='value(status.url)')
+          if [ -z "$REVISION" ] || [ -z "$URL" ]; then
+            echo "::error::Could not read the deployed revision or service URL."
+            exit 1
+          fi
+          # The ready revision must run THIS build's image, not a previous one.
+          # Cloud Run keeps the image reference exactly as passed (the tag).
+          if [ "$SERVING_IMAGE" != "$IMAGE" ]; then
+            echo "::error::Ready revision $REVISION serves $SERVING_IMAGE, not $IMAGE."
+            exit 1
+          fi
+          echo "Ready revision: $REVISION ($SERVING_IMAGE)"
+          echo "SERVICE_URL=$URL" >> "$GITHUB_ENV"
+
+      - name: Smoke check /health
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "${SERVICE_URL}/health" || true)
+            if [ "$CODE" = "200" ]; then
+              echo "/health returned 200"
+              exit 0
+            fi
+            echo "attempt $attempt: /health returned ${CODE:-no response}; retrying"
+            sleep 10
+          done
+          echo "::error::/health never returned 200 after the deploy."
+          exit 1
