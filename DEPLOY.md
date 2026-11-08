@@ -90,7 +90,7 @@ runs without any of them, degrading each integration gracefully to
 | Variable | Effect | Secret |
 |----------|--------|--------|
 | `FRED_API_KEY` | Enables `/api/economic/*` and macro precision for `/api/regime` | yes |
-| `MBOUM_API_KEY` | Adds MBOUM as a market-data fallback | yes |
+| `MBOUM_API_KEY` | Adds MBOUM as a market-data fallback and enables the equity option chain routes. Optional; the commands below do not set it | yes |
 | `MARKETSTACK_API_KEY` | Adds MarketStack as a market-data fallback | yes |
 | `COINGECKO_API_KEY` | Raises CoinGecko limits; powers benchmarks (works keyless too) | yes |
 | `EIA_API_KEY` | EIA energy data for regime inputs | yes |
@@ -154,7 +154,6 @@ reads them via `--set-secrets`. Create each once:
 
 ```bash
 printf '%s' "YOUR_FRED_KEY"        | gcloud secrets create nexus-fred-api-key --data-file=-
-printf '%s' "YOUR_MBOUM_KEY"       | gcloud secrets create nexus-mboum-api-key --data-file=-
 printf '%s' "YOUR_MARKETSTACK_KEY" | gcloud secrets create nexus-marketstack-api-key --data-file=-
 printf '%s' "YOUR_COINGECKO_KEY"   | gcloud secrets create nexus-coingecko-api-key --data-file=-
 printf '%s' "YOUR_EIA_KEY"         | gcloud secrets create nexus-eia-api-key --data-file=-
@@ -196,7 +195,6 @@ gcloud run deploy nexus-core \
   --add-cloudsql-instances <PROJECT_ID>:us-central1:<SQL_INSTANCE> \
   --set-env-vars "NEXUS_PUBLIC_MCP_PROFILE=demo,NEXUS_ACCESS_MODE=restricted" \
   --set-secrets "FRED_API_KEY=nexus-fred-api-key:latest,\
-MBOUM_API_KEY=nexus-mboum-api-key:latest,\
 MARKETSTACK_API_KEY=nexus-marketstack-api-key:latest,\
 COINGECKO_API_KEY=nexus-coingecko-api-key:latest,\
 EIA_API_KEY=nexus-eia-api-key:latest,\
@@ -271,7 +269,6 @@ gcloud run jobs deploy nexus-snapshot-job \
   --set-secrets "DATABASE_URL=<DATABASE_URL_SECRET>:latest,\
 COINGECKO_API_KEY=nexus-coingecko-api-key:latest,\
 FRED_API_KEY=nexus-fred-api-key:latest,\
-MBOUM_API_KEY=nexus-mboum-api-key:latest,\
 MARKETSTACK_API_KEY=nexus-marketstack-api-key:latest"
 ```
 
@@ -284,8 +281,8 @@ MARKETSTACK_API_KEY=nexus-marketstack-api-key:latest"
 > observation, fed back as the next day's `prior_regime` through the anchor hysteresis, and
 > becomes the permanent record every accuracy and calibration measure is derived from.
 > `run_regime_snapshot` therefore refuses to write when the macro provider is unconfigured
-> and exits non-zero so the scheduler retries. MBOUM/MARKETSTACK are the market-data
-> fallbacks behind the keyless yfinance primary (gold/SPX, VIX).
+> and exits non-zero so the scheduler retries. MARKETSTACK is the market-data
+> fallback behind the keyless yfinance primary (gold/SPX, VIX).
 
 Run it manually to verify:
 
