@@ -112,7 +112,15 @@ jobs:
           IMAGE="${IMAGE_REPO}:${IMAGE_TAG}"
           docker build --tag "$IMAGE" .
           docker push "$IMAGE"
-          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          # Cloud Run records a revision's image by digest, so compare digests.
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE")
+          DIGEST="${DIGEST##*@}"
+          if [ -z "$DIGEST" ]; then
+            echo "::error::Could not read the pushed image's digest."
+            exit 1
+          fi
+          echo "IMAGE=${IMAGE_REPO}@${DIGEST}" >> "$GITHUB_ENV"
+          echo "IMAGE_DIGEST=$DIGEST" >> "$GITHUB_ENV"
           echo "CANARY_TAG=sha-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 
       - name: Create the new revision with no traffic
@@ -137,7 +145,8 @@ jobs:
           REV_IMAGE=$(gcloud run revisions describe "$REVISION" \
             --region="$REGION" --project="$PROJECT_ID" \
             --format='value(spec.containers[0].image)')
-          if [ "$REV_IMAGE" != "$IMAGE" ]; then
+          _REPO="${REV_IMAGE%@*}"; _REPO="${_REPO%:*}"
+          if [ "$_REPO" != "$IMAGE_REPO" ] || [ "${REV_IMAGE##*@}" != "$IMAGE_DIGEST" ]; then
             echo "::error::Tagged revision $REVISION runs $REV_IMAGE, not $IMAGE."
             exit 1
           fi
@@ -182,7 +191,8 @@ jobs:
           SERVING_IMAGE=$(gcloud run revisions describe "$SERVING" \
             --region="$REGION" --project="$PROJECT_ID" \
             --format='value(spec.containers[0].image)')
-          if [ "$SERVING_IMAGE" != "$IMAGE" ]; then
+          _REPO="${SERVING_IMAGE%@*}"; _REPO="${_REPO%:*}"
+          if [ "$_REPO" != "$IMAGE_REPO" ] || [ "${SERVING_IMAGE##*@}" != "$IMAGE_DIGEST" ]; then
             echo "::error::Serving revision $SERVING runs $SERVING_IMAGE, not $IMAGE."
             exit 1
           fi
