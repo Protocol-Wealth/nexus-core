@@ -134,3 +134,150 @@ def test_g5_refuses_bad_thresholds_and_gk_rules() -> None:
 
 def test_g6_deterministic() -> None:
     assert _guardrails() == _guardrails()
+
+
+# ── Review of ccdd246 (accepted findings 1-4) ────────────────────────────────
+# Cases, stated first:
+#  F1a the reviewer's short-horizon case (age 92→95, $1M, $100k spend) solves the
+#      real target spend above the old 25%-draw ceiling, never 250k "feasible".
+#  F1b a 3-year known answer: the target spend is the annuity $500k buys over 3
+#      years at 5% (about 174k), above the old ceiling.
+#  F1c when the target is still met at the final ceiling, the answer is boundHit
+#      and NOT feasible.
+#  F2  paths above the tool cap, or an over-budget body, are refused with a
+#      too_expensive 400; paths default to the cap when omitted.
+#  F3  upper >= 1.0 and unknown threshold keys are refused, naming the key.
+#  F4  an ltcShock and goals are echoed (ltcShockImpact, goalFunding) and named
+#      in basis / inputsApplied; a plain body names nothing.
+
+
+def _short_horizon(**overrides: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "contractVersion": "0.1.0",
+        "currentAge": 92,
+        "retirementAge": 92,
+        "horizonAge": 95,
+        "accounts": [
+            {
+                "type": "taxable",
+                "balance": 1_000_000,
+                "allocation": {"us_equity": 0.6, "us_bonds": 0.4},
+            }
+        ],
+        "assetClasses": _BASE["assetClasses"],
+        "correlations": _BASE["correlations"],
+        "annualSpend": 100_000,
+        "spendColaRate": 0.0,
+        "guaranteedIncome": [],
+        "returnModel": "multivariate_normal",
+        "paths": 800,
+    }
+    body.update(overrides)
+    return body
+
+
+def test_f1a_short_horizon_finds_the_real_spend() -> None:
+    r = _post("risk_based_guardrails", _short_horizon())
+    assert r.status_code == 200, r.text
+    adj = r.json()["spendingAdjustment"]
+    assert adj["boundHit"] is False
+    assert adj["feasible"] is True
+    assert adj["annualSpend"] > 300_000
+    assert abs(adj["achievedSuccess"] - 0.8) <= 0.05
+
+
+def test_f1b_three_year_known_answer() -> None:
+    pv = sum(100_000 / 1.05**t for t in range(3))
+    body = {
+        "contractVersion": "0.1.0",
+        "currentAge": 70,
+        "retirementAge": 70,
+        "horizonAge": 73,
+        "accounts": [{"type": "taxable", "balance": 500_000, "allocation": {"cash": 1.0}}],
+        "assetClasses": [{"id": "cash", "expectedReturn": 0.05, "volatility": 1e-9, "lambda": 0.0}],
+        "correlations": {},
+        "annualSpend": 100_000,
+        "spendColaRate": 0.0,
+        "guaranteedIncome": [],
+        "returnModel": "multivariate_normal",
+        "paths": 200,
+    }
+    r = _post("risk_based_guardrails", body)
+    assert r.status_code == 200, r.text
+    annuity = 500_000 / (pv / 100_000)
+    spend = r.json()["spendingAdjustment"]["annualSpend"]
+    assert annuity > 125_000  # above the old 25%-draw ceiling
+    assert abs(spend - annuity) / annuity < 0.005, (spend, annuity)
+
+
+def test_f1c_bound_hit_is_not_feasible(monkeypatch: Any) -> None:
+    from nexus_core.app.planning import tools
+
+    monkeypatch.setattr(tools, "_GUARDRAIL_CEILING_PROBES", 0)
+    r = _post("risk_based_guardrails", _short_horizon())
+    assert r.status_code == 200, r.text
+    adj = r.json()["spendingAdjustment"]
+    assert adj["boundHit"] is True
+    assert adj["feasible"] is False
+
+
+def test_f2_refuses_too_expensive_requests() -> None:
+    over_paths = _post("risk_based_guardrails", {**_BASE, "paths": 50_000})
+    assert over_paths.status_code == 400
+    assert "too_expensive" in over_paths.text
+    wide = {
+        **_BASE,
+        "currentAge": 20,
+        "retirementAge": 20,
+        "horizonAge": 120,
+        "paths": 5000,
+        "accounts": [
+            {
+                "type": "taxable",
+                "balance": 2_000_000,
+                "allocation": {f"a{i}": 1 / 7 for i in range(7)},
+            }
+        ],
+        "assetClasses": [
+            {"id": f"a{i}", "expectedReturn": 0.05, "volatility": 0.1, "lambda": 0.1}
+            for i in range(7)
+        ],
+        "correlations": {},
+    }
+    over_budget = _post("risk_based_guardrails", wide)
+    assert over_budget.status_code == 400
+    assert "too_expensive" in over_budget.text
+    body = {k: v for k, v in _BASE.items() if k != "paths"}
+    ok = _post("risk_based_guardrails", body)
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["pathsConfirm"] == 5000
+
+
+def test_f3_refuses_upper_one_and_unknown_keys() -> None:
+    one = _post(
+        "risk_based_guardrails",
+        {**_BASE, "thresholds": {"upper": 1.0, "target": 0.8, "lower": 0.7}},
+    )
+    assert one.status_code == 400
+    typo = _post("risk_based_guardrails", {**_BASE, "thresholds": {"uper": 0.95}})
+    assert typo.status_code == 400
+    assert "uper" in typo.text
+
+
+def test_f4_echoes_ltc_shock_and_goals() -> None:
+    plain = _guardrails()
+    assert plain["inputsApplied"] == []
+    assert plain["basis"] == "static_spend_schedule_same_seed_engine"
+    assert "ltcShockImpact" not in plain
+
+    shocked = _guardrails(
+        ltcShock={"onsetAge": 84, "annualCost": 120_000, "durationYears": 4, "costInflation": 0.04},
+        goals=[{"id": "need-1", "tier": "need", "targetAmount": 80_000, "yearsToGoal": 2}],
+    )
+    assert shocked["inputsApplied"] == ["ltc_shock", "goal_funding"]
+    assert "ltc_shock" in shocked["basis"] and "goal_funding" in shocked["basis"]
+    impact = shocked["ltcShockImpact"]
+    assert impact["withShockSuccessProbability"] == shocked["currentSuccess"]
+    assert impact["baselineSuccessProbability"] >= impact["withShockSuccessProbability"]
+    assert shocked["goalFunding"] is not None
+    assert shocked["goalFundingSchedule"]

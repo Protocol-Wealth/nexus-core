@@ -2908,6 +2908,17 @@ def _solve_goal_tool(
 # Every number comes from the SAME in-process decumulation engine and pinned
 # seed as solve_goal; no second simulation exists. Advisor analysis only.
 _GUARDRAIL_DEFAULTS = {"upper": 0.90, "target": 0.80, "lower": 0.70}
+# Cost guard (review of ccdd246, finding 2): one request runs several searches
+# plus full-path confirmations, so paths are capped below the general engine
+# limit (default 5,000 when omitted) and the estimated total simulated cells are
+# bounded. A request over either limit is refused with a ``too_expensive`` 400.
+_GUARDRAIL_MAX_PATHS = 5000
+_GUARDRAIL_MAX_WORK_CELLS = 250_000_000
+# Search evaluations per bisection (solver iterations plus bound probes), the
+# ceiling-doubling probes per spend search, and the full-path runs per request.
+_GUARDRAIL_EVALS_PER_SEARCH = 26
+_GUARDRAIL_CEILING_PROBES = 12
+_GUARDRAIL_FULL_RUNS = 7
 
 
 def _guardrail_thresholds(body: dict[str, Any]) -> dict[str, float]:
@@ -2916,14 +2927,19 @@ def _guardrail_thresholds(body: dict[str, Any]) -> dict[str, float]:
         raw = {}
     if not isinstance(raw, dict):
         raise PlanningInputError("thresholds must be an object or null")
+    unknown = sorted(set(raw) - set(_GUARDRAIL_DEFAULTS))
+    if unknown:
+        raise PlanningInputError(
+            f"thresholds has unknown key(s): {', '.join(unknown)} (allowed: upper, target, lower)"
+        )
     resolved: dict[str, float] = {}
     for key, default in _GUARDRAIL_DEFAULTS.items():
         value = raw.get(key, default)
         if value is None:
             value = default
         resolved[key] = _finite_number(value, f"thresholds.{key}")
-    if not 0.0 < resolved["lower"] < resolved["target"] < resolved["upper"] <= 1.0:
-        raise PlanningInputError("thresholds must satisfy 0 < lower < target < upper <= 1")
+    if not 0.0 < resolved["lower"] < resolved["target"] < resolved["upper"] < 1.0:
+        raise PlanningInputError("thresholds must satisfy 0 < lower < target < upper < 1")
     return resolved
 
 
@@ -2938,21 +2954,38 @@ def _guardrail_zone(success: float, thresholds: dict[str, float]) -> str:
 def _spend_to_target(
     ctx: _MonteCarloContext, *, initial_balance: float, target: float
 ) -> dict[str, Any]:
-    """Solve the annual spend that hits ``target`` from ``initial_balance``."""
+    """Solve the annual spend that hits ``target`` from ``initial_balance``.
+
+    The search ceiling starts at a 25% draw plus guaranteed income and doubles
+    while that spend still meets ``target`` (review of ccdd246, finding 1), so a
+    short horizon is not capped at an arbitrary draw. If the target is still met
+    at the final ceiling, the answer is reported as ``boundHit`` and NOT feasible,
+    never as a solved spend.
+    """
     solve_paths = min(ctx.paths, _SOLVE_PATHS)
-    hi = initial_balance * 0.25 + _total_guaranteed_income(ctx.body)
-    result = solve_monotone(
-        evaluate=lambda x: _mc_success(
+
+    def success_at(spend: float) -> float:
+        return _mc_success(
             ctx,
             initial_balance=initial_balance,
-            net_spend_by_year=_schedule_for(ctx, annual_spend=x),
+            net_spend_by_year=_schedule_for(ctx, annual_spend=spend),
             paths=solve_paths,
-        ),
+        )
+
+    income = _total_guaranteed_income(ctx.body)
+    hi = max(initial_balance * 0.25 + income, 1.0)
+    for _ in range(_GUARDRAIL_CEILING_PROBES):
+        if success_at(hi) < target:
+            break
+        hi *= 2.0
+    result = solve_monotone(
+        evaluate=success_at,
         lo=0.0,
-        hi=max(hi, 1.0),
+        hi=hi,
         target=target,
         direction="decreasing",
     )
+    bound_hit = result.feasible and result.solved_value >= hi * (1.0 - 1e-9)
     confirm = _mc_success(
         ctx,
         initial_balance=initial_balance,
@@ -2960,7 +2993,8 @@ def _spend_to_target(
     )
     spend = round(result.solved_value, 2)
     return {
-        "feasible": result.feasible,
+        "feasible": result.feasible and not bound_hit,
+        "boundHit": bound_hit,
         "annualSpend": spend,
         "annualChange": round(spend - ctx.annual_spend, 2),
         "achievedSuccess": round(confirm, 4),
@@ -2983,6 +3017,7 @@ def _balance_at_threshold(ctx: _MonteCarloContext, *, threshold: float) -> dict[
     confirm = _mc_success(ctx, initial_balance=result.solved_value, net_spend_by_year=ctx.net_spend)
     return {
         "feasible": result.feasible,
+        "boundHit": not result.feasible,
         "portfolioValue": round(result.solved_value, 2),
         "achievedSuccess": round(confirm, 4),
     }
@@ -3008,7 +3043,23 @@ def _risk_based_guardrails_tool(
     thresholds = _guardrail_thresholds(body)
     mc_body = {k: v for k, v in body.items() if k != "thresholds"}
     mc_body.setdefault("seed", _SOLVE_SEED)
+    mc_body.setdefault("paths", _GUARDRAIL_MAX_PATHS)
+    paths = mc_body["paths"]
+    if isinstance(paths, int) and not isinstance(paths, bool) and paths > _GUARDRAIL_MAX_PATHS:
+        raise PlanningInputError(
+            f"too_expensive: risk_based_guardrails allows at most {_GUARDRAIL_MAX_PATHS} paths"
+        )
     ctx = _prepare_monte_carlo(mc_body, market, regime_engine)
+    searches = 5  # two trigger searches, three spend-to-target searches
+    evals = searches * (_GUARDRAIL_EVALS_PER_SEARCH + _GUARDRAIL_CEILING_PROBES)
+    work = (evals * min(ctx.paths, _SOLVE_PATHS) + _GUARDRAIL_FULL_RUNS * ctx.paths) * (
+        ctx.years * len(ctx.weights)
+    )
+    if work > _GUARDRAIL_MAX_WORK_CELLS:
+        raise PlanningInputError(
+            "too_expensive: reduce paths, the horizon, or the number of asset classes "
+            "for risk_based_guardrails"
+        )
 
     current = _run_monte_carlo(
         ctx, initial_balance=ctx.initial_balance, net_spend_by_year=ctx.net_spend
@@ -3023,7 +3074,8 @@ def _risk_based_guardrails_tool(
     at_lower = _spend_to_target(
         ctx, initial_balance=lower["portfolioValue"], target=thresholds["target"]
     )
-    return {
+    applied: list[str] = []
+    response: dict[str, Any] = {
         "method": "probability_of_success_guardrails",
         "basis": "static_spend_schedule_same_seed_engine",
         "thresholds": {k: round(v, 4) for k, v in thresholds.items()},
@@ -3041,6 +3093,37 @@ def _risk_based_guardrails_tool(
         "pathsConfirm": ctx.paths,
         "seedUsed": ctx.seed,
     }
+    # Inputs that shape every figure are named and echoed (review of ccdd246,
+    # finding 4), the same blocks monte_carlo_decumulation returns.
+    if ctx.ltc_shock is not None:
+        applied.append("ltc_shock")
+        baseline = _run_monte_carlo(
+            ctx,
+            initial_balance=ctx.initial_balance,
+            net_spend_by_year=ctx.net_spend_without_ltc_shock,
+        )
+        baseline_probability = float(baseline["successProbability"])
+        response["ltcShock"] = ltc_shock_summary(
+            ctx.ltc_shock, current_age=ctx.current_age, years=ctx.years
+        )
+        response["ltcShockImpact"] = {
+            "basis": "same_seed_same_returns_with_vs_without_ltc_shock",
+            "baselineSuccessProbability": round(baseline_probability, 4),
+            "withShockSuccessProbability": success,
+            "successProbabilityDelta": round(success - baseline_probability, 4),
+        }
+    if ctx.goal_funding_schedule:
+        applied.append("goal_funding")
+        response["goalFundingPolicy"] = {
+            "mode": "priority_then_earlier_year_then_input_order",
+            "basis": "path_level_priority_funding_after_base_spend_before_growth",
+        }
+        response["goalFundingSchedule"] = ctx.goal_funding_schedule
+        response["goalFunding"] = current.get("goalFunding")
+    if applied:
+        response["basis"] = "static_spend_schedule_same_seed_engine_with_" + "_and_".join(applied)
+    response["inputsApplied"] = applied
+    return response
 
 
 def _opt_num(body: dict[str, Any], key: str, default: float) -> float:

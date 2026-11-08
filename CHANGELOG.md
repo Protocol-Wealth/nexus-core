@@ -23,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
   Advisor analysis; numbers and enums only.
 
+  **Limits and reporting:**
+  - Paths are capped at 5,000 (the default), and a request over the work budget
+    is refused with `too_expensive`.
+  - A spend search that reaches its ceiling reports `boundHit` and is not
+    feasible.
+  - An `ltcShock` or `goals` input is echoed and named in `basis` /
+    `inputsApplied`.
+
 - **2026-11-07:** `project_cash_flow` can force and tax required minimum
   distributions. Pass `birthYear` together with `accountBalances`. From the
   owner's SECURE 2.0 applicable age, each year's RMD is the traditional
