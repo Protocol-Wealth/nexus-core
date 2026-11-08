@@ -121,6 +121,11 @@ jobs:
           fi
           echo "IMAGE=${IMAGE_REPO}@${DIGEST}" >> "$GITHUB_ENV"
           echo "IMAGE_DIGEST=$DIGEST" >> "$GITHUB_ENV"
+          # The push may be an image index (with a provenance attestation);
+          # Cloud Run then records the platform manifest inside it, so accept
+          # the pushed digest or exactly one of its children.
+          CHILDREN=$(docker buildx imagetools inspect --raw "${IMAGE_REPO}@${DIGEST}" | jq -r '.manifests[]?.digest' | tr '\n' ',')
+          echo "IMAGE_CHILD_DIGESTS=$CHILDREN" >> "$GITHUB_ENV"
           echo "CANARY_TAG=sha-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 
       - name: Create the new revision with no traffic
@@ -146,7 +151,8 @@ jobs:
             --region="$REGION" --project="$PROJECT_ID" \
             --format='value(spec.containers[0].image)')
           _REPO="${REV_IMAGE%@*}"; _REPO="${_REPO%:*}"
-          if [ "$_REPO" != "$IMAGE_REPO" ] || [ "${REV_IMAGE##*@}" != "$IMAGE_DIGEST" ]; then
+          _D="${REV_IMAGE##*@}"
+          if [ "$_REPO" != "$IMAGE_REPO" ] || { [ "$_D" != "$IMAGE_DIGEST" ] && ! tr ',' '\n' <<<"$IMAGE_CHILD_DIGESTS" | grep -qxF "$_D"; }; then
             echo "::error::Tagged revision $REVISION runs $REV_IMAGE, not $IMAGE."
             exit 1
           fi
@@ -192,7 +198,8 @@ jobs:
             --region="$REGION" --project="$PROJECT_ID" \
             --format='value(spec.containers[0].image)')
           _REPO="${SERVING_IMAGE%@*}"; _REPO="${_REPO%:*}"
-          if [ "$_REPO" != "$IMAGE_REPO" ] || [ "${SERVING_IMAGE##*@}" != "$IMAGE_DIGEST" ]; then
+          _D="${SERVING_IMAGE##*@}"
+          if [ "$_REPO" != "$IMAGE_REPO" ] || { [ "$_D" != "$IMAGE_DIGEST" ] && ! tr ',' '\n' <<<"$IMAGE_CHILD_DIGESTS" | grep -qxF "$_D"; }; then
             echo "::error::Serving revision $SERVING runs $SERVING_IMAGE, not $IMAGE."
             exit 1
           fi
