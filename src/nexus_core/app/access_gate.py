@@ -8,6 +8,14 @@ is deliberately small and stateless: when ``NEXUS_ACCESS_MODE=restricted``, it
 requires a configured Nexus service key on protected paths. When the mode is
 ``public`` (the default), it is a no-op so local/dev and current public deploys
 do not break until secrets are rolled.
+
+``NEXUS_ACCESS_MODE=iam`` is for a private deployment that sits behind Cloud Run
+IAM (no public invoker). Callers present a Google-signed ID token from their own
+service account; no shared key exists. The platform checks the token before the
+request arrives, and this gate checks it again (signature, issuer, audience,
+verified email on an allow-list), so an accidental public invoker binding still
+fails closed. In ``iam`` mode every path except ``/health`` is protected,
+including the native ``/mcp`` transport.
 """
 
 from __future__ import annotations
@@ -20,8 +28,14 @@ import os
 import re
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
+
 _MODE_ENV = "NEXUS_ACCESS_MODE"
 _KEYS_ENV = "NEXUS_API_KEYS"
+_IAM_AUDIENCE_ENV = "NEXUS_IAM_AUDIENCE"
+_IAM_EMAILS_ENV = "NEXUS_IAM_ALLOWED_EMAILS"
+_GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v3/certs"
+_GOOGLE_ISSUERS = ("https://accounts.google.com", "accounts.google.com")
 _SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
 _MIN_RAW_KEY_LENGTH = 32
 _AUDIT_ID_RE = re.compile(
@@ -32,8 +46,67 @@ logger = logging.getLogger(__name__)
 
 
 def access_mode() -> str:
-    """Current access mode: ``public`` or ``restricted``."""
+    """Current access mode: ``public``, ``restricted`` or ``iam``."""
     return os.environ.get(_MODE_ENV, "public").strip().lower() or "public"
+
+
+def _iam_audience() -> str:
+    return os.environ.get(_IAM_AUDIENCE_ENV, "").strip()
+
+
+def _iam_allowed_emails() -> frozenset[str]:
+    return frozenset(
+        e.strip().lower() for e in os.environ.get(_IAM_EMAILS_ENV, "").split(",") if e.strip()
+    )
+
+
+# Process-wide JWKS client for Google's ID-token keys, built on first use.
+_JWKS: dict[str, Any] = {"client": None}
+
+
+def _google_jwks_client() -> Any:
+    """Lazily built, cached JWKS client for Google's ID-token signing keys."""
+    if _JWKS["client"] is None:
+        import jwt  # PyJWT[crypto]
+
+        _JWKS["client"] = jwt.PyJWKClient(_GOOGLE_CERTS_URL, cache_keys=True, lifespan=3600)
+    return _JWKS["client"]
+
+
+def _verified_iam_email(headers: dict[bytes, bytes]) -> str | None:
+    """Email of a valid, allow-listed Google ID token in ``Authorization``, else None.
+
+    Checks signature (Google's published keys), issuer, audience (exactly
+    ``NEXUS_IAM_AUDIENCE``), expiry, ``email_verified`` and the allow-list. Any
+    failure, including a key-fetch error, returns None: the caller refuses.
+    """
+    auth = headers.get(b"authorization", b"").decode("latin-1").strip()
+    if not auth.lower().startswith("bearer "):
+        return None
+    token = auth[7:].strip()
+    if not token:
+        return None
+    try:
+        import jwt  # PyJWT[crypto]
+
+        signing_key = _google_jwks_client().get_signing_key_from_jwt(token)
+        claims = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=_iam_audience(),
+            options={"require": ["exp", "iat", "iss", "aud"]},
+        )
+    except Exception:  # noqa: BLE001 - any verification failure refuses
+        return None
+    if claims.get("iss") not in _GOOGLE_ISSUERS:
+        return None
+    if claims.get("email_verified") is not True:
+        return None
+    email = str(claims.get("email", "")).strip().lower()
+    if not email or email not in _iam_allowed_emails():
+        return None
+    return email
 
 
 def _key_digests() -> list[str]:
@@ -61,9 +134,17 @@ def _key_digests() -> list[str]:
 
 
 def validate_access_keys() -> None:
-    """Reject invalid restricted-mode key configuration during app construction."""
-    if access_mode() == "restricted" and not _key_digests():
+    """Reject invalid access configuration during app construction."""
+    mode = access_mode()
+    if mode not in ("public", "restricted", "iam"):
+        raise ValueError(f"{_MODE_ENV} must be public, restricted or iam (got {mode!r})")
+    if mode == "restricted" and not _key_digests():
         raise ValueError(f"{_KEYS_ENV} requires at least one key in restricted mode")
+    if mode == "iam":
+        if not _iam_audience():
+            raise ValueError(f"{_IAM_AUDIENCE_ENV} is required in iam mode")
+        if not _iam_allowed_emails():
+            raise ValueError(f"{_IAM_EMAILS_ENV} requires at least one email in iam mode")
 
 
 def _is_protected_path(path: str) -> bool:
@@ -165,16 +246,20 @@ class NexusAccessGate:
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         path = scope.get("path", "")
-        if (
-            scope.get("type") != "http"
-            or access_mode() != "restricted"
-            or not _is_protected_path(path)
-        ):
+        mode = access_mode()
+        protected = (mode == "iam" and path != "/health" and not path.startswith("/health/")) or (
+            mode == "restricted" and _is_protected_path(path)
+        )
+        if scope.get("type") != "http" or not protected:
             await self.app(scope, receive, send)
             return
 
         headers = dict(scope.get("headers") or [])
-        key_fingerprint = _authorized_key_fingerprint(headers)
+        if mode == "iam":
+            email = await run_in_threadpool(_verified_iam_email, headers)
+            key_fingerprint = None if email is None else "iam:" + email
+        else:
+            key_fingerprint = _authorized_key_fingerprint(headers)
         audit_id = _accounting_audit_id(path, headers)
         if key_fingerprint is not None and audit_id is not None:
 
@@ -182,7 +267,7 @@ class NexusAccessGate:
                 if message.get("type") == "http.response.start":
                     message = _privatize_cache_control(message)
                     response_headers = list(message.get("headers", []))
-                    response_headers.append((b"x-nexus-authenticated", b"restricted"))
+                    response_headers.append((b"x-nexus-authenticated", mode.encode("ascii")))
                     if audit_id != "not-applicable":
                         response_headers.append((b"x-pw-audit-id", audit_id.encode("ascii")))
                     message["headers"] = response_headers
@@ -205,6 +290,11 @@ class NexusAccessGate:
                 400,
                 "invalid_audit_id",
                 "Accounting requests require a UUID x-pw-audit-id",
+            )
+            return
+        if mode == "iam":
+            await _reject(
+                send, 401, "unauthorized", "Google ID token from an allowed caller required"
             )
             return
         await _reject(send, 401, "unauthorized", "Nexus API key required")
