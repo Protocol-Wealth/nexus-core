@@ -119,7 +119,7 @@ to respect origin.
 | Vaults | `/api/vaults`, `/api/vaults/chains` (vaults.fyi v2) |
 | LP | `/api/lp/chains`, `/api/lp/uniswap-v3/{chain}/positions?owner=`, `/api/lp/uniswap-v3/{chain}/{token_id}/analytics`, `/api/lp/uniswap-v3/{chain}/{token_id}/vs-benchmark` (ethereum, base, optimism, polygon); `/api/lp/aerodrome/{token_id}/analytics` (Base Slipstream, on-chain RPC) |
 | Solana | `/api/solana/price/{mint}`, `/api/solana/prices?mints=` (Jupiter v3 SPL token USD prices, keyless) |
-| Accounting gateway | `GET /api/accounting/tools`, `POST /api/accounting/tools/{tool_id}` (deployed contract `0.2.0` on Cloud Run revision `nexus-core-00070-zhx`; the same four calculation handlers also register in native MCP full mode in the deployed image) |
+| Accounting gateway | `GET /api/accounting/tools`, `POST /api/accounting/tools/{tool_id}` (contract `0.2.0`; for the revision serving traffic run `gcloud run services describe nexus-core --project pwllc-prod --region us-central1 --format=json \| jq -r '.status.traffic[] \| select(.percent == 100) \| .revisionName'`; the same four calculation handlers also register in native MCP full mode in the deployed image) |
 | Benchmarks | `/api/benchmarks`, `/api/benchmarks/series?days=`, `/api/benchmarks/history?days=` |
 | Usage | `/api/usage` (provider quota report) |
 | MCP | `/mcp` (MCP-over-HTTP, FastMCP) |
