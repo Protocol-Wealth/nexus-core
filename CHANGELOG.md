@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **2026-11-07:** `risk_based_guardrails` planning tool (the 35th). It gives
+  probability-of-success spending guardrails for one plan, over the same
+  in-process Monte Carlo decumulation engine and pinned seed as `solve_goal`, so
+  there's no second simulation. Pass optional `thresholds` {upper, target,
+  lower} (defaults 0.90/0.80/0.70) with a static-spending
+  `monte_carlo_decumulation` body. It returns:
+  - today's success and zone;
+  - the starting portfolio values at which success would reach the upper and
+    lower thresholds;
+  - the annual spend that returns the plan to the target today, and at each
+    trigger.
+
+  Advisor analysis; numbers and enums only.
+
+  **Limits and reporting:**
+  - Paths are capped at 5,000 (the default), and a request over the work budget
+    is refused with `too_expensive`.
+  - A spend search that reaches its ceiling reports `boundHit` and is not
+    feasible.
+  - An `ltcShock` or `goals` input is echoed and named in `basis` /
+    `inputsApplied`.
+
+- **2026-11-07:** `project_cash_flow` can force and tax required minimum
+  distributions. Pass `birthYear` together with `accountBalances`. From the
+  owner's SECURE 2.0 applicable age, each year's RMD is the traditional
+  bucket's prior-year-end balance divided by the IRS Uniform Lifetime Table
+  factor. It is withdrawn whether or not spending needs it, taxed as ordinary
+  income and counted toward spending first, and any after-tax excess is
+  reinvested in the taxable bucket. Rows add `requiredMinimumDistribution`,
+  `withdrawalsByAccount.traditional` includes it, and the aggregate adds
+  `lifetimeRequiredMinimumDistributions`. Without `birthYear`, the output is
+  unchanged.
+
+### Fixed
+
+- The RMD Uniform Lifetime Table now runs from age 72 to 120, following Treas.
+  Reg. §1.401(a)(9)-9(c). Above 100 it previously reused the age-100 factor
+  (6.4), which understated RMDs. Age 72, and the earlier start ages, now use
+  the age-72 factor (27.4) instead of the age-73 one.
+- A whole-number planning field, required (such as `age` or `year`) or
+  optional (such as `birthYear`), sent as JSON `Infinity`, `-Infinity` or
+  `NaN` now returns 400 naming the field, instead of 500 or an unnamed error.
+
+## [1.0.3] - 2026-10-29
+
+### PyPI distribution
+
+- Published `pw-nexus-core` version `1.0.3` from current `main`. It carries
+  every change below since `1.0.2`; the `nexus_core` import package and the
+  `nexus-core` CLI command are unchanged.
+
 ### Fixed
 
 - **2026-10-22:** The 2026 federal tax tables used by planning (brackets,
@@ -15,18 +68,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   table version `federal-income-tax-reference-2026-v2`, last verified
   2026-10-22. Roth-conversion, bracket-headroom, income-layering and cash-flow
   tax outputs change accordingly.
+- **2026-09-06:** Code blocks on the landing page and the MCP setup guide wrap
+  instead of clipping long commands (#311).
 
 ### Security
 
+- **2026-10-23:** The deployment lock `requirements-serve.lock` was
+  regenerated: `certifi` 2026.10.19 drops the eMudhra emSign ECC Root CA - G3,
+  and ten packages with published advisories moved to fixed releases inside
+  the ranges `pyproject.toml` declares (#324).
 - **2026-09-28:** Restricted REST/JSON mode now rejects short raw API keys,
   malformed SHA-256 digests, and an empty key list during app construction.
 
 ### Changed
 
+- **2026-10-23:** `README.md` describes the code rather than a dated deployment
+  snapshot (#325); `CURRENT-STATE.md` and `ROADMAP.md` were retired earlier
+  (#306).
+- **2026-09-28:** The source tree is normalized to `ruff format`, and CI gates
+  on `ruff format --check src/ tests/`.
 - **2026-09-21:** Repository agent instructions now live in `AGENTS.md`, and
   root `CLAUDE.md` was removed after its still-current facts moved.
+- Dependency ranges: `fastmcp>=3.4.4,<5`, `pandas>=2.2,<4.0`,
+  `numpy>=2.5.1`, `fastapi>=0.139.2`, `transformers>=5.14.1`,
+  `QuantLib>=1.43`, `arelle-release>=2.42.1`. Build requirements:
+  `setuptools==84.0.0`, `wheel==0.48.0`.
 
 ### Added
+
+- **OAuth `client_credentials` grant on the MCP transport (#309).** A CLI,
+  coding agent or scheduled job can exchange a configured client secret for
+  the same signed, audience-bound access token the `authorization_code` flow
+  issues, without a browser. Off by default: with `NEXUS_MCP_CLIENT_SECRETS`
+  unset the grant is neither advertised in the authorization-server metadata
+  nor accepted at the token endpoint. See `DEPLOY.md`.
 
 - **Typed response models across `/api/lp/*`.** The last of the five on-chain and
   market-data route modules to get them (wallet, chain, vaults, solana, lp); every
@@ -1497,4 +1572,5 @@ neither ran in CI). Deployed at `nexus-core-00040`.
 
 - Initial public release of docs
 
+[1.0.3]: https://github.com/Protocol-Wealth/nexus-core/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/Protocol-Wealth/nexus-core/compare/v1.0.1...v1.0.2

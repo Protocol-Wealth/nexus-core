@@ -10,6 +10,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # deploy.yml calls this workflow as its pre-deploy gate, so the gate it
+  # ships behind is this one, not a copy that can drift.
+  workflow_call:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

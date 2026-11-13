@@ -123,7 +123,7 @@ to respect origin.
 | Benchmarks | `/api/benchmarks`, `/api/benchmarks/series?days=`, `/api/benchmarks/history?days=` |
 | Usage | `/api/usage` (provider quota report) |
 | MCP | `/mcp` (MCP-over-HTTP, FastMCP) |
-| Planning gateway | `GET /api/planning/tools`, `POST /api/planning/tools/{tool_id}` (34 PII-free planning tools, contractVersion `0.1.0`); `/mcp/tools` is the legacy alias |
+| Planning gateway | `GET /api/planning/tools`, `POST /api/planning/tools/{tool_id}` (35 PII-free planning tools, contractVersion `0.1.0`); `/mcp/tools` is the legacy alias |
 
 ## Regime Engine
 

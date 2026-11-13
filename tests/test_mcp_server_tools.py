@@ -186,6 +186,7 @@ def test_extra_tools_register() -> None:
 _PLANNING_TOOL_IDS = {
     "monte_carlo_decumulation",
     "solve_goal",
+    "risk_based_guardrails",
     "analyze_goals",
     "project_cash_flow",
     "cashflow_planning_bridge",

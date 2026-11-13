@@ -90,7 +90,7 @@ private ingestion.
 | `GET /mcp-guide` · `GET /llms.txt` | MCP client setup guide · agent site map (llmstxt.org) |
 | `GET /.well-known/security.txt` | RFC 9116 disclosure pointer |
 | `GET /api/usage` | Provider usage / quota report |
-| `POST /mcp` | Model Context Protocol over HTTP (FastMCP, also stdio). In full mode, `tools/list` = research tools + `health`/`describe`/`get_quotes` + 34 planning tools + four accounting tools; in demo mode, only closed-world demo tools are registered. All tools are read-only |
+| `POST /mcp` | Model Context Protocol over HTTP (FastMCP, also stdio). In full mode, `tools/list` = research tools + `health`/`describe`/`get_quotes` + 35 planning tools + four accounting tools; in demo mode, only closed-world demo tools are registered. All tools are read-only |
 | `GET /api/planning/tools` · `POST /api/planning/tools/{id}` | Planning JSON gateway (pw-api / pwplan-core contractVersion `0.1.0`, PII-free). Legacy `/mcp/tools` aliases remain for compatibility |
 | `GET /api/accounting/tools` · `POST /api/accounting/tools/{id}` | Restricted REST accounting gateway (contractVersion `0.2.0`; for the revision serving traffic run `gcloud run services describe nexus-core --project pwllc-prod --region us-central1 --format='value(status.traffic[0].revisionName)'`): `describe`, `price_history`, `decode_onchain_events`, `compute_cost_basis`, and `onchain_pnl_report`. The deployed image registers the four calculation handlers (not the colliding internal `describe`) in native MCP full mode; hosted demo remains unchanged |
 
@@ -284,7 +284,7 @@ different signal sources should still re-fit.)
 ### Full install (all capabilities)
 
 ```bash
-pip install "pw-nexus-core[all]==1.0.2"
+pip install "pw-nexus-core[all]==1.0.3"
 ```
 
 ### Modular installs (reduce dep footprint)
@@ -297,7 +297,7 @@ FinancePy) · `edgar` (edgartools, Arelle, sec-parser) · `market` (yfinance) ·
 alphalens). Omit the bracket entirely for core only (regime + scoring).
 
 ```bash
-pip install "pw-nexus-core[serve]==1.0.2"
+pip install "pw-nexus-core[serve]==1.0.3"
 ```
 
 ### From source
@@ -305,7 +305,7 @@ pip install "pw-nexus-core[serve]==1.0.2"
 Install the same reviewed tag directly from GitHub:
 
 ```bash
-pip install "pw-nexus-core[all] @ git+https://github.com/Protocol-Wealth/nexus-core.git@v1.0.2"
+pip install "pw-nexus-core[all] @ git+https://github.com/Protocol-Wealth/nexus-core.git@v1.0.3"
 ```
 
 ## Quick Start

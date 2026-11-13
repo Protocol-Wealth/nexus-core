@@ -1,8 +1,14 @@
 # AGENTS.md — nexus-core
 
-Engineering and regulatory standards for every agent are `~/projects/AGENTS.md`.
-Where this file conflicts with that one, that one wins. This file is only what
-is specific to this repository. It does not describe what is live.
+This file and the existing code in this repository govern work here. Standards an
+agent brings from outside the repository (for example a maintainer's
+`~/projects/AGENTS.md`) may add to them but never override them. This file is only
+what is specific to this repository. It does not describe what is live.
+
+When a repository's documentation and its existing code disagree, follow the
+conventions used in the existing code, and in your final reply point out each
+inconsistency you found. (Rule from [arXiv 2610.30571](https://arxiv.org/abs/2610.30571),
+as adopted in [hsi-operator's AGENTS.md](https://github.com/rivendale/hsi-operator/blob/main/AGENTS.md).)
 
 **This repository is public**, and so is its git history: deleting a file does not
 unpublish it. Keep client data, PII, account identifiers and firm-internal
@@ -234,9 +240,18 @@ Hard NOs. Each is enforced by review + tooling where possible.
   `mypy --strict src/nexus_core/`, then
   `pytest -q --cov=src/nexus_core --cov-fail-under=80` (plain `pytest` does not
   enforce the coverage floor; run this form to reproduce the gate). SPDX headers: `.github/workflows/spdx-headers.yml`.
-  License scan: `.github/workflows/license-compliance.yml`.
-- **Deploy:** [`DEPLOY.md`](DEPLOY.md) owns the Cloud Run web service, snapshot
-  Job, and Scheduler procedure. The snapshot is a Cloud Run Job (`nexus-core
+  License scan: `.github/workflows/license-compliance.yml`. `ci.yml` is also
+  callable (`workflow_call`): `deploy.yml` runs it as its pre-deploy gate.
+- **Deploy:** a merge to `main` deploys the web service
+  (`.github/workflows/deploy.yml`):
+  - it runs the CI gate and skips a stale commit;
+  - it changes only the image, as a canary: no traffic, then `/health` on the
+    tag URL, then 100% of traffic;
+  - it runs as `nexus-core-deployer` through WIF.
+
+  Agents never deploy by hand. `gcloud run deploy --source` is an emergency
+  path only. [`DEPLOY.md`](DEPLOY.md) owns the procedure, including the
+  snapshot Job, which is still deployed by hand, and the Scheduler. The snapshot is a Cloud Run Job (`nexus-core
   snapshot`), not an HTTP route. Secrets live in Secret Manager — no credentials
   in config or code.
 - **Rate limit:** in-process limiter in `src/nexus_core/app/ratelimit.py`;

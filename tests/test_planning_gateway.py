@@ -216,7 +216,7 @@ def test_planning_response_carries_disclaimer() -> None:
 def test_list_tools_version_handshake() -> None:
     body = _list_gateway_tools()
     assert body["contractVersion"] == CONTRACT_VERSION
-    assert len(body["tools"]) == 34
+    assert len(body["tools"]) == 35
     assert "glide_path" in body["tools"]
     assert "correlation_matrix" in body["tools"]
     assert "capital_market_assumptions" in body["tools"]
@@ -226,6 +226,7 @@ def test_list_tools_version_handshake() -> None:
     assert "regime_return_generator" in body["tools"]
     assert "monte_carlo_decumulation" in body["tools"]
     assert "solve_goal" in body["tools"]
+    assert "risk_based_guardrails" in body["tools"]
     assert "roth_conversion" in body["tools"]
     assert "sequence_of_returns_stress" in body["tools"]
     assert "rmd" in body["tools"]
@@ -947,6 +948,56 @@ def test_rmd_accepts_birth_year_policy() -> None:
     assert body["rmdAmount"] == 0.0
 
 
+@pytest.mark.parametrize("bad", ["Infinity", "-Infinity", "NaN"])
+def test_rmd_non_finite_birth_year_400(bad: str) -> None:
+    # Python's json accepts these tokens; a whole-number field must refuse
+    # them with a 400, not let int() raise OverflowError into a 500.
+    r = _client().post(
+        "/mcp/tools/rmd",
+        content='{"contractVersion": "0.1.0", "age": 73, "balance": 500000, "birthYear": '
+        + bad
+        + "}",
+        headers={"content-type": "application/json"},
+    )
+    assert r.status_code == 400
+    assert "birthYear" in r.text
+
+
+@pytest.mark.parametrize("bad", ["Infinity", "-Infinity", "NaN"])
+def test_rmd_non_finite_required_age_400(bad: str) -> None:
+    # A required whole-number field must refuse non-finite JSON tokens with a
+    # 400 naming the field, not an OverflowError 500 or an unnamed message.
+    r = _client().post(
+        "/mcp/tools/rmd",
+        content='{"contractVersion": "0.1.0", "age": ' + bad + ', "balance": 500000}',
+        headers={"content-type": "application/json"},
+    )
+    assert r.status_code == 400
+    assert "age" in r.text
+
+
+@pytest.mark.parametrize(("field", "bad"), [("year", "Infinity"), ("age", "NaN")])
+def test_tax_aware_withdrawal_non_finite_whole_number_400(field: str, bad: str) -> None:
+    body = {
+        "contractVersion": "0.1.0",
+        "year": 2026,
+        "filingStatus": "married_joint",
+        "accounts": [{"type": "taxable", "balance": 200000, "allocation": {"us_equity": 1.0}}],
+        "grossNeed": 120000,
+        "age": 65,
+        "otherTaxableIncome": 0,
+    }
+    raw = json.dumps(body).replace(f'"{field}": {body[field]}', f'"{field}": {bad}')
+    assert bad in raw
+    r = _client().post(
+        "/mcp/tools/tax_aware_withdrawal",
+        content=raw,
+        headers={"content-type": "application/json"},
+    )
+    assert r.status_code == 400
+    assert field in r.text
+
+
 def test_rmd_negative_balance_400() -> None:
     r = _client().post(
         "/mcp/tools/rmd", json={"contractVersion": "0.1.0", "age": 73, "balance": -1}
@@ -1535,6 +1586,28 @@ def test_project_cash_flow_account_balances_gateway() -> None:
     assert first["withdrawalsByAccount"]["traditional"] > 0.0
     assert first["accountBalances"]["taxable"] == pytest.approx(0.0)
     assert body["assumptions"]["withdrawalOrder"] == ["taxable", "traditional", "roth"]
+
+
+def test_project_cash_flow_birth_year_forces_rmds_through_the_gateway() -> None:
+    payload = {
+        "contractVersion": "0.1.0",
+        "currentAge": 75,
+        "retirementAge": 65,
+        "terminalAge": 76,
+        "currentIncome": 0,
+        "currentExpenses": 60_000,
+        "retirementIncome": 80_000,
+        "filingStatus": "married_joint",
+        "accountBalances": {"taxable": 500_000, "traditional": 1_000_000, "roth": 0},
+        "accountReturns": {"taxable": 0.0, "traditional": 0.0, "roth": 0.0},
+        "birthYear": 1951,
+        "baseYear": 2026,
+    }
+    response = _call_gateway_tool("project_cash_flow", payload)
+    assert isinstance(response, JSONResponse)
+    body = _response_json(response)
+    assert body["years"][0]["requiredMinimumDistribution"] == round(1_000_000 / 24.6, 2)
+    assert body["assumptions"]["rmdStartAge"] == 73
 
 
 def test_project_cash_flow_bad_horizon_400() -> None:

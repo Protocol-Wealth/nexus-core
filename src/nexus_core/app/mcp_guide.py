@@ -192,7 +192,7 @@ nexus-core mcp        # MCP server over stdio</code></pre>
     <tr><td>Options</td><td>Black-Scholes price + Greeks; covered-call / cash-secured-put / collar overlays</td></tr>
     <tr><td>Crypto options</td><td>Deribit instruments + IV/Greeks (BTC, ETH, SOL, XRP, TRX, AVAX)</td></tr>
     <tr><td>DeFi</td><td>DefiLlama TVL by protocol and chain</td></tr>
-    <tr><td>Planning</td><td>34 PII-free tools: Monte Carlo, goal funding, deterministic cash flow, healthcare/LTC stress, education, income layering, inherited IRA analysis, risk profile scoring, allocation optimization, performance math, Roth/IRMAA, report assembly</td></tr>
+    <tr><td>Planning</td><td>35 PII-free tools: Monte Carlo, goal funding, deterministic cash flow, healthcare/LTC stress, education, income layering, inherited IRA analysis, risk profile scoring, allocation optimization, performance math, Roth/IRMAA, report assembly</td></tr>
     <tr><td>Accounting</td><td>four de-identified tools: historical pricing, public-chain event decoding, account-scoped FIFO cost basis, and realized-PnL reporting</td></tr>
   </table>
   <p>
@@ -265,6 +265,7 @@ npx @modelcontextprotocol/inspector nexus-core mcp</code></pre>
   <ul>
     <li><code>monte_carlo_decumulation</code> — primary retirement decumulation simulation, including optional same-seed LTC-shock impact</li>
     <li><code>solve_goal</code> — solve one planning variable to a target success probability</li>
+    <li><code>risk_based_guardrails</code> — probability-of-success spending guardrails: zone, trigger portfolio values, and the spend that returns the plan to target</li>
     <li><code>analyze_goals</code> — goal-funding status + shared-pool priority allocation</li>
     <li><code>project_cash_flow</code> — deterministic year-by-year cash-flow and net-worth projection, including optional LTC shock expense rows</li>
     <li><code>cashflow_planning_bridge</code> — derived monthly close values into planning assumptions</li>

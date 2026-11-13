@@ -71,6 +71,18 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "reduced-path search. Identity-free (numbers + enums). Illustration only, "
         "not advice. JSON request object in `body`."
     ),
+    "risk_based_guardrails": (
+        "Probability-of-success spending guardrails for one plan, over the same "
+        "in-process Monte Carlo decumulation engine and pinned seed as solve_goal. "
+        "Pass optional `thresholds` {upper, target, lower} (defaults 0.90/0.80/0.70) "
+        "and the rest of a full monte_carlo_decumulation body (static spending; omit "
+        "Guyton-Klinger `guardrails`). Returns today's success and zone "
+        "(above_upper / within_band / below_lower), the starting portfolio values at "
+        "which success would reach the upper and lower thresholds, the annual spend "
+        "that returns the plan to the target today, and the spend that would do so at "
+        "each trigger. Identity-free (numbers + enums). Advisor analysis, not advice. "
+        "JSON request object in `body`."
+    ),
     "analyze_goals": (
         "Goal-based funding analysis: for each financial goal (education, home, "
         "legacy, major purchase) the inflation-grown future cost, the projected "
@@ -101,7 +113,12 @@ _PLANNING_TOOL_DESCRIPTIONS = {
         "For S8 waterfall mode, optionally pass `accountBalances` split across "
         "taxable/traditional/roth, optional `accountReturns`, and optional early "
         "withdrawal penalty settings; existing single-bucket callers are unchanged. "
-        "Identity-free (numbers + filing status only). Illustration only, not "
+        "Pass `birthYear` (a birth YEAR, never a date) together with "
+        "`accountBalances` to force and tax each year's required minimum "
+        "distribution from the traditional bucket (SECURE 2.0 start age; must agree "
+        "with `currentAge` in `baseYear` within one year). Without `birthYear` no "
+        "RMDs are modeled. "
+        "Identity-free (numbers, filing status and birth year only). Illustration only, not "
         "advice. JSON request object in `body`."
     ),
     "cashflow_planning_bridge": (
@@ -404,8 +421,8 @@ def build_configured_server(
     the EMF ``score_asset`` (sharing the REST ``/api/score`` context builder +
     framework, so MCP and REST return identical scores), market quotes/history,
     FRED economic series, DefiLlama TVL, the options pricing/overlay + Deribit
-    crypto-option tools, and the 34 planning tools (monte_carlo_decumulation,
-    solve_goal, analyze_goals, project_cash_flow, cashflow_planning_bridge,
+    crypto-option tools, and the 35 planning tools (monte_carlo_decumulation,
+    solve_goal, risk_based_guardrails, analyze_goals, project_cash_flow, cashflow_planning_bridge,
     cash_reserve_analysis, budget_pacing_projection, education_funding,
     education_vehicle_rules, income_layering, glide_path, tax_aware_withdrawal,
     correlation_matrix,
