@@ -13,8 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Cloud Run IAM. Callers present a Google-signed ID token from their own service
   account instead of a shared key. The gate checks signature, issuer, audience
   (`NEXUS_IAM_AUDIENCE`), `email_verified` and an allow-list
-  (`NEXUS_IAM_ALLOWED_EMAILS`), and protects every path except `/health`. A bad
-  iam configuration fails at start. `deploy.yml` also ships each build to the
+  (`NEXUS_IAM_ALLOWED_EMAILS`), with 30 s of clock leeway, and protects every
+  path except exactly `/health` (`/health/db` included). A bad iam configuration
+  fails at start. `deploy.yml` also ships each build to the
   private engine named by the `NEXUS_INTERNAL_SERVICE` repository variable, and
   skips it by name while that is unset. The public `nexusmcp.site` service is
   unchanged.

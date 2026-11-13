@@ -11,6 +11,14 @@ I5 a token without email_verified is refused;
 I6 a shared API key is refused in iam mode;
 I7 iam mode without audience or allow-list, or an unknown mode, fails at start;
 I8 an accounting request with a valid token still needs a UUID audit id.
+
+Added from the accepted pw-review findings on PR #341 (adjudication, 2026-11-13):
+I1 also covers /health/db (only the exact /health path is open);
+I2 requires a Cache-Control header that is present and private;
+I9 a token from another issuer is refused;
+I10 an expired token is refused;
+I11 a token signed with another algorithm (HS256, none) is refused;
+I12 a token issued up to 30 s in the container's future (clock skew) passes.
 """
 
 from __future__ import annotations
@@ -21,6 +29,7 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from nexus_core.app import access_gate
@@ -59,8 +68,8 @@ def _app() -> FastAPI:
     app = FastAPI()
 
     @app.get("/api/regime")
-    def api() -> dict[str, bool]:
-        return {"api": True}
+    def api() -> JSONResponse:
+        return JSONResponse({"api": True}, headers={"Cache-Control": "public, max-age=60"})
 
     @app.get("/api/accounting/tools")
     def accounting() -> dict[str, bool]:
@@ -73,6 +82,10 @@ def _app() -> FastAPI:
     @app.get("/health")
     def health() -> dict[str, bool]:
         return {"health": True}
+
+    @app.get("/health/db")
+    def health_db() -> dict[str, bool]:
+        return {"db": True}
 
     app.add_middleware(NexusAccessGate)
     return app
@@ -94,6 +107,7 @@ def _bearer(token: str) -> dict[str, str]:
 def test_i1_no_token_is_refused_except_health(iam: TestClient) -> None:
     assert iam.get("/api/regime").status_code == 401
     assert iam.post("/mcp").status_code == 401
+    assert iam.get("/health/db").status_code == 401
     assert iam.get("/health").status_code == 200
 
 
@@ -101,7 +115,10 @@ def test_i2_valid_allowlisted_token_passes(iam: TestClient) -> None:
     r = iam.get("/api/regime", headers=_bearer(_token()))
     assert r.status_code == 200
     assert r.headers["x-nexus-authenticated"] == "iam"
-    assert "private" in r.headers.get("cache-control", "private")
+    assert "cache-control" in r.headers
+    directives = [d.strip() for d in r.headers["cache-control"].split(",")]
+    assert "private" in directives
+    assert "public" not in directives
 
 
 def test_i3_wrong_audience_is_refused(iam: TestClient) -> None:
@@ -153,3 +170,35 @@ def test_i8_accounting_still_needs_audit_id(iam: TestClient) -> None:
         headers={**_bearer(_token()), "X-Pw-Audit-Id": AUDIT_ID},
     )
     assert ok.status_code == 200
+
+
+def test_i9_wrong_issuer_is_refused(iam: TestClient) -> None:
+    t = _token(iss="https://evil.example")
+    assert iam.get("/api/regime", headers=_bearer(t)).status_code == 401
+
+
+def test_i10_expired_token_is_refused(iam: TestClient) -> None:
+    now = int(time.time())
+    t = _token(iat=now - 3600, exp=now - 600)
+    assert iam.get("/api/regime", headers=_bearer(t)).status_code == 401
+
+
+def test_i11_other_algorithms_are_refused(iam: TestClient) -> None:
+    now = int(time.time())
+    claims = {
+        "iss": "https://accounts.google.com",
+        "aud": AUD,
+        "email": CALLER,
+        "email_verified": True,
+        "iat": now,
+        "exp": now + 600,
+    }
+    hs256 = jwt.encode(claims, "a-shared-secret-of-at-least-32-bytes!!", algorithm="HS256")
+    unsigned = jwt.encode(claims, None, algorithm="none")
+    assert iam.get("/api/regime", headers=_bearer(hs256)).status_code == 401
+    assert iam.get("/api/regime", headers=_bearer(unsigned)).status_code == 401
+
+
+def test_i12_token_issued_slightly_in_the_future_passes(iam: TestClient) -> None:
+    t = _token(iat=int(time.time()) + 20)
+    assert iam.get("/api/regime", headers=_bearer(t)).status_code == 200

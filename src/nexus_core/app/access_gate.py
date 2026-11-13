@@ -14,8 +14,8 @@ IAM (no public invoker). Callers present a Google-signed ID token from their own
 service account; no shared key exists. The platform checks the token before the
 request arrives, and this gate checks it again (signature, issuer, audience,
 verified email on an allow-list), so an accidental public invoker binding still
-fails closed. In ``iam`` mode every path except ``/health`` is protected,
-including the native ``/mcp`` transport.
+fails closed. In ``iam`` mode every path except exactly ``/health`` is protected,
+including ``/health/db`` and the native ``/mcp`` transport.
 """
 
 from __future__ import annotations
@@ -36,6 +36,8 @@ _IAM_AUDIENCE_ENV = "NEXUS_IAM_AUDIENCE"
 _IAM_EMAILS_ENV = "NEXUS_IAM_ALLOWED_EMAILS"
 _GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v3/certs"
 _GOOGLE_ISSUERS = ("https://accounts.google.com", "accounts.google.com")
+# Tolerated clock skew between Google and this container for exp/iat checks.
+_IAM_CLOCK_LEEWAY_SECONDS = 30
 _SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
 _MIN_RAW_KEY_LENGTH = 32
 _AUDIT_ID_RE = re.compile(
@@ -95,6 +97,7 @@ def _verified_iam_email(headers: dict[bytes, bytes]) -> str | None:
             signing_key.key,
             algorithms=["RS256"],
             audience=_iam_audience(),
+            leeway=_IAM_CLOCK_LEEWAY_SECONDS,
             options={"require": ["exp", "iat", "iss", "aud"]},
         )
     except Exception:  # noqa: BLE001 - any verification failure refuses
@@ -247,7 +250,7 @@ class NexusAccessGate:
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         path = scope.get("path", "")
         mode = access_mode()
-        protected = (mode == "iam" and path != "/health" and not path.startswith("/health/")) or (
+        protected = (mode == "iam" and path != "/health") or (
             mode == "restricted" and _is_protected_path(path)
         )
         if scope.get("type") != "http" or not protected:
