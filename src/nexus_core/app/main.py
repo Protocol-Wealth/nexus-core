@@ -17,7 +17,10 @@ Environment variable              Effect
 ``MARKETSTACK_API_KEY``           Adds MarketStack as a market-data fallback.
 ``COINGECKO_API_KEY``             Raises CoinGecko rate limits (optional).
 ``NEXUS_PUBLIC_MCP_PROFILE``      ``full`` (default) or ``demo``.
-``NEXUS_ACCESS_MODE``             ``public`` (default) or ``restricted``.
+``NEXUS_ACCESS_MODE``             ``public`` (default), ``restricted`` (API keys) or
+                                  ``iam`` (Google ID tokens; private deployments).
+``NEXUS_IAM_AUDIENCE``            iam mode: the exact ID-token audience to accept.
+``NEXUS_IAM_ALLOWED_EMAILS``      iam mode: comma-separated caller service accounts.
 ``NEXUS_API_KEYS``                Comma-separated API keys or sha256:<hex> digests.
 ``NEXUS_RATE_LIMIT_PER_MIN``      Per-IP request budget (default ``60``).
 ``NEXUS_CORS_ORIGINS``            Comma-separated allow-list (default ``*``).

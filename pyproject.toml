@@ -51,6 +51,10 @@ dependencies = [
     "httpx>=0.28.1",
     "structlog>=26.1.0",
     "asyncpg>=0.31.0",
+    # Verifies Google-signed ID tokens in NEXUS_ACCESS_MODE=iam (access_gate).
+    # Already in requirements-serve.lock via mcp; declared because the gate
+    # imports it directly. MIT (PyJWT), Apache-2.0/BSD (cryptography).
+    "pyjwt[crypto]>=2.10",
     # [dev,serve] (what CI installs) resolves pandas 3.x, the current release.
     # [all] cannot take pandas 3: alphalens-reloaded 0.4.6 and
     # pyfolio-reloaded >=0.9.9 both require pandas<3, so a full install

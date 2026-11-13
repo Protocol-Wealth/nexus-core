@@ -204,3 +204,35 @@ jobs:
             exit 1
           fi
           echo "100% of traffic on $SERVING ($SERVING_IMAGE)"
+
+      # The private engine (nexus-core-internal: ingress internal, Cloud Run IAM,
+      # NEXUS_ACCESS_MODE=iam) runs the same image. pw-infrastructure creates it
+      # and grants this deployer run.admin on it. Until that apply, the repository
+      # variable NEXUS_INTERNAL_SERVICE stays unset and this step is skipped by
+      # name. Once it is set, a failed update fails the deploy: the private
+      # engine must never silently fall behind the public one.
+      - name: Deploy the same image to the private engine
+        if: steps.fresh.outputs.deploy == 'true' && vars.NEXUS_INTERNAL_SERVICE != ''
+        env:
+          INTERNAL_SERVICE: ${{ vars.NEXUS_INTERNAL_SERVICE }}
+        run: |
+          set -euo pipefail
+          gcloud run services update "$INTERNAL_SERVICE" \
+            --region="$REGION" \
+            --project="$PROJECT_ID" \
+            --image="$IMAGE" \
+            --quiet
+          INTERNAL_IMAGE=$(gcloud run services describe "$INTERNAL_SERVICE" \
+            --region="$REGION" --project="$PROJECT_ID" \
+            --format='value(spec.template.spec.containers[0].image)')
+          _REPO="${INTERNAL_IMAGE%@*}"; _REPO="${_REPO%:*}"
+          _D="${INTERNAL_IMAGE##*@}"
+          if [ "$_REPO" != "$IMAGE_REPO" ] || { [ "$_D" != "$IMAGE_DIGEST" ] && ! tr ',' '\n' <<<"$IMAGE_CHILD_DIGESTS" | grep -qxF "$_D"; }; then
+            echo "::error::$INTERNAL_SERVICE runs $INTERNAL_IMAGE, not $IMAGE."
+            exit 1
+          fi
+          echo "$INTERNAL_SERVICE runs $INTERNAL_IMAGE"
+
+      - name: Note a skipped private-engine deploy
+        if: steps.fresh.outputs.deploy == 'true' && vars.NEXUS_INTERNAL_SERVICE == ''
+        run: echo "::notice::NEXUS_INTERNAL_SERVICE is unset, so the private engine was not updated (it may not exist yet)."
