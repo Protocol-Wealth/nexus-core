@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
 from nexus_core.engine.planning import rmd, rmd_start_age
@@ -103,3 +105,28 @@ def test_zero_balance() -> None:
 def test_validation(kwargs: dict[str, object], match: str) -> None:
     with pytest.raises(ValueError, match=match):
         rmd(**kwargs)  # type: ignore[arg-type]
+
+
+def test_rmd_uses_decimal_half_even_for_halfway_cents() -> None:
+    """9999999.99 / 6.0 is an exact half-cent; Decimal ROUND_HALF_EVEN wins.
+
+    Binary float division rounded with the builtin ``round(..., 2)`` produced
+    1666666.67 for this input. The money path now divides in Decimal and
+    quantizes with ROUND_HALF_EVEN, which is 1666666.66.
+    """
+    out = rmd(age=101, balance=9_999_999.99)
+    assert out["distributionPeriod"] == 6.0
+    assert out["rmdAmount"] == 1_666_666.66
+
+
+def test_rmd_accepts_decimal_balance() -> None:
+    out = rmd(age=73, balance=Decimal("500000"))
+    assert out["applies"] is True
+    assert out["rmdAmount"] == 18_867.92
+    assert out["effectiveRate"] == 0.0377
+
+
+@pytest.mark.parametrize("balance", [True, float("nan"), float("inf"), float("-inf")])
+def test_rmd_rejects_non_money_balance(balance: object) -> None:
+    with pytest.raises(ValueError, match="balance must be non-negative"):
+        rmd(age=75, balance=balance)  # type: ignore[arg-type]
