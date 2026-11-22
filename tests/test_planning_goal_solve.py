@@ -62,6 +62,7 @@ def test_decreasing_infeasible_when_even_floor_fails() -> None:
         direction="decreasing",
     )
     assert r.feasible is False
+    assert r.bound_hit is False
     assert r.solved_value == 0.0
     assert r.best_achievable == pytest.approx(0.30, abs=1e-4)
 
@@ -79,7 +80,8 @@ def test_increasing_already_met_at_floor() -> None:
     assert r.iterations == 0
 
 
-def test_decreasing_met_even_at_ceiling() -> None:
+def test_decreasing_upper_bound_hit_is_not_feasible() -> None:
+    # Success at hi still meets the target, so the true spend may be above hi.
     r = solve_monotone(
         evaluate=lambda x: 0.95 - x / 1000.0,
         lo=0.0,
@@ -87,8 +89,10 @@ def test_decreasing_met_even_at_ceiling() -> None:
         target=0.80,
         direction="decreasing",
     )
-    assert r.feasible is True
-    assert r.solved_value == 100.0  # even the max variable still meets the target
+    assert r.feasible is False
+    assert r.bound_hit is True
+    assert r.solved_value == 100.0
+    assert r.best_achievable == pytest.approx(0.85, abs=1e-4)
     assert r.iterations == 0
 
 
@@ -167,12 +171,14 @@ def test_integer_decreasing_finds_largest_affordable() -> None:
     assert probs == sorted(probs, reverse=True)  # non-increasing
 
 
-def test_integer_decreasing_met_even_at_ceiling() -> None:
+def test_integer_decreasing_upper_bound_hit_is_not_feasible() -> None:
     r = solve_integer_monotone(
         evaluate=lambda n: 0.95 - n / 1000.0, lo=0, hi=100, target=0.80, direction="decreasing"
     )
-    assert r.feasible is True
-    assert r.solved_value == 100.0  # even the max integer still clears the target
+    assert r.feasible is False
+    assert r.bound_hit is True
+    assert r.solved_value == 100.0
+    assert r.best_achievable == pytest.approx(0.85, abs=1e-4)
     assert r.iterations == 0
 
 

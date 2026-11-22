@@ -2863,6 +2863,7 @@ def _solve_goal_tool(
         "solveFor": solve_for,
         "targetSuccess": round(target, 4),
         "feasible": result.feasible,
+        "boundHit": result.bound_hit,
         "solvedValue": _round_solve_x(solve_for, result.solved_value),
         "achievedSuccess": achieved,
         "direction": direction,
@@ -2985,7 +2986,7 @@ def _spend_to_target(
         target=target,
         direction="decreasing",
     )
-    bound_hit = result.feasible and result.solved_value >= hi * (1.0 - 1e-9)
+    bound_hit = result.bound_hit
     confirm = _mc_success(
         ctx,
         initial_balance=initial_balance,
