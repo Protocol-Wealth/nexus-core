@@ -13,9 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   balance by the Uniform Lifetime Table factor in Decimal, then quantizes the
   amount to cents and the effective rate to four decimal places with
   `ROUND_HALF_EVEN`. Public results remain JSON-safe floats, and existing
-  published-table test cases are unchanged. This is a first slice of hardening
-  planning money math; tax brackets, withdrawal sequencing, and cash-flow still
-  use floats.
+  published-table test cases are unchanged.
+- **Federal tax money path uses ``decimal.Decimal``.** `ordinary_tax`, `ltcg_tax`,
+  `standard_deduction`, and `tax_aware_withdrawal` now compute dollar amounts in
+  Decimal and quantize to cents (effective rate to four decimal places) with
+  `ROUND_HALF_EVEN`. Public results remain JSON-safe floats. Bracket tables,
+  RMD factor lookups, and integer ages are unchanged; `goal_solve` and
+  cash-flow still search or accumulate in float and call into this quantized
+  tax path. Part of #346.
 
 ### Added
 
