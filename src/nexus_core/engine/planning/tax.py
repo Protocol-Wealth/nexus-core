@@ -17,6 +17,7 @@ current IRS tables for real use. Pure + deterministic; no I/O.
 
 from __future__ import annotations
 
+import math
 from typing import Any, Literal
 
 from .state_tax import (
@@ -125,7 +126,20 @@ _RMD_TABLE_FIRST_AGE = 72
 _RMD_TABLE_LAST_AGE = 120
 
 
+def _require_whole_age(age: object) -> int:
+    """Coerce a whole-number age; reject bools and non-integers at runtime."""
+    if (
+        isinstance(age, bool)
+        or not isinstance(age, (int, float))
+        or not math.isfinite(age)
+        or age != int(age)
+    ):
+        raise ValueError(f"age must be a whole number; got {age!r}")
+    return int(age)
+
+
 def _rmd_factor(age: int) -> float:
+    age = _require_whole_age(age)
     if age <= _RMD_TABLE_FIRST_AGE:
         return _RMD_FACTORS[_RMD_TABLE_FIRST_AGE]
     if age >= _RMD_TABLE_LAST_AGE:
@@ -164,7 +178,11 @@ def rmd_start_age(birth_year: int | None = None) -> RmdStartAge:
 
 
 def rmd_factor(age: int) -> float:
-    """IRS Uniform Lifetime Table distribution period for ``age`` (rows 72..120; clamped at both ends)."""
+    """IRS Uniform Lifetime Table distribution period for ``age`` (rows 72..120; clamped at both ends).
+
+    ``age`` must be a whole number. A float such as ``73.0`` is accepted; a
+    non-integer such as ``73.5`` raises ``ValueError`` rather than ``KeyError``.
+    """
     return _rmd_factor(age)
 
 
