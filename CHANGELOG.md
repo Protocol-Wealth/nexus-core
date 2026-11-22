@@ -54,6 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Direct Python calls to `rmd_factor` / `rmd` no longer raise `KeyError` for a
+  non-integer age such as `73.5`. They raise `ValueError` naming the field,
+  matching the gateway's `_as_int` contract. Whole-number floats such as
+  `73.0` are still accepted. (#332)
 - The RMD Uniform Lifetime Table now runs from age 72 to 120, following Treas.
   Reg. §1.401(a)(9)-9(c). Above 100 it previously reused the age-100 factor
   (6.4), which understated RMDs. Age 72, and the earlier start ages, now use
