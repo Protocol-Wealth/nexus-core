@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
 from nexus_core.engine.planning import (
@@ -11,7 +13,12 @@ from nexus_core.engine.planning import (
     StateResidencyChange,
     tax_aware_withdrawal,
 )
-from nexus_core.engine.planning.tax import ordinary_tax
+from nexus_core.engine.planning.tax import (
+    ltcg_tax,
+    ordinary_brackets,
+    ordinary_tax,
+    standard_deduction,
+)
 
 _ACCOUNTS = [
     {"type": "taxable", "balance": 200000, "allocation": {"us_equity": 1.0}},
@@ -281,3 +288,126 @@ def test_bad_filing_status_raises_value_error() -> None:
             age=65,
             other_taxable_income=0,
         )
+
+
+# --- Decimal money path (#346) ------------------------------------------------
+
+
+def test_ordinary_tax_zero_at_and_below_standard_deduction() -> None:
+    deduction = standard_deduction("married_joint")
+    assert deduction == 32_200.0
+    assert ordinary_tax(deduction, "married_joint") == 0.0
+    assert ordinary_tax(deduction - 1, "married_joint") == 0.0
+    assert ordinary_tax(0, "married_joint") == 0.0
+
+
+def test_ordinary_tax_at_10_percent_bracket_edges() -> None:
+    # 2026 MFJ: std 32,200; 10% top at 24,800 taxable → income 57,000.
+    assert ordinary_tax(57_000, "married_joint") == 2_480.0
+    # One dollar into the 12% bracket.
+    assert ordinary_tax(57_001, "married_joint") == 2_480.12
+    # 2026 single: std 16,100; 10% top at 12,400 taxable → income 28,500.
+    assert ordinary_tax(28_500, "single") == 1_240.0
+    assert ordinary_tax(28_501, "single") == 1_240.12
+
+
+def test_ordinary_tax_at_later_bracket_edges() -> None:
+    # Single 12% top is 50,400 taxable → income 16,100 + 50,400 = 66,500.
+    # 12,400*0.10 + (50,400-12,400)*0.12 = 1,240 + 4,560 = 5,800.
+    assert ordinary_tax(66_500, "single") == 5_800.0
+    # One dollar into the 22% bracket.
+    assert ordinary_tax(66_501, "single") == 5_800.22
+    # 22% top is 105,700 taxable → income 121,800.
+    # 5,800 + (105,700-50,400)*0.22 = 5,800 + 12,166 = 17,966.
+    assert ordinary_tax(121_800, "single") == 17_966.0
+    assert ordinary_tax(121_801, "single") == 17_966.24
+
+
+def test_ordinary_tax_quantizes_sub_cent_slice_half_even() -> None:
+    # Income $0.05 over the MFJ standard deduction is a $0.005 tax (10% * 0.05),
+    # which ROUND_HALF_EVEN quantizes to 0.00. $0.10 over is an exact cent.
+    deduction = standard_deduction("married_joint")
+    assert ordinary_tax(Decimal(str(deduction)) + Decimal("0.05"), "married_joint") == 0.0
+    assert ordinary_tax(Decimal(str(deduction)) + Decimal("0.10"), "married_joint") == 0.01
+
+
+def test_ordinary_tax_accepts_decimal_income() -> None:
+    assert ordinary_tax(Decimal("130000"), "married_joint") == 11_240.0
+
+
+def test_ordinary_tax_rejects_non_finite_income() -> None:
+    with pytest.raises(ValueError, match="income must be a finite number"):
+        ordinary_tax(True, "single")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="income must be a finite number"):
+        ordinary_tax(float("nan"), "single")
+    with pytest.raises(ValueError, match="income must be a finite number"):
+        ordinary_tax(float("inf"), "single")
+
+
+def test_standard_deduction_matches_published_table() -> None:
+    assert standard_deduction("single") == 16_100.0
+    assert standard_deduction("head_of_household") == 24_150.0
+
+
+def test_ltcg_tax_zero_below_and_fifteen_at_zero_breakpoint() -> None:
+    # Single 2026 0% LTCG top is 49,450; selection uses a strict `<`.
+    assert ltcg_tax(10_000, 49_449.99, "single") == 0.0
+    assert ltcg_tax(10_000, 49_450, "single") == 1_500.0
+    assert ltcg_tax(10_000, 49_450.01, "single") == 1_500.0
+
+
+def test_ltcg_tax_twenty_percent_at_fifteen_breakpoint() -> None:
+    # Single 2026 15% LTCG top is 545,500.
+    assert ltcg_tax(10_000, 545_499.99, "single") == 1_500.0
+    assert ltcg_tax(10_000, 545_500, "single") == 2_000.0
+    assert ltcg_tax(10_000, 545_500.01, "single") == 2_000.0
+
+
+def test_ltcg_tax_zero_and_negative_gains() -> None:
+    assert ltcg_tax(0, 100_000, "single") == 0.0
+    assert ltcg_tax(-1, 100_000, "single") == 0.0
+
+
+def test_ltcg_tax_quantizes_half_cents_even() -> None:
+    # 1.15 * 0.15 = 0.1725 → 0.17; 10.05 * 0.15 = 1.5075 → 1.51.
+    assert ltcg_tax(1.15, 50_000, "single") == 0.17
+    assert ltcg_tax(Decimal("10.05"), 50_000, "single") == 1.51
+
+
+def test_ordinary_brackets_still_expose_float_table() -> None:
+    rows = ordinary_brackets("single")
+    assert rows[0] == (12_400, 0.1)
+    assert rows[-1][0] == float("inf")
+    assert rows[-1][1] == 0.37
+
+
+def test_tax_aware_withdrawal_accepts_decimal_need_and_balance() -> None:
+    r = tax_aware_withdrawal(
+        year=2026,
+        filing_status="single",
+        accounts=[{"type": "roth", "balance": Decimal("300000"), "allocation": {"x": 1.0}}],
+        gross_need=Decimal("50000"),
+        age=70,
+        other_taxable_income=Decimal("0"),
+    )
+    assert r["withdrawals"][0]["gross"] == 50_000.0
+    assert r["totalTax"] == 0.0
+
+
+def test_tax_aware_withdrawal_rmd_matches_decimal_cents() -> None:
+    r = tax_aware_withdrawal(
+        year=2026,
+        filing_status="single",
+        accounts=[
+            {"type": "traditional", "balance": 1_000_000, "allocation": {"x": 1.0}},
+            {"type": "taxable", "balance": 500_000, "allocation": {"x": 1.0}},
+        ],
+        gross_need=10_000,
+        age=75,
+        other_taxable_income=0,
+        birth_year=1960,
+    )
+    traditional = next(w for w in r["withdrawals"] if w["type"] == "traditional")
+    expected = float((Decimal("1000000") / Decimal("24.6")).quantize(Decimal("0.01")))
+    assert traditional["gross"] == expected == 40_650.41
+    assert r["rmdSatisfied"] is True
