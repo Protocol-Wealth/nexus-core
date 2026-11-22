@@ -54,6 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A decreasing `solve_monotone` / `solve_integer_monotone` search that still
+  meets the target at the upper bound is no longer reported as `feasible=True`
+  with `solved_value=hi`. It returns `feasible=False` and `bound_hit=True`, so
+  `solve_goal` cannot understate a sustainable spend as a real answer. (#334)
 - Direct Python calls to `rmd_factor` / `rmd` no longer raise `KeyError` for a
   non-integer age such as `73.5`. They raise `ValueError` naming the field,
   matching the gateway's `_as_int` contract. Whole-number floats such as
