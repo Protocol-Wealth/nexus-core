@@ -6,7 +6,7 @@ depend on each other at the code level. This file exists so an adopter
 reading either repo can see the join.
 
 - This repo: [`Protocol-Wealth/nexus-core`](https://github.com/Protocol-Wealth/nexus-core) — regime + scoring engine (Python).
-- Sibling: [`Protocol-Wealth/pwos-core`](https://github.com/Protocol-Wealth/pwos-core) — TypeScript compliance primitives, including `@protocolwealthos/shared/disclosure` (the disclosure card).
+- Sibling: [`Protocol-Wealth/pwos-core`](https://github.com/Protocol-Wealth/pwos-core) — TypeScript compliance primitives, including `@protocolwealthos/disclosure-card` (the disclosure card).
 
 Both are Apache 2.0 + defensive-patent. Both ship reference / placeholder
 configuration; an adopter's production thresholds and policy bindings live
@@ -27,7 +27,7 @@ review) and lives in `pwos-core`'s disclosure-card surface.
 which model is in use, what data-retention posture applies, what human
 oversight gates client-facing actions, what the system's known limitations
 are, what regulatory rules the operator is operating under. The
-`DisclosureCard` (`@protocolwealthos/shared/disclosure`) is the
+`DisclosureCard` (`@protocolwealthos/disclosure-card`) is the
 machine-readable surface for that description.
 
 Wiring them together is an adopter responsibility. The two suggested join
@@ -124,7 +124,7 @@ enforcement: if the HITL gate is not wired in the adopter's
 orchestrator, the published `clientFacingRequiresApproval` value must be
 `false`, even if the operator would prefer to publish `true` for
 marketing reasons. The CI gate `assertNoVerifyMarkers` (also in
-`@protocolwealthos/shared/disclosure`) is one place an adopter can wire
+`@protocolwealthos/disclosure-card`) is one place an adopter can wire
 a build-time check that disclosure-vs-reality stays aligned.
 
 ---

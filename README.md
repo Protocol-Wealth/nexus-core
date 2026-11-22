@@ -7,7 +7,7 @@
 [![OIN Member](https://img.shields.io/badge/OIN-Member-green.svg)](https://openinventionnetwork.com)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![GitHub stars](https://img.shields.io/github/stars/Protocol-Wealth/nexus-core?style=social)](https://github.com/Protocol-Wealth/nexus-core/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/Protocol-Wealth/nexus-core?style=social)](https://github.com/Protocol-Wealth/nexus-core)
 
 **Live:** [nexusmcp.site](https://nexusmcp.site) | **Source:** [GitHub](https://github.com/Protocol-Wealth/nexus-core) | **Patent:** [USPTO #64/034,229](https://patentcenter.uspto.gov/applications/64034229)
 
@@ -423,7 +423,7 @@ Python 3.12 · FastAPI · FastMCP · `httpx` · `asyncpg` · PostgreSQL (Cloud S
 **Patent Pending** — USPTO Application #64/034,229
 "Compliance-First Quantitative Research Engine with Multi-Signal Regime Detection, Systematic Asset Scoring, and AI Tool Orchestration via Model Context Protocol for SEC/FINRA-Regulated Financial Advisory Services"
 
-- [Patent disclosure](https://nexusmcp.site/patent) · [USPTO Patent Center](https://patentcenter.uspto.gov/applications/64034229) · [Figure 1 — system drawing (PDF)](docs/PW-PROV-002-FIG1.pdf)
+- [Patent disclosure](docs/PATENT.md) · [USPTO Patent Center](https://patentcenter.uspto.gov/applications/64034229) · [Figure 1 — system drawing (PDF)](docs/PW-PROV-002-FIG1.pdf)
 - Applicant: Protocol Wealth, LLC
 - Inventor: Nicholas Rygiel
 - Filed: April 9, 2026

@@ -20,9 +20,13 @@ Two domains:
 Feasibility is *reported*, never raised. When the target sits above the
 achievable ceiling within the bounds, ``feasible`` is ``False`` and
 ``best_achievable`` carries the maximum success reachable in-bounds (so the
-caller can say "the best this plan can do is 74%"). The returned
-``success_curve`` is a monotonicity-enforced list of ``(x, success_probability)``
-samples across the searched domain — the "what-if" curve a planning UI renders.
+caller can say "the best this plan can do is 74%"). When a ``decreasing``
+search still meets the target at the upper bound (the true value may lie
+above ``hi``), ``feasible`` is also ``False`` and ``bound_hit`` is ``True``,
+so a spend solve cannot understate the sustainable amount as a feasible
+answer. The returned ``success_curve`` is a monotonicity-enforced list of
+``(x, success_probability)`` samples across the searched domain — the
+"what-if" curve a planning UI renders.
 
 Educational scenario analysis only — not advice.
 """
@@ -67,6 +71,7 @@ class SolveResult:
     iterations: int
     best_achievable: float | None
     success_curve: tuple[SolvePoint, ...]
+    bound_hit: bool = False
 
 
 def _clamp01(value: float) -> float:
@@ -108,6 +113,7 @@ def _result(
     iterations: int,
     best: float | None,
     samples: dict[float, float],
+    bound_hit: bool = False,
 ) -> SolveResult:
     return SolveResult(
         feasible=feasible,
@@ -118,6 +124,7 @@ def _result(
         iterations=iterations,
         best_achievable=None if best is None else round(_clamp01(best), 4),
         success_curve=_build_curve(samples, direction=direction),
+        bound_hit=bound_hit,
     )
 
 
@@ -205,16 +212,19 @@ def solve_monotone(
         )
 
     # decreasing: the ceiling is at lo (the minimum variable -> the maximum success).
-    if s_hi >= target:  # even the ceiling of the variable still meets the target
+    # If even the maximum variable still meets the target, the true solution may
+    # lie above hi — report a bound hit, not a feasible solved value (#334).
+    if s_hi >= target:
         return _result(
-            feasible=True,
+            feasible=False,
             solved_value=hi,
             achieved=s_hi,
             target=target,
             direction=direction,
             iterations=iters,
-            best=None,
+            best=s_hi,
             samples=samples,
+            bound_hit=True,
         )
     if s_lo < target:  # even the minimum variable can't reach the target
         return _result(
@@ -337,16 +347,19 @@ def solve_integer_monotone(
         )
 
     # decreasing
+    # Hitting the upper bound while still meeting the target is a bound hit,
+    # not a feasible solved value — the true integer may lie above hi (#334).
     if s_hi >= target:
         return _result(
-            feasible=True,
+            feasible=False,
             solved_value=hi,
             achieved=s_hi,
             target=target,
             direction=direction,
             iterations=iters,
-            best=None,
+            best=s_hi,
             samples=samples,
+            bound_hit=True,
         )
     if s_lo < target:
         return _result(

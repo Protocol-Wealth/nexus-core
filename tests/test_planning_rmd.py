@@ -103,3 +103,29 @@ def test_zero_balance() -> None:
 def test_validation(kwargs: dict[str, object], match: str) -> None:
     with pytest.raises(ValueError, match=match):
         rmd(**kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("age", [73.0, 70.0, 125.0])
+def test_rmd_factor_accepts_whole_number_floats(age: float) -> None:
+    assert rmd_factor(age) == rmd_factor(int(age))
+
+
+def test_rmd_accepts_whole_number_float_age() -> None:
+    assert rmd(age=73.0, balance=500_000.0) == rmd(age=73, balance=500_000.0)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("age", [73.5, "73", True, False, 1.0 + 1e-12])
+def test_rmd_factor_rejects_non_integer_age(age: object) -> None:
+    with pytest.raises(ValueError, match="age must be a whole number"):
+        rmd_factor(age)  # type: ignore[arg-type]
+
+
+def test_rmd_rejects_non_integer_age() -> None:
+    with pytest.raises(ValueError, match="age must be a whole number"):
+        rmd(age=73.5, balance=500_000.0)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("age", [float("nan"), float("inf"), float("-inf")])
+def test_rmd_factor_rejects_non_finite_age(age: float) -> None:
+    with pytest.raises(ValueError, match="age must be a whole number"):
+        rmd_factor(age)
