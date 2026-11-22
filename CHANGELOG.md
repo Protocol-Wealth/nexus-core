@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **RMD money path uses ``decimal.Decimal``.** `rmd()` now divides the prior-year
+  balance by the Uniform Lifetime Table factor in Decimal, then quantizes the
+  amount to cents and the effective rate to four decimal places with
+  `ROUND_HALF_EVEN`. Public results remain JSON-safe floats, and existing
+  published-table test cases are unchanged. This is a first slice of hardening
+  planning money math; tax brackets, withdrawal sequencing, and cash-flow still
+  use floats.
+
 ### Added
 
 - **2026-11-12:** `NEXUS_ACCESS_MODE=iam` for a private deployment behind
